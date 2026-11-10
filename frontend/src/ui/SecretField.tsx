@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@lew-ds/lds-react';
-import { SeededTextField } from './SeededTextField';
+import { TextField } from '@lew-ds/lds-react';
 
 export interface SecretFieldProps {
   label: string;
@@ -109,18 +109,16 @@ export function SecretField({
 
   return (
     <div className="rt-secret-field">
-      {/* Seeded, not controlled: the parent re-renders on every keystroke, and a
-          changing `value` prop would swap this input's DOM and eat the caret. */}
-      <SeededTextField
+      <TextField
         id={id}
         name={name}
         label={label}
         type="password"
         help={help}
         autoComplete="off"
-        seed={value ?? ''}
+        value={value ?? ''}
         onChange={(e) => {
-          const typed = (e.target as HTMLInputElement).value;
+          const typed = e.target.value;
           // Empty means "no secret supplied", not "store an empty secret".
           onChange(typed === '' ? null : typed);
         }}

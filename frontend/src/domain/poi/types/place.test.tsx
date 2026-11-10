@@ -47,7 +47,7 @@ describe('the gym page', () => {
 
   test('offers the number as a call action rather than a row to read', () => {
     renderPoi(gym({ phone: '+1 515-555-0113' }));
-    expect(screen.getByRole('button', { name: /^Call/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^Call/ })).toHaveAttribute(
       'href',
       'tel:+15155550113',
     );
@@ -65,25 +65,25 @@ describe('the gym page', () => {
     // store locator answers a different question than it promises, so a record
     // with no page now simply has no button — as every other place type does.
     renderPoi(gym());
-    expect(screen.queryByRole('button', { name: /page$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /page$/ })).not.toBeInTheDocument();
   });
 
   test('names the button from the record, not from a constant in the page', () => {
     // The chain arrives as data, so a differently-branded gym labels its own button
     // without the page or its registry row knowing the chain exists.
     renderPoi(gym({ brand: 'Anytime Fitness', website: 'https://www.anytimefitness.com/gyms/1234' }));
-    expect(screen.getByRole('button', { name: 'Anytime Fitness page' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Planet Fitness page' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Anytime Fitness page' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Planet Fitness page' })).not.toBeInTheDocument();
   });
 
   test('a record with no brand still gets a usable label', () => {
     renderPoi({ category: 'planet_fitness_location', website: 'https://example.test/gym' });
-    expect(screen.getByRole('button', { name: 'Gym page' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Gym page' })).toBeInTheDocument();
   });
 
   test("links the record's own page", () => {
     renderPoi(gym({ website: 'https://www.planetfitness.com/gyms/ankeny-ia' }));
-    expect(screen.getByRole('button', { name: 'Planet Fitness page' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Planet Fitness page' })).toHaveAttribute(
       'href',
       'https://www.planetfitness.com/gyms/ankeny-ia',
     );

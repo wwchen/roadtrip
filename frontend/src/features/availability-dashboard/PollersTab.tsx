@@ -187,7 +187,7 @@ export function PollersTab({ route }: PollersTabProps) {
             label="Active"
             options={ACTIVE_OPTIONS}
             defaultValue={DEFAULT_FILTERS.active}
-            onChange={(e) => setDraft((e.target as HTMLSelectElement).value as ActiveFilter)}
+            onChange={(e) => setDraft(e.target.value as ActiveFilter)}
           />
           <div className="rt-dash-actions">
             <Button variant="primary" type="submit">

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { SeededTextField, Toggle } from '@ui';
+import { TextField, Toggle } from '@ui';
 import type { TriggerState } from '@/lib/watch-triggers';
 
 export interface TriggerSelectorProps {
@@ -8,21 +7,12 @@ export interface TriggerSelectorProps {
   disabled?: boolean;
 }
 
-const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
-const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
-
 /**
- * LDS controls are uncontrolled: seed toggles once and mirror changes into state.
- * The conditional channel field uses SeededTextField so remounting it reads the
- * current value rather than the form's initial snapshot.
- *
  * Every control carries an `id`, and each Toggle also an `aria-label`: LDS's
  * `textField` emits `<label for={id}>`, but its `toggle` puts the visible label in
  * a `<span>` beside the switch, so `id` alone leaves the checkbox unnamed.
  */
 export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorProps) {
-  // Freeze toggle seeds so their DOM is not replaced during editing.
-  const [initial] = useState(value);
   const patch = (fields: Partial<TriggerState>) => onChange({ ...value, ...fields });
 
   return (
@@ -33,21 +23,21 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
         label="Slack"
         aria-label="Slack"
         help="Post when a matching site opens."
-        defaultChecked={initial.slackNotify}
+        checked={value.slackNotify}
         disabled={disabled}
-        onChange={(e) => patch({ slackNotify: checkedOf(e) })}
+        onChange={(e) => patch({ slackNotify: e.target.checked })}
       />
       {value.slackNotify && (
-        <SeededTextField
+        <TextField
           id="watch-slack-channel"
           name="slack_channel"
           label="Channel"
           type="text"
           placeholder="#alerts"
-          seed={value.slackChannel}
+          value={value.slackChannel}
           disabled={disabled}
           help="Leave blank to use the channel saved in your account settings."
-          onChange={(e) => patch({ slackChannel: valueOf(e) })}
+          onChange={(e) => patch({ slackChannel: e.target.value })}
         />
       )}
 
@@ -57,9 +47,9 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
         label="Email"
         aria-label="Email"
         help="Send to the email address saved in your account settings."
-        defaultChecked={initial.emailNotify}
+        checked={value.emailNotify}
         disabled={disabled}
-        onChange={(e) => patch({ emailNotify: checkedOf(e) })}
+        onChange={(e) => patch({ emailNotify: e.target.checked })}
       />
       <Toggle
         id="watch-stop-when-triggered"
@@ -67,9 +57,9 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
         label="Stop when triggered"
         aria-label="Stop when triggered"
         help="Mark done after a successful trigger."
-        defaultChecked={initial.stopWhenTriggered}
+        checked={value.stopWhenTriggered}
         disabled={disabled}
-        onChange={(e) => patch({ stopWhenTriggered: checkedOf(e) })}
+        onChange={(e) => patch({ stopWhenTriggered: e.target.checked })}
       />
     </div>
   );

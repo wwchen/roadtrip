@@ -53,8 +53,6 @@ function fieldsFor(
   };
 }
 
-const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
-
 /** Parse the optional POI id into the backend DTO's numeric shape. */
 function parsePoiId(raw: string): number | undefined {
   const trimmed = raw.trim();
@@ -123,7 +121,7 @@ export function WatchForm({
           defaultValue={initialFields.poiId}
           disabled={isEdit}
           help={isEdit ? "A watch's target cannot be moved." : undefined}
-          onChange={(e) => setFields((f) => ({ ...f, poiId: valueOf(e) }))}
+          onChange={(e) => setFields((f) => ({ ...f, poiId: e.target.value }))}
         />
         <TextField
           id="watch-start-date"
@@ -132,7 +130,7 @@ export function WatchForm({
           type="date"
           defaultValue={initialFields.startDate}
           disabled={isEdit}
-          onChange={(e) => setFields((f) => ({ ...f, startDate: valueOf(e) }))}
+          onChange={(e) => setFields((f) => ({ ...f, startDate: e.target.value }))}
         />
         <TextField
           id="watch-end-date"
@@ -141,7 +139,7 @@ export function WatchForm({
           type="date"
           defaultValue={initialFields.endDate}
           disabled={isEdit}
-          onChange={(e) => setFields((f) => ({ ...f, endDate: valueOf(e) }))}
+          onChange={(e) => setFields((f) => ({ ...f, endDate: e.target.value }))}
         />
       </div>
 

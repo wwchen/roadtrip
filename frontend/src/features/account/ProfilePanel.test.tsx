@@ -1,6 +1,13 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import type { Profile } from '@/api/account-api';
-import { buildProfilePayload, isProfileDirty, profileValuesOf, type ProfileValues } from './ProfilePanel';
+import {
+  buildProfilePayload,
+  isProfileDirty,
+  ProfilePanel,
+  profileValuesOf,
+  type ProfileValues,
+} from './ProfilePanel';
 
 const profile: Profile = {
   display_name: 'William Chen',
@@ -38,5 +45,16 @@ describe('profile values', () => {
       display_name: 'Wm',
       theme: 'dark',
     });
+  });
+});
+
+describe('the profile panel', () => {
+  test('shows a display name the modal reloads, without a remount', () => {
+    const values: ProfileValues = { display_name: 'William Chen', theme: 'system' };
+    const { rerender } = render(<ProfilePanel profile={profile} values={values} onChange={vi.fn()} />);
+
+    rerender(<ProfilePanel profile={profile} values={{ ...values, display_name: 'Wm' }} onChange={vi.fn()} />);
+
+    expect(screen.getByLabelText('Display name')).toHaveValue('Wm');
   });
 });

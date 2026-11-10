@@ -5,6 +5,8 @@ import { poiFromUrl } from '@/lib/poi-url';
 import { usePoiDetail } from '@/queries/poi-detail';
 import './poi-page-shell.css';
 
+const POI_SKELETON_HEIGHT = '320px';
+
 /**
  * A POI at page width.
  *
@@ -36,7 +38,7 @@ export function PoiPage() {
         </Banner>
       ) : null}
 
-      {query.isPending && poiId != null ? <Skeleton height="320px" /> : null}
+      {query.isPending && poiId != null ? <Skeleton variant="block" style={{ height: POI_SKELETON_HEIGHT }} /> : null}
 
       {query.isError ? (
         <Banner status="error" title="Could not load this place">

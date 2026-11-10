@@ -8,8 +8,6 @@ import { useMapContext } from './MapProvider';
 import type { ViewportPois } from './useViewportPois';
 import './legend.css';
 
-const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
-
 /** Below this width the panel is a bottom sheet behind a toggle button. Matches legend.css. */
 const MOBILE_QUERY = '(max-width: 640px)';
 
@@ -180,7 +178,7 @@ function AgencyRow({ agency, count }: { agency: string; count: number }) {
       // No `id`: LDS wraps the input in its own <label>, so the association is
       // implicit — and an agency name is not a safe source for an element id.
       checked={visible}
-      onChange={(e) => setAgencyHidden(agency, !checkedOf(e))}
+      onChange={(e) => setAgencyHidden(agency, !e.target.checked)}
       label={
         <span className="rt-legend__row-label">
           <LegendDot colorToken={overlaySpec('cg').legendColorToken} />

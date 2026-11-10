@@ -81,7 +81,7 @@ export const Inputs: Story = {
         <TextField id="story-trip-name" label="Trip name" defaultValue="Pacific coast" help="Shown to collaborators." />
         <Select id="story-region" label="Region" defaultValue="pacific" options={REGION_OPTIONS} />
         <Textarea id="story-notes" label="Notes" defaultValue="Bring the rain fly." rows={3} showCount maxLength={120} />
-        <CodeField id="story-code" label="Access code" defaultValue="246810" length={6} groupAfter={3} />
+        <CodeField label="Access code" value="246810" length={6} groupAfter={3} />
       </div>
       <div className="rt-storybook-inline">
         <Checkbox label="Tent camping" defaultChecked />

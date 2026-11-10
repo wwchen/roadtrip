@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, SecretField, SeededTextField } from '@ui';
+import { Button, SecretField, TextField } from '@ui';
 import type { SettingsResponse, UpdateNotificationsFields } from '@/api/account-api';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { AccountStatusText } from './AccountStatusText';
@@ -112,7 +112,7 @@ export function NotificationsPanel({
   return (
     <div className="rt-account-panel">
       <div className="rt-notif-field">
-        <SeededTextField
+        <TextField
           id="settings-notification-email"
           name="notification_email"
           label="Notification email"
@@ -120,11 +120,11 @@ export function NotificationsPanel({
           // The login email as placeholder, so leaving it blank visibly means
           // "use the address I sign in with".
           placeholder={settings.profile.login_email}
-          seed={values.notification_email}
+          value={values.notification_email}
           onChange={(e) =>
             onChange({
               ...values,
-              notification_email: (e.target as HTMLInputElement).value,
+              notification_email: e.target.value,
             })
           }
         />
@@ -150,15 +150,15 @@ export function NotificationsPanel({
       />
 
       <div className="rt-notif-field">
-        <SeededTextField
+        <TextField
           id="settings-slack-channel"
           name="slack_channel"
           label="Slack channel"
           type="text"
           placeholder="#general"
-          seed={values.slack_channel}
+          value={values.slack_channel}
           onChange={(e) =>
-            onChange({ ...values, slack_channel: (e.target as HTMLInputElement).value })
+            onChange({ ...values, slack_channel: e.target.value })
           }
         />
         <Button

@@ -144,7 +144,7 @@ describe('rows', () => {
       watch({ last_run_at: '2026-08-08T11:00:00Z', last_run_status: 'failed', last_run_error: 'boom' }),
     ]);
 
-    expect(screen.getByText('error')).toBeInTheDocument();
+    expect(screen.getByText('error')).toHaveAccessibleDescription('boom');
   });
 });
 

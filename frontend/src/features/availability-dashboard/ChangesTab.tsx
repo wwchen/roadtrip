@@ -147,37 +147,32 @@ export function ChangesTab({ route }: ChangesTabProps) {
             apply(EMPTY_FILTERS);
           }}
         >
-          {/* Keyed on the applied value so Reset clears the rendered inputs —
-              LDS controls are uncontrolled, so reseeding means remounting. */}
           <TextField
-            key={`poi:${filters.poiId}`}
             id="changes-poi-id"
             name="poi_id"
             label="POI ID"
             inputMode="numeric"
-            defaultValue={filters.poiId}
-            onChange={(e) => setDraft((d) => ({ ...d, poiId: (e.target as HTMLInputElement).value }))}
+            value={draft.poiId}
+            onChange={(e) => setDraft((d) => ({ ...d, poiId: e.target.value }))}
           />
           <TextField
-            key={`campsite:${filters.campsiteId}`}
             id="changes-campsite-id"
             name="campsite_id"
             label="Campsite ID"
             inputMode="numeric"
-            defaultValue={filters.campsiteId}
+            value={draft.campsiteId}
             onChange={(e) =>
-              setDraft((d) => ({ ...d, campsiteId: (e.target as HTMLInputElement).value }))
+              setDraft((d) => ({ ...d, campsiteId: e.target.value }))
             }
           />
           <TextField
-            key={`date:${filters.targetDate}`}
             id="changes-target-date"
             name="target_date"
             label="Target Date"
             type="date"
-            defaultValue={filters.targetDate}
+            value={draft.targetDate}
             onChange={(e) =>
-              setDraft((d) => ({ ...d, targetDate: (e.target as HTMLInputElement).value }))
+              setDraft((d) => ({ ...d, targetDate: e.target.value }))
             }
           />
           <div className="rt-dash-actions">

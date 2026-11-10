@@ -2,8 +2,6 @@ import { Toggle } from '@ui';
 import { BASEMAPS, type Basemap } from './basemaps';
 import { useMapContext } from './MapProvider';
 
-const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
-
 /**
  * Basemap choice and the satellite underlay.
  *
@@ -45,7 +43,7 @@ export function BasemapPicker() {
           id="rt-satellite"
           aria-label="Satellite overlay"
           checked={satellite}
-          onChange={(e) => setSatellite(checkedOf(e))}
+          onChange={(e) => setSatellite(e.target.checked)}
         />
       </div>
     </>

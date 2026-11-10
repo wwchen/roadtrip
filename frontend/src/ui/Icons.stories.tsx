@@ -22,7 +22,7 @@ const meta = {
         component:
           'Open Icons rendered through LDS. The masked set is the regression surface: referenced ' +
           'across files those symbols render blank or lose half their artwork, because an external ' +
-          '`<use>` resolves a mask id against the host document. See `@ui/icon-sprite`.',
+          '`<use>` resolves a mask id against the host document. Pages draw them from LDS\'s `IconSprite`.',
       },
     },
   },

@@ -18,9 +18,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@lew-ds/lds": "1.1.1",
-    "@lew-ds/lds-react": "1.0.1",
-    "@lew-ds/open-icons": "1.0.0",
+    "@lew-ds/lds": "1.2.0",
+    "@lew-ds/lds-react": "2.0.0",
+    "@lew-ds/open-icons": "1.1.0",
     "@roadtrip/domain": "*",
     "@tanstack/react-query": "^5.104.1",
     "@turf/buffer": "^7.4.0",

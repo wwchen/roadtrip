@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
-import { ToastProvider } from '@ui';
+import { IconSprite, ToastProvider } from '@ui';
 import { createQueryClient } from '@/queries/client';
 import { PageErrorBoundary } from './PageErrorBoundary';
 import { SettingsHost } from './SettingsHost';
@@ -23,13 +23,16 @@ export function AppProviders({ children, client }: AppProvidersProps) {
   const queryClient = useMemo(() => client ?? createQueryClient(), [client]);
 
   return (
-    <PageErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          {children}
-          <SettingsHost />
-        </ToastProvider>
-      </QueryClientProvider>
-    </PageErrorBoundary>
+    <>
+      <IconSprite all />
+      <PageErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            {children}
+            <SettingsHost />
+          </ToastProvider>
+        </QueryClientProvider>
+      </PageErrorBoundary>
+    </>
   );
 }
