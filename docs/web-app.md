@@ -202,9 +202,89 @@ Anything else under those prefixes is `404` without a call. The query string and
 redirect to another listed path passes through. The egress host's Caddy block admits the same
 two patterns, and `kotlinPassthrough.test.ts` fails if the Caddyfile and the module disagree.
 
-Sign-in, watches, settings, add-to-cart and Slack interactivity are not forwarded: they need a
-session cookie for Kotlin's domain, and stay unreachable on Vercel until sign-in is ported. The
-admin import stays behind its Cloudflare Zero Trust rule on mini-ca.
+Watches, settings, add-to-cart and Slack interactivity are not forwarded: they move to Vercel
+in their own sub-projects (see `docs/superpowers/specs/2026-11-08-sign-in-on-vercel-design.md`).
+The admin import stays behind its Cloudflare Zero Trust rule on mini-ca.
+
+## Sign-in on Vercel
+
+Vercel signs users in with Neon Auth (Managed Better Auth); Kotlin's `/auth/*` is not used.
+Users and sessions live in the `neon_auth` schema of Neon `main`. `/api/auth/*` proxies to Neon
+Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it through `AuthPort`
+(`apps/web/src/server/auth/`), whose only implementation adapts `@neon/auth`.
+
+- Pages: `/auth/sign-in` (Google, email and password, an emailed link), `/auth/sign-up`,
+  `/auth/forgot`, `/auth/reset`. Their forms post to server actions. `/auth/login?return_to=…`
+  redirects to the sign-in page and `/auth/logout` signs out, so the frontend's `auth-api.ts`
+  is unchanged. `return_to` is kept only when it is a same-site path.
+- Google, magic-link and email-verification sign-ins finish on Neon Auth's host and come back with
+  `?neon_auth_session_verifier=…`. `apps/web/src/proxy.ts` runs Neon Auth's middleware on exactly
+  those requests; it exchanges the verifier for the session cookie and redirects to the same URL
+  without it. Callback URLs are absolute, built from the request's origin.
+- The exchange needs the challenge cookie of the browser that asked for the link. A link opened
+  elsewhere (a phone's mail app) lands on `/auth/sign-in` with its return path and a notice to ask
+  for a new link from that browser; a failed exchange lands there with the retry message.
+- Neon's shared email provider supports only code-style verification. Link verification, which
+  these pages use, needs custom SMTP (Resend), so `require_email_verification` stays off until it is
+  set; until then a password sign-up is never verified and `/api/me` treats it as signed out.
+- `GET /api/me` answers `auth_enabled: false` when sign-in is off, anonymous without a session
+  or when Neon Auth cannot be reached, and otherwise the user. Each Neon Auth user is linked to
+  one `app_user` through `user_identity` (`provider = 'neon-auth'`, `subject` = the Neon Auth
+  user id); a verified email joins the account that already has it. Admin comes from
+  `ADMIN_EMAILS`.
+- `app_user` and `user_identity` are written by the `roadtrip_web_writer` role
+  (`packages/db/migrations/0003_web_writer.sql`), which can write only those two tables.
+  `roadtrip_web` stays read-only.
+
+Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
+
+| Variable | Value |
+|---|---|
+| `NEON_AUTH_BASE_URL` | The Auth URL Neon shows for `main` |
+| `NEON_AUTH_COOKIE_SECRET` | At least 32 random characters (`openssl rand -base64 32`) |
+| `APP_DATABASE_URL` | `roadtrip_web_writer`'s connection string |
+| `ADMIN_EMAILS` | Comma-separated admin emails |
+
+Previews get none of them, so a preview's `/api/me` reports sign-in off and `/api/auth/*` is 404.
+
+Locally, Tilt runs `apps/web` as its `web` resource (`next dev` on http://localhost:3001, after
+`frontend-dist` and the backend's migrations; Grafana holds 3000), alongside the Kotlin app on :8765. It signs in against the Neon Auth of the
+`vercel-dev` Neon branch, whose users are separate from production's, and keeps app data in local
+Postgres:
+
+- `NEON_AUTH_BASE_URL` comes from `apps/web/.env.development`, which `next dev` loads and Vercel
+  never does. Put your own in `apps/web/.env.local` to override it.
+  `NEON_AUTH_COOKIE_SECRET` and `ADMIN_EMAILS` come from Tilt's environment (the first from the
+  local vault).
+- The resource builds `DATABASE_URL` (`roadtrip_web`) and `APP_DATABASE_URL` (`roadtrip_web_writer`)
+  on `127.0.0.1:5432` at run time from `WEB_DB_PASSWORD` and `WEB_WRITER_DB_PASSWORD`,
+  URL-encoded, so no password appears in the Tiltfile or the Tilt UI. The compose `web` service,
+  which only production's `web` profile runs, has no sign-in settings.
+- `roadtrip_web_writer` comes from Flyway's `R__web_writer_grants.sql` (held equal to Drizzle's
+  `0003` by `webWriteGrants.test.ts`). Both web roles get their passwords from `postgres-init/` on
+  first init only. A local database created before those scripts needs them once, with the stack
+  up:
+  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_DB_PASSWORD_FILE=/run/secrets/web_db_password postgres /docker-entrypoint-initdb.d/20-web-reader.sh`
+  and
+  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password postgres /docker-entrypoint-initdb.d/30-web-writer.sh`.
+  Until then the web resource answers 500 with `password authentication failed`.
+- Without all three sign-in settings, `next dev` logs which are missing and runs with sign-in off.
+  The resource stops `next dev` when Tilt goes away, even if Tilt is killed, so a stale dev server
+  never holds `apps/web`, and restarts it after `npm ci`.
+- `/auth/logout` expires the `__Secure-neon-auth` cookies itself when Neon Auth refuses the
+  sign-out (it does when the request has neither Origin nor Referer).
+- `vercel-dev` allows localhost origins by default. Reset it from `main` only after dropping its
+  copied `neon_auth` schema, or Neon Auth cannot be re-provisioned there.
+
+One-time owner setup on Neon `main`: enable Neon Auth; add `https://roadtrip.floo.ca` as a
+trusted origin; turn on email and password with verification required, the magic-link plugin,
+and Google with the production OAuth client; set the email provider to Resend's SMTP; and set
+`roadtrip_web_writer`'s password.
+
+Migrations reach Neon through the `neon-migrate` job in `ci.yml`: on a master push, after
+`ci-passed`, it runs `npm run migrate --workspace @roadtrip/db` with the `NEON_MIGRATE_URL`
+repository secret (an owner connection string). Without the secret it skips with a warning, so
+it never blocks the mini-ca deploy; a failing migration fails CI.
 
 ## Previews
 

@@ -1,13 +1,7 @@
-import type { MeResponseDto } from '@/server/contract';
+import { currentMe } from '@/server/service/auth/meService';
 
 export const dynamic = 'force-dynamic';
 
-const ANONYMOUS_WITHOUT_IDENTITY_PROVIDER: MeResponseDto = {
-  authenticated: false,
-  auth_enabled: false,
-  auth_embedded: false,
-};
-
-export function GET(): Response {
-  return Response.json(ANONYMOUS_WITHOUT_IDENTITY_PROVIDER);
+export async function GET(): Promise<Response> {
+  return Response.json(await currentMe());
 }

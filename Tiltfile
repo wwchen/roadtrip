@@ -6,6 +6,11 @@
 # available.
 
 PORT = '8765'
+WEB_PORT = '3001'
+LOCAL_POSTGRES = '127.0.0.1:5432'
+URL_ENCODED_SECRET = '$(python3 -c "import os, sys, urllib.parse; value = os.environ.get(sys.argv[1]) or sys.exit(sys.argv[1] + \' is not set; add it to the local vault\'); print(urllib.parse.quote(value, safe=\'\'))" %s)'
+TILT_WATCH_SECONDS = '2'
+NPM_INSTALL_MARKER = 'node_modules/.package-lock.json'
 COMPOSE_PROJECT = 'roadtrip'
 COMPOSE_FILES = ['docker-compose.yml', 'docker-compose.local.yml', 'docker-compose.secrets.yml']
 COMPOSE_PROFILES = ['pois', 'recgov-companion']
@@ -112,7 +117,7 @@ local_resource(
 # instead of silently serving a stale bundle.
 local_resource(
     'frontend-deps',
-    cmd='npm ci --workspace roadtrip-frontend',
+    cmd='npm ci',
     deps=[
         'package.json',
         'package-lock.json',
@@ -149,6 +154,25 @@ local_resource(
         'frontend/node_modules',
     ],
     labels=['build'],
+)
+
+local_resource(
+    'web',
+    cmd='npm run build --workspace @roadtrip/db && node apps/web/scripts/copy-frontend.mjs',
+    serve_cmd=(
+        'set -eu; ' +
+        'DATABASE_URL="postgres://roadtrip_web:' + URL_ENCODED_SECRET % 'WEB_DB_PASSWORD' + '@' + LOCAL_POSTGRES + '/roadtrip"; ' +
+        'APP_DATABASE_URL="postgres://roadtrip_web_writer:' + URL_ENCODED_SECRET % 'WEB_WRITER_DB_PASSWORD' + '@' + LOCAL_POSTGRES + '/roadtrip"; ' +
+        'export DATABASE_URL APP_DATABASE_URL; ' +
+        'set -m; npm --prefix apps/web run dev -- --port ' + WEB_PORT + ' & dev=$!; ' +
+        'trap \'kill -- -$dev 2>/dev/null || true\' EXIT INT TERM; ' +
+        'while kill -0 $PPID 2>/dev/null && kill -0 $dev 2>/dev/null; do sleep ' + TILT_WATCH_SECONDS + '; done; ' +
+        'kill -0 $dev 2>/dev/null && exit 0; wait $dev'
+    ),
+    resource_deps=['frontend-dist', 'postgres', 'backend'],
+    deps=['frontend/dist', 'packages/db/src', 'packages/db/migrations', NPM_INSTALL_MARKER],
+    links=[link('http://localhost:' + WEB_PORT, 'apps/web (Vercel shape)')],
+    labels=['app'],
 )
 
 docker_compose(
