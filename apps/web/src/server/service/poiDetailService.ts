@@ -1,5 +1,5 @@
 import { CAMPGROUND_POI_TYPE, type Db } from '@roadtrip/db';
-import { bookingIdentities, shippedTenantRegistry } from '@roadtrip/domain';
+import { bookingIdentities, servingAvailabilityProvider, shippedTenantRegistry } from '@roadtrip/domain';
 import { config } from '../config';
 import type { PoiCategoryDetailSchema, PoiDetailFeatureSchema, PoiDetailPropertiesSchema } from '../contract';
 import { toContractId } from '../contractIds';
@@ -14,7 +14,7 @@ import {
   type TeslaDetailRow,
 } from '../repo/poiDetailRepo';
 import { bookingSystem, campgroundBookingRef, computeCtas } from './booking/campgroundCta';
-import { poiDateContext } from './booking/dateContext';
+import { addDays, poiDateContext } from './booking/dateContext';
 import {
   alertDto,
   amenityDtos,
@@ -47,14 +47,24 @@ function campgroundBooking(row: CampgroundDetailRow, now: Date) {
   const tenants = shippedTenantRegistry();
   const identities = bookingIdentities(row.bookingProvider, row.bookingProviderRef, row.bookingAliases);
   const bookingRef = campgroundBookingRef(tenants, identities);
+  const dateContext = poiDateContext(row.location?.latitude, row.location?.longitude, now);
+  const serving = servingAvailabilityProvider(identities, config.enabledAvailabilityProviders, tenants);
   const cta = computeCtas(tenants, {
     bookingRef,
     reserveUrl: row.reservationUrl,
     infoUrl: row.links[0]?.url ?? null,
-    dateContext: poiDateContext(row.location?.latitude, row.location?.longitude, now),
+    dateContext,
     identities,
   });
-  return { cta: cta.length === 0 ? null : cta, booking_system: bookingSystem(tenants, bookingRef) };
+  return {
+    cta: cta.length === 0 ? null : cta,
+    booking_system: bookingSystem(tenants, bookingRef),
+    availability_supported: serving === null ? null : true,
+    availability_provider: serving?.id ?? row.bookingProvider,
+    time_zone: dateContext.timeZone,
+    earliest_date: dateContext.earliestDate,
+    latest_date: serving === null ? null : addDays(dateContext.earliestDate, serving.bookingHorizonDays),
+  };
 }
 
 function campgroundProperties(row: CampgroundDetailRow, now: Date): PoiDetailPropertiesSchema {

@@ -23,6 +23,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityEgressController
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
+import ca.floo.roadtrip.service.availability.CellTransitionSink
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -85,11 +86,13 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
         startDate: LocalDate? = start,
         endDate: LocalDate? = end,
         mode: AvailabilityEgressMode = AvailabilityEgressMode.REFRESH,
+        freshAtOrAfter: String? = null,
     ) = AvailabilityEgressRequestDto(
         mode = mode,
         campground = ProviderRefDto(dataProvider = DataProvider.RECGOV.id, dataProviderRef = ref),
         startDate = startDate?.toString(),
         endDate = endDate?.toString(),
+        freshAtOrAfter = freshAtOrAfter,
     )
 
     private fun controller(
@@ -107,6 +110,7 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
                     failoverFetcher = FailoverAvailabilityFetcher(ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
                     bookingHorizons = BookingHorizonResolver(providers, dateResolver),
                     availabilityRepo = AvailabilityRepo(ctx),
+                    transitionSink = CellTransitionSink.none,
                     snapshotFreshnessTtl = { ttl },
                 ),
             dateResolver = dateResolver,
@@ -169,6 +173,20 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `a request without a mode is 400 and calls no provider`() {
+        val provider = recgov()
+        egress(listOf(provider)) {
+            val response =
+                client.post(EGRESS_PATH) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"campground":{"data_provider":"${DataProvider.RECGOV.id}","data_provider_ref":"$CAMPGROUND_REF"}}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(0, provider.calls.size)
+        }
+    }
+
+    @Test
     fun `a campground no provider serves is 501`() =
         egress(listOf(FakeAvailabilityProvider(BookingProvider.ASPIRA))) {
             val response = post(request())
@@ -206,6 +224,40 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
             assertEquals((WINDOW_DAYS * 2).toInt(), body.cells.size)
         }
     }
+
+    @Test
+    fun `refresh with a cutoff the stored cells meet answers from the store`() {
+        egress(listOf(recgov())) { post(request()) }
+        val cold = recgov()
+        egress(listOf(cold), ttl = alwaysStale) {
+            val response = post(request(freshAtOrAfter = observedAt.minus(Duration.ofDays(1)).toString()))
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = wire.decodeFromString(AvailabilityEgressResponseDto.serializer(), response.bodyAsText())
+            assertEquals(0, cold.calls.size)
+            assertTrue(body.fromCache)
+        }
+    }
+
+    @Test
+    fun `refresh with a cutoff newer than the stored cells fetches`() {
+        egress(listOf(recgov())) { post(request()) }
+        val again = recgov()
+        egress(listOf(again), ttl = alwaysFresh) {
+            val response = post(request(freshAtOrAfter = observedAt.plusSeconds(1).toString()))
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = wire.decodeFromString(AvailabilityEgressResponseDto.serializer(), response.bodyAsText())
+            assertEquals(1, again.calls.size)
+            assertEquals(false, body.fromCache)
+        }
+    }
+
+    @Test
+    fun `a malformed cutoff is 400 bad_date_window`() =
+        egress(listOf(recgov())) {
+            val response = post(request(freshAtOrAfter = "yesterday"))
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals("bad_date_window", errorOf(response.bodyAsText()))
+        }
 
     @Test
     fun `a provider failure is 503 with its code`() =

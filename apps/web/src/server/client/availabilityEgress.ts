@@ -4,7 +4,11 @@ import type { AvailabilityEgressRequestDto, AvailabilityEgressResponseDto, Avail
 export const EGRESS_PATH = '/api/internal/availability/fetch';
 export const EGRESS_TIMEOUT_CODE = 'timeout';
 export const EGRESS_UNREACHABLE_CODE = 'unreachable';
+export const EGRESS_REDIRECTED_CODE = 'egress_redirected';
+export const EGRESS_NOT_JSON_CODE = 'egress_not_json';
 const NO_STATUS = 0;
+const FIRST_REDIRECT_STATUS = 300;
+const FIRST_CLIENT_ERROR_STATUS = 400;
 const TIMEOUT_ERROR = 'TimeoutError';
 const ACCESS_CLIENT_ID_HEADER = 'cf-access-client-id';
 const ACCESS_CLIENT_SECRET_HEADER = 'cf-access-client-secret';
@@ -35,12 +39,19 @@ export async function fetchEgress(endpoint: EgressEndpoint, request: Availabilit
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(timeoutMs),
       cache: 'no-store',
+      redirect: 'manual',
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === TIMEOUT_ERROR;
     return { kind: 'error', status: NO_STATUS, code: timedOut ? EGRESS_TIMEOUT_CODE : EGRESS_UNREACHABLE_CODE, body: null };
   }
-  if (response.ok) return { kind: 'cells', body: (await response.json()) as AvailabilityEgressResponseDto };
+  if (response.status >= FIRST_REDIRECT_STATUS && response.status < FIRST_CLIENT_ERROR_STATUS) {
+    return { kind: 'error', status: response.status, code: EGRESS_REDIRECTED_CODE, body: null };
+  }
+  if (response.ok) {
+    const body = (await response.json().catch(() => null)) as AvailabilityEgressResponseDto | null;
+    return body === null ? { kind: 'error', status: response.status, code: EGRESS_NOT_JSON_CODE, body: null } : { kind: 'cells', body };
+  }
   const body = (await response.json().catch(() => null)) as AvailabilityErrorDto | null;
   const code = typeof body?.error === 'string' ? body.error : null;
   return { kind: 'error', status: response.status, code, body: code === null ? null : body };

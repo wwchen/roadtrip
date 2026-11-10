@@ -59,6 +59,7 @@ import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
+import ca.floo.roadtrip.service.availability.CellTransitionSink
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.StayCheckController
@@ -121,6 +122,7 @@ internal fun Application.registerKoinRoutes() {
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
+    val transitionSink: CellTransitionSink by inject()
     val staticDir: File by inject(named("staticDir"))
 
     // Resolve the session into a Principal once per request, ambient for every
@@ -155,6 +157,7 @@ internal fun Application.registerKoinRoutes() {
                 bookingHorizons = bookingHorizons,
                 availabilityRepo = availabilityRepo,
                 snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(config.cache),
+                transitionSink = transitionSink,
             )
         val campsiteController =
             campsiteAvailabilityController(

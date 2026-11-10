@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 const ROUTE_MODULES: Record<string, () => Promise<{ dynamic?: string }>> = {
+  '/api/auth/[...path]': () => import('./api/auth/[...path]/route'),
   '/api/build-info': () => import('./api/build-info/route'),
   '/api/campgrounds/details': () => import('./api/campgrounds/details/route'),
   '/api/campgrounds/search': () => import('./api/campgrounds/search/route'),
@@ -13,6 +14,12 @@ const ROUTE_MODULES: Record<string, () => Promise<{ dynamic?: string }>> = {
   '/api/pois/search': () => import('./api/pois/search/route'),
   '/api/route': () => import('./api/route/route'),
   '/api/watches': () => import('./api/watches/route'),
+  '/auth/forgot': () => import('./auth/forgot/page'),
+  '/auth/login': () => import('./auth/login/route'),
+  '/auth/reset': () => import('./auth/reset/page'),
+  '/auth/sign-in': () => import('./auth/sign-in/page'),
+  '/auth/sign-up': () => import('./auth/sign-up/page'),
+  '/auth/logout': () => import('./auth/logout/route'),
   '/campgrounds/[poiId]': () => import('./campgrounds/[poiId]/page'),
   '/search': () => import('./search/page'),
 };

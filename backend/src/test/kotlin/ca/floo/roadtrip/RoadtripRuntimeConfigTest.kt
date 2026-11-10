@@ -53,7 +53,7 @@ class RoadtripRuntimeConfigTest {
     }
 
     @Test
-    fun `the shipped read path shows every campground provider and the shipped registry knows each one`() {
+    fun `the shipped read path lists its campground providers and the shipped registry knows each one`() {
         val providers = shippedAppConfig().readPathProviders
 
         assertEquals(shippedReadPathProviders, providers.enabledDataProviders)
@@ -308,7 +308,6 @@ private val shippedReadPathProviders =
         "campflare",
         "bcparks-strapi",
         "aspira",
-        "recgov",
         "reserveamerica",
         "reservecalifornia",
         "tesla_supercharger",

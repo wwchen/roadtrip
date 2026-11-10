@@ -50,6 +50,7 @@ services:
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
       - GRAFANA_DB_PASSWORD_FILE=/run/secrets/grafana_db_password
       - WEB_DB_PASSWORD_FILE=/run/secrets/web_db_password
+      - WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password
     volumes:
       - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro

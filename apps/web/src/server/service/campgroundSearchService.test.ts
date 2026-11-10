@@ -13,6 +13,7 @@ import {
 import { campgroundDetails, searchCampgroundIds } from './campgroundSearchService';
 
 const NO_SHOWERS_POI = 3401n;
+const RECGOV_ONLY_POI = 3403n;
 const LIMIT = 100;
 let fixture: CatalogFixture;
 
@@ -22,6 +23,10 @@ beforeAll(async () => {
   await fixture.writeDb.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, amenities, booking_provider, booking_provider_ref)
     VALUES (3402, 'campflare', 'ns-1', 'No Showers Camp', '[{"key":"showers","present":false}]', 'aspira', 'bc:1:2:null')`);
   await fixture.writeDb.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${NO_SHOWERS_POI}, 3402)`);
+  await fixture.writeDb.execute(sql`INSERT INTO pois (id, poi_type, geom) VALUES (${RECGOV_ONLY_POI}, 'campground', ST_SetSRID(ST_MakePoint(-92.27, 35.55), 4326))`);
+  await fixture.writeDb.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, booking_provider, booking_provider_ref)
+    VALUES (3404, 'campflare', 'sugar-1', 'Sugar Loaf', 'recgov', '232713')`);
+  await fixture.writeDb.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${RECGOV_ONLY_POI}, 3404)`);
 });
 
 afterAll(async () => {
@@ -76,7 +81,12 @@ test('details keep request order, omit unknown and disabled-provider ids, and ca
   expect(campgrounds[0]).not.toHaveProperty('max_people');
 });
 
-test('a summary names the booking site its campground books through, without claiming availability', async () => {
+test('a summary names the booking site its campground books through and claims availability for it', async () => {
   const { campgrounds } = await campgroundDetails(fixture.readDb, [NO_SHOWERS_POI], ENABLED_PROVIDERS);
-  expect(campgrounds[0]).toMatchObject({ booking_system: 'BC Parks', availability_supported: false });
+  expect(campgrounds[0]).toMatchObject({ booking_system: 'BC Parks', availability_supported: true });
+});
+
+test('a summary for a campground only rec.gov sells, with rec.gov not enabled, names rec.gov but claims no availability', async () => {
+  const { campgrounds } = await campgroundDetails(fixture.readDb, [RECGOV_ONLY_POI], ENABLED_PROVIDERS);
+  expect(campgrounds[0]).toMatchObject({ booking_system: 'Recreation.gov', availability_supported: false });
 });

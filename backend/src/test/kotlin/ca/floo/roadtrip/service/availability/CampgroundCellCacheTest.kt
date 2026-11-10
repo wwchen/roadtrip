@@ -190,6 +190,7 @@ class CampgroundCellCacheTest : SharedDbTest() {
                         failoverFetcher = FailoverAvailabilityFetcher(ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
                         bookingHorizons = BookingHorizonResolver(providers, dateResolver),
                         availabilityRepo = AvailabilityRepo(ctx),
+                        transitionSink = CellTransitionSink.none,
                         clock = clock,
                         snapshotFreshnessTtl = { freshnessTtl },
                     ),

@@ -205,6 +205,20 @@ def step_by_name(job: dict, name: str) -> dict:
 
 
 class DeploymentContractTest(unittest.TestCase):
+    def test_neon_migrations_run_on_master_only(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        job = jobs["neon-migrate"]
+        condition = job.get("if", "")
+        self.assertIn("github.event_name == 'push'", condition)
+        self.assertIn("github.ref == 'refs/heads/master'", condition)
+        self.assertIn("needs.ci-passed.result == 'success'", condition)
+        self.assertIn("ci-passed", job["needs"])
+        migrate = step_by_name(job, "Apply Neon migrations")
+        self.assertIn("npm run migrate --workspace @roadtrip/db", migrate["run"])
+        self.assertIn('if [ -z "$DATABASE_URL" ]', migrate["run"])
+        self.assertIn("::warning::", migrate["run"])
+        self.assertEqual("${{ secrets.NEON_MIGRATE_URL }}", migrate["env"]["DATABASE_URL"])
+
     def test_ci_publishes_every_immutable_image(self) -> None:
         jobs = workflow("ci.yml")["jobs"]
         app = jobs["docker-build"]
@@ -235,6 +249,28 @@ class DeploymentContractTest(unittest.TestCase):
         web = path_filters()["web"]
         self.assertIn("Dockerfile", web)
         self.assertIn(".dockerignore", web)
+
+    def test_local_sign_in_runs_through_tilt_and_never_the_production_web_service(self) -> None:
+        compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+        production_web = " ".join(compose["services"]["web"]["environment"])
+        for name in ("NEON_AUTH", "APP_DATABASE", "ADMIN_EMAILS"):
+            self.assertNotIn(name, production_web)
+        tilt = (ROOT / "Tiltfile").read_text()
+        web = tilt[tilt.index("local_resource(\n    'web',") : tilt.index("docker_compose(")]
+        self.assertNotIn("NEON_AUTH_BASE_URL", tilt)
+        self.assertNotIn("neonauth", tilt)
+        self.assertIn("roadtrip_web_writer:", web)
+        self.assertIn("resource_deps=['frontend-dist', 'postgres', 'backend']", web)
+        self.assertIn("NPM_INSTALL_MARKER]", web)
+        self.assertIn("kill -0 $PPID", web)
+        self.assertIn("set -eu", web)
+        self.assertIn("is not set; add it to the local vault", tilt)
+        self.assertNotIn("npm ci --workspace", tilt)
+
+    def test_local_neon_auth_url_is_the_only_committed_dev_setting(self) -> None:
+        settings = (ROOT / "apps/web/.env.development").read_text().split()
+        self.assertEqual([line.split("=", 1)[0] for line in settings], ["NEON_AUTH_BASE_URL"])
+        self.assertIn(".neonauth.", settings[0])
 
     def test_web_runs_only_in_production(self) -> None:
         compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())

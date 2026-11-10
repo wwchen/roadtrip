@@ -1,14 +1,37 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CAMPGROUND_POI_TYPE, POI_TYPES } from '@roadtrip/db';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ConfigError, config } from './config';
 
 const DATABASE_URL = 'postgres://reader@db.test/roadtrip';
-const DEFAULT_PROVIDERS = ['campflare', 'bcparks-strapi', 'aspira', 'recgov', 'reserveamerica', 'reservecalifornia'];
+const DEFAULT_PROVIDERS = ['campflare', 'bcparks-strapi', 'aspira', 'reserveamerica', 'reservecalifornia'];
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
 const CUSTOM_LIMIT = 25;
+const KOTLIN_APPLICATION_YAML = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..', '..', '..', '..', 'backend', 'src', 'main', 'resources', 'application.yaml',
+);
+const KOTLIN_AVAILABILITY_LIST_KEY = 'enabled-availability-providers:';
+const KOTLIN_DATA_LIST_KEY = 'enabled-data-providers:';
+const NON_CAMPGROUND_POI_TYPES: readonly string[] = POI_TYPES.filter((type) => type !== CAMPGROUND_POI_TYPE);
+
+function kotlinYamlList(key: string): string[] {
+  const lines = readFileSync(KOTLIN_APPLICATION_YAML, 'utf8').split('\n');
+  const start = lines.findIndex((line) => line.trim() === key);
+  if (start === -1) throw new Error(`${key} is missing from application.yaml`);
+  const entries: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) continue;
+    if (!trimmed.startsWith('- ')) break;
+    entries.push(trimmed.slice(2).trim());
+  }
+  return entries;
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -211,4 +234,97 @@ test('the enabled availability providers default to Kotlin read-path list and re
   expect(config.enabledAvailabilityProviders).toEqual(['aspira', 'campflare', 'reserveamerica', 'reservecalifornia']);
   vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', 'campflare');
   expect(config.enabledAvailabilityProviders).toEqual(['campflare']);
+});
+
+test("the default enabled availability providers are Kotlin's application.yaml list", () => {
+  vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', undefined);
+  expect(config.enabledAvailabilityProviders).toEqual(kotlinYamlList(KOTLIN_AVAILABILITY_LIST_KEY));
+});
+
+test("the default enabled data providers are Kotlin's application.yaml campground providers", () => {
+  vi.stubEnv('ENABLED_DATA_PROVIDERS', undefined);
+  const kotlinCampgroundProviders = kotlinYamlList(KOTLIN_DATA_LIST_KEY).filter((provider) => !NON_CAMPGROUND_POI_TYPES.includes(provider));
+  expect(config.enabledDataProviders).toEqual(kotlinCampgroundProviders);
+});
+
+const AUTH_URL = 'https://ep-test.neonauth.test/neondb/auth';
+const COOKIE_SECRET = 'c'.repeat(32);
+const APP_DATABASE_URL = 'postgres://roadtrip_web_writer@db.test/roadtrip';
+const SIGN_IN_VARIABLES = {
+  NEON_AUTH_BASE_URL: AUTH_URL,
+  NEON_AUTH_COOKIE_SECRET: COOKIE_SECRET,
+  APP_DATABASE_URL,
+} as const;
+const ALL_SIGN_IN = Object.keys(SIGN_IN_VARIABLES) as (keyof typeof SIGN_IN_VARIABLES)[];
+
+function stubSignIn(only: readonly (keyof typeof SIGN_IN_VARIABLES)[], adminEmails?: string) {
+  for (const [variable, value] of Object.entries(SIGN_IN_VARIABLES)) {
+    vi.stubEnv(variable, (only as readonly string[]).includes(variable) ? value : undefined);
+  }
+  vi.stubEnv('ADMIN_EMAILS', adminEmails);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET_FILE', undefined);
+  vi.stubEnv('APP_DATABASE_PASSWORD_FILE', undefined);
+}
+
+test('sign-in is off when none of its variables are set', () => {
+  stubSignIn([]);
+  expect(config.signIn).toBeNull();
+});
+
+test('sign-in is on with all three variables', () => {
+  stubSignIn(ALL_SIGN_IN);
+  const signIn = config.signIn;
+  expect(signIn?.neonAuthBaseUrl.href).toBe(AUTH_URL);
+  expect(signIn?.cookieSecret).toBe(COOKIE_SECRET);
+  expect(signIn?.appDatabaseUrl).toBe(APP_DATABASE_URL);
+  expect(signIn?.adminEmails).toEqual(new Set());
+});
+
+test.each(ALL_SIGN_IN)('a partial sign-in configuration without %s is an error', (unset) => {
+  stubSignIn(ALL_SIGN_IN.filter((variable) => variable !== unset));
+  expect(() => config.signIn).toThrow(ConfigError);
+  expect(() => config.signIn).toThrow(new RegExp(unset));
+});
+
+test('ADMIN_EMAILS is trimmed and lower-cased', () => {
+  stubSignIn(ALL_SIGN_IN, ' Will@Example.com ,b@x.io');
+  expect(config.signIn?.adminEmails).toEqual(new Set(['will@example.com', 'b@x.io']));
+});
+
+test('a cookie secret shorter than 32 characters is an error', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET', 'c'.repeat(31));
+  expect(() => config.signIn).toThrow(/NEON_AUTH_COOKIE_SECRET/);
+});
+
+test('NEON_AUTH_BASE_URL must be absolute', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_BASE_URL', '/neondb/auth');
+  expect(() => config.signIn).toThrow(/NEON_AUTH_BASE_URL must be an absolute URL/);
+});
+
+test('the cookie secret can come from a mounted file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET', undefined);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET_FILE', secretFile('f'.repeat(32)));
+  expect(config.signIn?.cookieSecret).toBe('f'.repeat(32));
+});
+
+test('the cookie secret cannot come from both the variable and a file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET_FILE', secretFile('f'.repeat(32)));
+  expect(() => config.signIn).toThrow(/NEON_AUTH_COOKIE_SECRET_FILE and NEON_AUTH_COOKIE_SECRET are both set/);
+});
+
+test('the app database password can come from a mounted file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('APP_DATABASE_PASSWORD_FILE', secretFile('wr%ter:pw'));
+  expect(decodeURIComponent(new URL(config.signIn?.appDatabaseUrl ?? '').password)).toBe('wr%ter:pw');
+});
+
+test('an app database URL that already carries a password refuses a password file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('APP_DATABASE_URL', 'postgres://roadtrip_web_writer:inline@db.test/roadtrip');
+  vi.stubEnv('APP_DATABASE_PASSWORD_FILE', secretFile('other'));
+  expect(() => config.signIn).toThrow(/APP_DATABASE_PASSWORD_FILE is set but APP_DATABASE_URL already carries a password/);
 });

@@ -1,4 +1,4 @@
-import { Icon, SeededTextField } from '@ui';
+import { Icon, TextField } from '@ui';
 import { coerceChoice, type ThemeChoice } from '@/lib/theme';
 import type { Profile, SettingsResponse } from '@/api/account-api';
 import './account.css';
@@ -66,22 +66,19 @@ export interface ProfilePanelProps {
  * the state and passes it down, so "is anything unsaved" is derivable at any moment
  * rather than only when someone asks — which is what the modal's discard guard
  * needs.
- *
- * The field is uncontrolled per LDS (see the plan's gotchas); reseeding it means
- * remounting the panel, which the modal does by keying on the loaded settings.
  */
 export function ProfilePanel({ profile, values, onChange }: ProfilePanelProps) {
   return (
     <div className="rt-account-panel">
-      <SeededTextField
+      <TextField
         id="settings-display-name"
         name="display_name"
         label="Display name"
         type="text"
         placeholder="Your name"
-        seed={values.display_name}
+        value={values.display_name}
         onChange={(e) =>
-          onChange({ ...values, display_name: (e.target as HTMLInputElement).value })
+          onChange({ ...values, display_name: e.target.value })
         }
       />
 

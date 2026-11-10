@@ -63,7 +63,7 @@ export function PlaceSurface({ poiId, arrival, onClose }: PlaceSurfaceProps) {
     if (!query.isError) {
       return (
         <PlaceChrome>
-          <Skeleton height={LOADING_HEIGHT} />
+          <Skeleton variant="block" style={{ height: LOADING_HEIGHT }} />
         </PlaceChrome>
       );
     }

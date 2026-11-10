@@ -60,6 +60,12 @@ describe('SharePoiButton', () => {
     expect(screen.getByLabelText(COPY_LABEL)).toBeInTheDocument();
   });
 
+  test('names itself on hover', () => {
+    render(<SharePoiButton id={4242} />);
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent(COPY_LABEL);
+  });
+
   test('does not inherit the query of the link that opened the tab', async () => {
     window.history.replaceState(null, '', '/?poi=1&route=abc');
     render(<SharePoiButton id={99} />);

@@ -190,6 +190,29 @@ class PoiServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `a campground only rec_gov sells books on rec_gov but claims no availability while rec_gov is disabled`() {
+        val poiId = seedRecGovOnlyPoi()
+        val recGov = FakeAvailabilityProvider(id = BookingProvider.RECGOV, enabled = false)
+
+        val detail = poiService(availabilityProviders = listOf(recGov)).poiDetail(poiId)!!.campgroundDetail()
+
+        assertEquals(BookingRefDto(BookingProvider.RECGOV.id, "232713"), detail.bookingRef)
+        assertEquals("Recreation.gov", detail.bookingSystem)
+        assertNull(detail.availabilitySupported)
+        assertNull(detail.latestDate)
+    }
+
+    @Test
+    fun `a campground only rec_gov sells claims availability once rec_gov is enabled`() {
+        val poiId = seedRecGovOnlyPoi()
+        val recGov = FakeAvailabilityProvider(id = BookingProvider.RECGOV)
+
+        val detail = poiService(availabilityProviders = listOf(recGov)).poiDetail(poiId)!!.campgroundDetail()
+
+        assertEquals(true, detail.availabilitySupported)
+    }
+
+    @Test
     fun `an aliased Campflare pin books through rec_gov with no booking adapters registered`() {
         // Campflare serves the aliased row while rec.gov sells it: booking
         // follows the registry's `sells`, not whichever adapters this process
@@ -829,6 +852,18 @@ class PoiServiceTest : SharedDbTest() {
                 propertiesJson = sourcePayloadJson,
                 bookingProvider = SOURCE,
                 bookingProviderRef = "pc:-2147483647:-2147483026:-2147483640",
+            ).poiId
+
+    private fun seedRecGovOnlyPoi(): Long =
+        ctx
+            .seedCatalogPoi(
+                sourceId = "232713",
+                name = "Sugar Loaf",
+                lon = -92.27,
+                lat = 35.55,
+                source = DataProvider.RECGOV.id,
+                bookingProvider = BookingProvider.RECGOV.id,
+                bookingProviderRef = "232713",
             ).poiId
 
     private fun poiService(availabilityProviders: List<AvailabilityProvider> = emptyList()): PoiService =

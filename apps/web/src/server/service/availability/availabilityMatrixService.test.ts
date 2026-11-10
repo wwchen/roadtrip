@@ -59,6 +59,7 @@ function storedAnswer(
         start_date: start,
         end_date: end,
         latest_date: LATEST,
+        from_cache: true,
         campsites: known$.map((index) => ({ data_provider: ENABLED_PROVIDER, data_provider_ref: refOf(index) })),
         cells: known$.flatMap((index) =>
           [start, addDays(start, 1)].map((date) => ({
@@ -122,8 +123,17 @@ test('an unconfigured egress is unavailable', async () => {
   await expect(week(null)).rejects.toBeInstanceOf(AvailabilityUnavailableError);
 });
 
+test('an unconfigured egress still answers an empty week for a campground with no matching campsites', async () => {
+  const result = await week(null, ['cabin']);
+  expect(result.state).toBe('empty');
+  expect(result.days).toEqual([]);
+  expect([result.start_date, result.end_date]).toEqual([start, end]);
+});
+
 test.each([
   [0, 'timeout'],
+  [302, 'egress_redirected'],
+  [200, 'egress_not_json'],
   [503, 'rate_limited'],
 ])('a mini-ca answer of %s %s is unavailable and logged', async (status, code) => {
   const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -160,6 +170,12 @@ test('a campground mini-ca will not serve is unknown_campground', async () => {
 
 test('all campsites closed is closed_for_season with no days', async () => {
   const result = await week(storedAnswer('closed'));
+  expect(result.state).toBe('closed_for_season');
+  expect(result.days).toEqual([]);
+});
+
+test('campsites mini-ca does not know do not keep the others from closed_for_season', async () => {
+  const result = await week(storedAnswer('closed', () => NOW, (index) => index !== 2));
   expect(result.state).toBe('closed_for_season');
   expect(result.days).toEqual([]);
 });

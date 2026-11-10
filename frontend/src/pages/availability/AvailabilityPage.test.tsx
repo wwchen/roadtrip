@@ -493,6 +493,17 @@ describe('runs tab', () => {
     await waitFor(() => expect(screen.getByLabelText('Poller ID')).toHaveValue(''));
     expect(window.location.search).toBe('?tab=runs');
   });
+
+  test('reset clears a filter that was typed but never applied', async () => {
+    stubApi(runList(run()));
+    renderPage('?tab=runs');
+    await screen.findByRole('table');
+
+    await userEvent.type(screen.getByLabelText('Poller ID'), '9');
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(screen.getByLabelText('Poller ID')).toHaveValue('');
+  });
 });
 
 describe('changes tab', () => {
@@ -504,6 +515,16 @@ describe('changes tab', () => {
       await screen.findByText('Set a Campsite ID or POI ID to load changes.'),
     ).toBeInTheDocument();
     expect(asked('/changes')).toBeUndefined();
+  });
+
+  test('reset clears a target that was typed but never applied', async () => {
+    stubApi();
+    renderPage('?tab=changes');
+
+    await userEvent.type(screen.getByLabelText('POI ID'), '42');
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(screen.getByLabelText('POI ID')).toHaveValue('');
   });
 
   test('refuses both a POI and a campsite', async () => {

@@ -101,10 +101,11 @@ export interface AvailabilityEgressCellDto {
 export type AvailabilityEgressMode = 'stored' | 'refresh';
 
 export interface AvailabilityEgressRequestDto {
-  mode?: AvailabilityEgressMode;
+  mode: AvailabilityEgressMode;
   campground: ProviderRefDto;
   start_date?: string;
   end_date?: string;
+  fresh_at_or_after?: string;
 }
 
 export interface AvailabilityEgressResponseDto {
@@ -113,6 +114,7 @@ export interface AvailabilityEgressResponseDto {
   latest_date?: string;
   campsites: ProviderRefDto[];
   cells: AvailabilityEgressCellDto[];
+  from_cache: boolean;
 }
 
 export interface AvailabilityErrorDto {

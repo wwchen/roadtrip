@@ -2,7 +2,7 @@
 //
 // Extraction and small controls only — anything that renders a *block* lives in
 // `PoiBlocks.tsx`, so a type component composes blocks here and never markup.
-import { Button, Icon } from '@ui';
+import { Button, Icon, Tooltip } from '@ui';
 import { distanceKm, formatDistance } from '@/lib/geo';
 import type { PoiFeature } from '@/lib/poi';
 import { formatPhone, phoneNumbers, telHref } from '@/lib/phone';
@@ -95,25 +95,26 @@ export function DirectionsButton({ name, lng, lat, kind = 'PLACE', onAdded }: Di
 
   const label = mode === 'directions' ? 'Add stop' : 'Directions';
   return (
-    <Button
-      variant="secondary"
-      iconOnly
-      aria-label={label}
-      title={label}
-      onClick={() => {
-        // `addPoiToTrip`, not `tripStore.addStop`: the POI is the DESTINATION and
-        // the mode becomes directions, which a bare append does not do. Pressing
-        // this in browse mode with `addStop` left the POI as the search row and the
-        // planner in browse mode — a parity break against the vanilla's
-        // `addTripStopFromExternal`, invisible until 4e mounted the topbar.
-        addPoiToTrip({ name: name || 'Selected place', lng: lng as number, lat: lat as number, kind });
-        // The vanilla handler closed the drawer after adding, so the map and the
-        // trip row are both visible immediately.
-        onAdded();
-      }}
-    >
-      <Icon name="navigation" aria-hidden="true" />
-    </Button>
+    <Tooltip label={label}>
+      <Button
+        variant="secondary"
+        iconOnly
+        aria-label={label}
+        onClick={() => {
+          // `addPoiToTrip`, not `tripStore.addStop`: the POI is the DESTINATION and
+          // the mode becomes directions, which a bare append does not do. Pressing
+          // this in browse mode with `addStop` left the POI as the search row and the
+          // planner in browse mode — a parity break against the vanilla's
+          // `addTripStopFromExternal`, invisible until 4e mounted the topbar.
+          addPoiToTrip({ name: name || 'Selected place', lng: lng as number, lat: lat as number, kind });
+          // The vanilla handler closed the drawer after adding, so the map and the
+          // trip row are both visible immediately.
+          onAdded();
+        }}
+      >
+        <Icon name="navigation" aria-hidden="true" />
+      </Button>
+    </Tooltip>
   );
 }
 
@@ -139,9 +140,11 @@ export function SharePoiButton({ id }: { id: string | number | null | undefined 
 
   const label = share.copied ? COPIED_POI_LABEL : COPY_POI_LABEL;
   return (
-    <Button variant="tertiary" iconOnly aria-label={label} title={label} onClick={() => share.copy(url)}>
-      <Icon name={share.copied ? 'check' : 'link'} aria-hidden="true" />
-    </Button>
+    <Tooltip label={label}>
+      <Button variant="tertiary" iconOnly aria-label={label} onClick={() => share.copy(url)}>
+        <Icon name={share.copied ? 'check' : 'link'} aria-hidden="true" />
+      </Button>
+    </Tooltip>
   );
 }
 

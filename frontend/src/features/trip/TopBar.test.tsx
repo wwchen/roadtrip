@@ -927,7 +927,7 @@ describe('the results list', () => {
 
     await act(async () => header.click());
 
-    expect(screen.getByRole('button', { expanded: false })).toBeInTheDocument();
+    expect(header).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('holds the corridor slider inside its body', async () => {

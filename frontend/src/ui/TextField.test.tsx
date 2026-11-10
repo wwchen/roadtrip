@@ -1,12 +1,11 @@
+import type { ChangeEvent } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { TextField } from './TextField';
-
-const valueOf = (event: Event): string => (event.target as HTMLInputElement).value;
+import { TextField } from '@ui';
 
 describe('TextField', () => {
   test('a date field reports a pick through onChange', () => {
-    const onChange = vi.fn((event: Event) => valueOf(event));
+    const onChange = vi.fn((event: ChangeEvent<HTMLInputElement>) => event.target.value);
     render(<TextField id="tf-date" label="Start date" type="date" onChange={onChange} />);
 
     fireEvent.input(screen.getByLabelText('Start date'), { target: { value: '2026-09-11' } });
@@ -27,7 +26,7 @@ describe('TextField', () => {
     expect(onChange).toHaveBeenCalledTimes(2);
   });
 
-  test('a text field is left to LDS and still reports once per keystroke', () => {
+  test('a text field reports once per keystroke', () => {
     const onChange = vi.fn();
     render(<TextField id="tf-text" label="POI ID" onChange={onChange} />);
 

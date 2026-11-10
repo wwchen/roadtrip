@@ -85,10 +85,14 @@ export function egressRequest(
   };
 }
 
+function emptyWeek(target: WeekTarget, startDate: string | null, endDate: string | null, now: Date): AvailabilityEgressResponseDto {
+  const start = startDate ?? poiDateContext(target.campground.lat, target.campground.lng, now).earliestDate;
+  return { start_date: start, end_date: endDate ?? addDays(start, DEFAULT_WEEK_DAYS), campsites: [], cells: [], from_cache: false };
+}
+
 function unknownToMiniCa(target: WeekTarget, startDate: string | null, endDate: string | null, now: Date): AvailabilityEgressResponseDto {
   console.warn(CATALOG_DRIFT_LOG, JSON.stringify({ campground: target.campground.dataProviderRef, provider: target.campground.dataProvider }));
-  const start = startDate ?? poiDateContext(target.campground.lat, target.campground.lng, now).earliestDate;
-  return { start_date: start, end_date: endDate ?? addDays(start, DEFAULT_WEEK_DAYS), campsites: [], cells: [] };
+  return emptyWeek(target, startDate, endDate, now);
 }
 
 async function storedWeek(
@@ -98,7 +102,10 @@ async function storedWeek(
   fetchStored: EgressFetch | null,
   now: Date,
 ): Promise<AvailabilityEgressResponseDto> {
-  if (fetchStored === null) throw new AvailabilityUnavailableError();
+  if (fetchStored === null) {
+    if (target.campsites.length === 0) return emptyWeek(target, startDate, endDate, now);
+    throw new AvailabilityUnavailableError();
+  }
   const result = await fetchStored(egressRequest(target, startDate, endDate, 'stored'));
   if (result.kind === 'cells') return result.body;
   if (result.status === STATUS_NOT_FOUND) return unknownToMiniCa(target, startDate, endDate, now);
@@ -138,7 +145,13 @@ export async function availabilityWeek(
   if (tracked.length === 0) return { ...base, state: 'empty', days: [] };
   const cells = cellsOf(stored, new Map(tracked.map((campsite) => [campsite.key, campsite.id])));
   const cache = weekCache(tracked.map((campsite) => campsite.id), cells, stored.start_date, stored.end_date, settings.ttlSeconds, settings.now);
-  const fused = fuseWeek(target.campsites.map((campsite) => campsite.id), cells, stored.start_date, stored.end_date);
+  const fused = fuseWeek(
+    target.campsites.map((campsite) => campsite.id),
+    cells,
+    stored.start_date,
+    stored.end_date,
+    tracked.map((campsite) => campsite.id),
+  );
   return { ...base, state: fused.state, ...(cache === null ? {} : { cache }), days: fused.days };
 }
 

@@ -5,17 +5,18 @@
 pages call (`/api/pois`, `/api/pois/{id}`, `/api/pois/search`, `/api/campgrounds/search`,
 `/api/campgrounds/details`, `/api/geocode`, `/api/route`, `/api/pois/on-route`, `/api/me`,
 `/api/build-info`, and `/api/watches`, which answers 401), its own `/campgrounds/[poiId]` and
-`/search` pages, and `/api/health`. It runs on Vercel against a Neon Postgres. Sign-in, watches,
-availability and the worker are not ported yet; the Kotlin stack on mini-ca is untouched and
-keeps serving production.
+`/search` pages, and `/api/health`. It runs on Vercel against a Neon Postgres. Availability is
+read from mini-ca (see "Availability on Vercel"). Sign-in, watches and the worker are not ported
+yet; the Kotlin stack on mini-ca is untouched and keeps serving production.
 
 A campground's detail carries Kotlin's booking buttons (`cta`) and booking site
 (`booking_system`), and its summary carries `booking_system`. Both are computed from the
 catalog row and the booking-site table in `@roadtrip/domain` (kept equal to
 `poi-registry.yaml`'s `booking_providers` by a test in `packages/worker`), with no vendor
 calls. An Aspira button is dated to the campground's first bookable night in its own time zone,
-looked up from its coordinates. `availability_supported` and the availability date fields stay
-off until availability is ported, so the drawer's availability grid does not mount.
+looked up from its coordinates. `availability_supported` is set only when an enabled
+availability provider serves the campground, the same rule Kotlin uses. A campground only rec.gov
+sells keeps its rec.gov button but shows no grid while rec.gov availability is off.
 
 Nothing in this file is a secret. The connection string itself lives only in Vercel and in the
 operator's own scratch file; this file records its shape and the settings measured against it.
@@ -100,11 +101,11 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `DATABASE_URL` | sensitive | the Neon **pooled** endpoint as the `roadtrip_web` role, plus `connect_timeout=10&idle_timeout=20` |
 | `DATABASE_PREPARE` | plain | `true` |
 | `DATABASE_REQUIRE_READ_ONLY` | plain, optional | default `true`; set `false` for **Preview only**, whose branch-scoped `DATABASE_URL` from the Neon integration logs in as the branch owner, which is not read-only |
-| `ENABLED_DATA_PROVIDERS` | plain, optional | default `campflare,bcparks-strapi,aspira,recgov,reserveamerica,reservecalifornia`, the same campground providers as Kotlin's `read-path.enabled-data-providers`; set but empty is a `ConfigError`, never "none enabled" |
+| `ENABLED_DATA_PROVIDERS` | plain, optional | default `campflare,bcparks-strapi,aspira,reserveamerica,reservecalifornia`, the same campground providers as Kotlin's `read-path.enabled-data-providers` (rec.gov is off: Campflare carries the same facilities and their availability); set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
 | `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
-| `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list; picks the provider whose booking links the campsite list shows (the matrix takes its window from mini-ca) |
+| `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list, which a test in `config.test.ts` keeps equal to `application.yaml`; decides `availability_supported` and picks the provider whose booking links the campsite list shows (the matrix takes its window from mini-ca). Change it only together with mini-ca's list |
 | `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this counts as stale |
 | `AVAILABILITY_EGRESS_URL` | plain, optional | `https://roadtrip-egress.floo.ca`; with the two Access variables, how the matrix reaches mini-ca's availability |
 | `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `roadtrip-egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; the only credential the egress call carries |
@@ -127,12 +128,26 @@ Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores
   date, lists the campsites it knows, and reads its own Postgres; it never calls a vendor on this
   path. Freshness counts only campsites mini-ca knows, so a campsite missing from its catalog shows
   unknown without keeping the week stale. A window mini-ca refuses is passed through as its `400`.
-  If mini-ca is unreachable or the egress is not configured, the GET answers
-  `503 availability_unavailable`.
+  `closed_for_season` is judged over the campsites mini-ca knows. If mini-ca is unreachable or the
+  egress is not configured, the GET answers `503 availability_unavailable`, except that a
+  campground with no matching campsites answers an empty week without asking mini-ca.
 - When the week is stale, the page sends one `POST /api/pois/{id}/campsites/availability/refresh`.
-  It answers `202` at once and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
+  It first checks the window with a stored read, so a window mini-ca refuses is the caller's `400`.
+  Then it answers `202` and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
   read-through fetches from the vendor through its one rate limiter and stores the result in its
   own Postgres. The page polls the GET every 2 seconds, at most 15 times, until the week is fresh.
+- `POST /api/pois/availability/stays` is the map's stay check, streamed as `text/event-stream`
+  in the same contract Kotlin serves. It validates as Kotlin does (1 to 50 POIs, both dates, a
+  group size of at least 1; `max_age_seconds` clamped to 60 s to 2 h). For each POI, at most 3 at
+  a time, it reads the campground and campsites from Neon and asks mini-ca for `mode: "refresh"`
+  with `fresh_at_or_after` set to now minus the max age: mini-ca answers from its store when every
+  cell is that fresh and fetches otherwise, through the same read-through as the refresh. Vercel
+  then judges the stay over the campsites mini-ca knows that fit the group (`staySummary.ts`,
+  ported from Kotlin's `StaySummary.kt`) and classifies egress failures as Kotlin's
+  `StayFailureClassifier` does. A POI gets 45 s and the stream 120 s; the rest answer
+  `timed_out` and `done` says `deadline_reached`. A keep-alive comment goes out every 15 s.
+  Unconfigured egress answers every POI `failed`, `provider_misconfigured`. Per-IP limiting is a
+  Vercel Firewall rule on the path (Kotlin's ceiling is 150 POIs a minute).
 
 Both are on only where `AVAILABILITY_EGRESS_URL` and both `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/
 `_SECRET` are set; a partial set fails at configuration. Unset, the matrix GET answers `503` and
@@ -165,6 +180,111 @@ To turn it on:
 2. Deploy mini-ca; production's compose turns the egress route on.
 3. Set the three variables in Vercel Production and add the Firewall rule.
 4. Open a stale campground's matrix on the deployment and watch it refresh.
+
+## Kotlin routes Vercel forwards
+
+The availability dashboard and the API docs read mini-ca's own Postgres and routing tree, so
+Vercel forwards them to Kotlin instead of serving them: `apps/web/src/app/api/availability/[...path]`
+and `apps/web/src/app/api/docs/[[...path]]` call `forwardToKotlin`
+(`apps/web/src/server/client/kotlinPassthrough.ts`). It goes over the same Access-protected
+egress host as the availability fetch, with the same service token, and forwards only:
+
+- `GET` matching `KOTLIN_READ_PATH`: `/api/availability/pollers`, `…/pollers/summary`,
+  `…/pollers/{id}/runs`, `…/runs`, `…/changes`, `…/changes/summary`, and `/api/docs` with
+  everything under it (Swagger UI and `openapi.json`);
+- `POST` matching `KOTLIN_FORCE_PATH`: `/api/availability/pollers/{id}/force`, the "check now"
+  action, which keeps Kotlin's per-poller cooldown.
+
+Anything else under those prefixes is `404` without a call. The query string and the request's
+`accept` and `content-type` go up; the status and `content-type`, `cache-control` and
+`retry-after` come back. Unconfigured egress, an unreachable mini-ca, or a redirect off the list
+(an Access policy sending the token to a login page) is `503 kotlin_unavailable`; a relative
+redirect to another listed path passes through. The egress host's Caddy block admits the same
+two patterns, and `kotlinPassthrough.test.ts` fails if the Caddyfile and the module disagree.
+
+Watches, settings, add-to-cart and Slack interactivity are not forwarded: they move to Vercel
+in their own sub-projects (see `docs/superpowers/specs/2026-11-08-sign-in-on-vercel-design.md`).
+The admin import stays behind its Cloudflare Zero Trust rule on mini-ca.
+
+## Sign-in on Vercel
+
+Vercel signs users in with Neon Auth (Managed Better Auth); Kotlin's `/auth/*` is not used.
+Users and sessions live in the `neon_auth` schema of Neon `main`. `/api/auth/*` proxies to Neon
+Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it through `AuthPort`
+(`apps/web/src/server/auth/`), whose only implementation adapts `@neon/auth`.
+
+- Pages: `/auth/sign-in` (Google, email and password, an emailed link), `/auth/sign-up`,
+  `/auth/forgot`, `/auth/reset`. Their forms post to server actions. `/auth/login?return_to=…`
+  redirects to the sign-in page and `/auth/logout` signs out, so the frontend's `auth-api.ts`
+  is unchanged. `return_to` is kept only when it is a same-site path.
+- Google, magic-link and email-verification sign-ins finish on Neon Auth's host and come back with
+  `?neon_auth_session_verifier=…`. `apps/web/src/proxy.ts` runs Neon Auth's middleware on exactly
+  those requests; it exchanges the verifier for the session cookie and redirects to the same URL
+  without it. Callback URLs are absolute, built from the request's origin.
+- The exchange needs the challenge cookie of the browser that asked for the link. A link opened
+  elsewhere (a phone's mail app) lands on `/auth/sign-in` with its return path and a notice to ask
+  for a new link from that browser; a failed exchange lands there with the retry message.
+- Neon's shared email provider supports only code-style verification. Link verification, which
+  these pages use, needs custom SMTP (Resend), so `require_email_verification` stays off until it is
+  set; until then a password sign-up is never verified and `/api/me` treats it as signed out.
+- `GET /api/me` answers `auth_enabled: false` when sign-in is off, anonymous without a session
+  or when Neon Auth cannot be reached, and otherwise the user. Each Neon Auth user is linked to
+  one `app_user` through `user_identity` (`provider = 'neon-auth'`, `subject` = the Neon Auth
+  user id); a verified email joins the account that already has it. Admin comes from
+  `ADMIN_EMAILS`.
+- `app_user` and `user_identity` are written by the `roadtrip_web_writer` role
+  (`packages/db/migrations/0003_web_writer.sql`), which can write only those two tables.
+  `roadtrip_web` stays read-only.
+
+Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
+
+| Variable | Value |
+|---|---|
+| `NEON_AUTH_BASE_URL` | The Auth URL Neon shows for `main` |
+| `NEON_AUTH_COOKIE_SECRET` | At least 32 random characters (`openssl rand -base64 32`) |
+| `APP_DATABASE_URL` | `roadtrip_web_writer`'s connection string |
+| `ADMIN_EMAILS` | Comma-separated admin emails |
+
+Previews get none of them, so a preview's `/api/me` reports sign-in off and `/api/auth/*` is 404.
+
+Locally, Tilt runs `apps/web` as its `web` resource (`next dev` on http://localhost:3001, after
+`frontend-dist` and the backend's migrations; Grafana holds 3000), alongside the Kotlin app on :8765. It signs in against the Neon Auth of the
+`vercel-dev` Neon branch, whose users are separate from production's, and keeps app data in local
+Postgres:
+
+- `NEON_AUTH_BASE_URL` comes from `apps/web/.env.development`, which `next dev` loads and Vercel
+  never does. Put your own in `apps/web/.env.local` to override it.
+  `NEON_AUTH_COOKIE_SECRET` and `ADMIN_EMAILS` come from Tilt's environment (the first from the
+  local vault).
+- The resource builds `DATABASE_URL` (`roadtrip_web`) and `APP_DATABASE_URL` (`roadtrip_web_writer`)
+  on `127.0.0.1:5432` at run time from `WEB_DB_PASSWORD` and `WEB_WRITER_DB_PASSWORD`,
+  URL-encoded, so no password appears in the Tiltfile or the Tilt UI. The compose `web` service,
+  which only production's `web` profile runs, has no sign-in settings.
+- `roadtrip_web_writer` comes from Flyway's `R__web_writer_grants.sql` (held equal to Drizzle's
+  `0003` by `webWriteGrants.test.ts`). Both web roles get their passwords from `postgres-init/` on
+  first init only. A local database created before those scripts needs them once, with the stack
+  up:
+  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_DB_PASSWORD_FILE=/run/secrets/web_db_password postgres /docker-entrypoint-initdb.d/20-web-reader.sh`
+  and
+  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password postgres /docker-entrypoint-initdb.d/30-web-writer.sh`.
+  Until then the web resource answers 500 with `password authentication failed`.
+- Without all three sign-in settings, `next dev` logs which are missing and runs with sign-in off.
+  The resource stops `next dev` when Tilt goes away, even if Tilt is killed, so a stale dev server
+  never holds `apps/web`, and restarts it after `npm ci`.
+- `/auth/logout` expires the `__Secure-neon-auth` cookies itself when Neon Auth refuses the
+  sign-out (it does when the request has neither Origin nor Referer).
+- `vercel-dev` allows localhost origins by default. Reset it from `main` only after dropping its
+  copied `neon_auth` schema, or Neon Auth cannot be re-provisioned there.
+
+One-time owner setup on Neon `main`: enable Neon Auth; add `https://roadtrip.floo.ca` as a
+trusted origin; turn on email and password with verification required, the magic-link plugin,
+and Google with the production OAuth client; set the email provider to Resend's SMTP; and set
+`roadtrip_web_writer`'s password.
+
+Migrations reach Neon through the `neon-migrate` job in `ci.yml`: on a master push, after
+`ci-passed`, it runs `npm run migrate --workspace @roadtrip/db` with the `NEON_MIGRATE_URL`
+repository secret (an owner connection string). Without the secret it skips with a warning, so
+it never blocks the mini-ca deploy; a failing migration fails CI.
 
 ## Previews
 

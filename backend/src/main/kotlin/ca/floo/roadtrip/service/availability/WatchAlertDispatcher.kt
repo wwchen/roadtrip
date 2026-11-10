@@ -12,6 +12,9 @@ import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.time.Instant
 import java.time.LocalDate
 
 /**
@@ -25,6 +28,8 @@ import java.time.LocalDate
  * fails the lint job instead of shipping a 404 to users.
  */
 private const val GRAFANA_CAMPGROUND_DETAIL_UID = "campground-detail"
+
+private const val FIRING_LOCK_STRIPES = 64
 
 /**
  * Turns cube edges into watch alerts. Called once per poller run, after the
@@ -65,6 +70,21 @@ internal class WatchAlertDispatcher(
     private val campgroundCta: CampgroundCta,
     private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
 ) {
+    private val firingLocks = List(FIRING_LOCK_STRIPES) { Mutex() }
+
+    suspend fun dispatchCovering(
+        transitions: List<CellTransition>,
+        recordedAt: Instant,
+    ) {
+        val bookable = transitions.filter { it.status.isOnlineBookable }
+        if (bookable.isEmpty()) return
+        val watches =
+            watchRepo
+                .liveWatchesCovering(bookable.map { it.campsiteId }.distinct())
+                .filter { it.createdAt.toInstant() < recordedAt }
+        dispatch(watches, bookable)
+    }
+
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
@@ -182,6 +202,18 @@ internal class WatchAlertDispatcher(
         handlers: List<TriggerActionHandler>,
     ) {
         if (handlers.isEmpty()) return
+        firingLocks[Math.floorMod(watch.id, FIRING_LOCK_STRIPES)].withLock {
+            val current = watchRepo.findById(watch.id)
+            if (current?.status == WatchStatus.ACTIVE) fire(current, covered, campsitesById, handlers)
+        }
+    }
+
+    private suspend fun fire(
+        watch: AvailabilityWatchRepo.Watch,
+        covered: List<CellTransition>,
+        campsitesById: Map<Long, Campsite>,
+        handlers: List<TriggerActionHandler>,
+    ) {
         val openings = hydrateOpenings(covered, campsitesById)
         // Fire every registered handler; fold-any so one succeeding handler is
         // enough to satisfy `stopWhenTriggered`. `.any { it }` on a mapped

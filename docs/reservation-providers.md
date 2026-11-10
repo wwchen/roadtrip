@@ -62,10 +62,17 @@ service/availability/provider/
 `booking_provider` + `booking_provider_ref` (the colon-delimited
 `BookingProviderRef.serialize()` form) is the row's *primary* booking identity.
 The availability API emits it as `scope_ref`. The POI detail's
-`booking_ref: {provider, ref}` — and with it `booking_system`, the CTAs, and
-`availability_supported` — is instead the identity `BookingIdentityResolver`
-picks (see "Booking provider seam"), which falls back to the *serving*
-provider's ref and then to the primary. Nothing on the serving
+`booking_ref: {provider, ref}` — and with it `booking_system` and the CTAs —
+is instead the identity `BookingIdentityResolver` picks (see "Booking provider
+seam"), which falls back to the *serving* provider's ref and then to the
+primary. `availability_supported` is narrower: it is set only when an enabled
+availability provider serves the campground (`BookingHorizonResolver.servingProvider`
+in Kotlin, `servingAvailabilityProvider` in `@roadtrip/domain`), the lookup the
+grid, the stay check, watches and the egress all go through. A campground only
+rec.gov sells keeps its rec.gov button while rec.gov availability is off, and
+shows no grid. The web app's default `ENABLED_AVAILABILITY_PROVIDERS` must equal
+`application.yaml`'s `enabled-availability-providers`; a test in
+`apps/web/src/server/config.test.ts` holds them equal. Nothing on the serving
 path reads `source_payload`; a key an ETL writes there is provenance, not
 behaviour.
 
@@ -233,6 +240,28 @@ implementation (e.g. Campflare's alert API) would:
   the same `CellTransition` the internal poller produces, and hands them
   to `WatchAlertDispatcher`.
 - `onWatchDeactivated`: unsubscribe upstream.
+
+Readers detect openings too. When the read-through (the matrix, the stay
+check, the egress refresh) fetches and a cell's status changes,
+`AvailabilityLoader` passes the transitions to a `CellTransitionSink`.
+`WatchTransitionDispatch` hands them, with the time of the write, to
+`WatchAlertDispatcher.dispatchCovering` off the request path. That finds
+the live watches covering those campsites
+(`AvailabilityWatchRepo.liveWatchesCovering`), skips watches created after
+the write (their initial dispatch reads the cell itself), and dispatches.
+Without it, an opening a reader saw first became the current status, the
+poller's next write saw no change, and no alert went out.
+
+Two guards keep one opening from alerting twice:
+
+- `AvailabilityRepo.recordObservations` takes a transaction advisory lock
+  per campground, in id order, before comparing status, so two writers
+  recording the same change emit one transition between them. It locks no
+  campsite rows, so it neither blocks foreign-key inserts nor deadlocks
+  with the catalog importer.
+- `WatchAlertDispatcher` fires one watch at a time (a striped in-process
+  mutex) and re-reads the watch first, so a `stopWhenTriggered` watch that
+  one path just marked `DONE` is not fired again by another.
 
 **Adding a new alert provider is one file** under
 `service/availability/alert/providers/<vendor>/` plus one registry entry.
@@ -620,8 +649,9 @@ answers every cell with its campsite's `(data_provider, data_provider_ref)` and 
 observed, plus the window it resolved against the serving provider, the latest bookable date, and
 every campsite it knows for that campground. `mode: "stored"` reads mini-ca's current cells and
 never calls a vendor;
-`mode: "refresh"` (the default) runs the same read-through `CampsiteAvailabilityService` as the
-matrix, so it is one more caller of the one rate limiter, not a second one. It is mounted only when
+`mode: "refresh"` runs the same read-through `CampsiteAvailabilityService` as the
+matrix, so it is one more caller of the one rate limiter, not a second one. `mode` is required: a
+request without it is `400`, so a forgotten field can never reach a vendor. It is mounted only when
 `AVAILABILITY_EGRESS_ENABLED` is `true` and carries no credential of its own: the Cloudflare Access
 policy on its hostname is the caller check; `docs/web-app.md` covers the rest of the path.
 

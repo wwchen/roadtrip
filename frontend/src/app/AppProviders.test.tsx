@@ -3,7 +3,11 @@ import { createTestQueryClient } from '@/test/query-client';
 import { render, screen } from '@testing-library/react';
 import { useMe } from '@/queries/auth';
 import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
+import { Icon } from '@ui';
+import spriteMarkup from '@lew-ds/open-icons/icons.svg?raw';
 import { AppProviders } from './AppProviders';
+
+const MASK_REFERENCES = [...spriteMarkup.matchAll(/url\(#([^)]+)\)/g)].map((m) => m[1]);
 
 const SIGNED_IN = {
   authenticated: true,
@@ -83,5 +87,29 @@ describe('AppProviders', () => {
 
     expect(await screen.findByText('error')).toBeInTheDocument();
     client.clear();
+  });
+
+  test('every mask a glyph refers to resolves in the page', () => {
+    render(
+      <AppProviders client={createTestQueryClient()}>
+        <p>page</p>
+      </AppProviders>,
+    );
+
+    expect(MASK_REFERENCES.length).toBeGreaterThan(0);
+    expect(MASK_REFERENCES.filter((id) => document.getElementById(id) === null)).toEqual([]);
+  });
+
+  test('glyphs point at the sprite in the page, which stays rendered', () => {
+    render(
+      <AppProviders client={createTestQueryClient()}>
+        <Icon name="warning-fill" />
+      </AppProviders>,
+    );
+
+    const sprite = document.getElementById('warning-fill')?.closest('svg[data-icon-sprite]');
+    expect(document.querySelector('use')?.getAttribute('href')).toBe('#warning-fill');
+    expect(sprite).not.toBeNull();
+    expect((sprite as SVGElement).style.display).not.toBe('none');
   });
 });

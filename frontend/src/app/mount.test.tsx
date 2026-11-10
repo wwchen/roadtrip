@@ -39,8 +39,8 @@ test('mounting a page installs the icon sprite', async () => {
   await vi.waitFor(() => expect(fetched.requests.length).toBe(chromeUrls.length));
 
   // A masked symbol, whose `mask="url(#k-warning-fill)"` only resolves when the
-  // sprite shares a document with the glyph referencing it. See `@ui/icon-sprite`.
-  expect(document.getElementById('k-warning-fill')).not.toBeNull();
+  // sprite shares a document with the glyph referencing it.
+  await vi.waitFor(() => expect(document.getElementById('k-warning-fill')).not.toBeNull());
 });
 
 test('the chrome still starts when the shell has no mount point, and says so', async () => {

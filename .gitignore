@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!apps/web/.env.development
 samples/
 node_modules/
 .DS_Store
