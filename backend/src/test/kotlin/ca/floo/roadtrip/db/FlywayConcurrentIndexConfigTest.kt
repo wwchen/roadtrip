@@ -1,8 +1,10 @@
 package ca.floo.roadtrip.db
 
 import ca.floo.roadtrip.fixtures.repoFile
+import org.flywaydb.core.Flyway
+import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val TRANSACTIONAL_LOCK_KEY = "flyway.postgresql.transactional.lock"
@@ -22,10 +24,15 @@ private const val PLUGIN_LOCK_SITE = "pluginConfiguration = mapOf(flywaySessionL
 class FlywayConcurrentIndexConfigTest {
     @Test
     fun `migrate takes a session-level Flyway lock, never a transactional one`() =
-        assertEquals(
-            "false",
-            flywaySessionLock[TRANSACTIONAL_LOCK_KEY],
-            "Db.migrate must pass $TRANSACTIONAL_LOCK_KEY=false; a transactional lock deadlocks V61",
+        assertFalse(
+            Flyway
+                .configure()
+                .sessionLevelLock()
+                .load()
+                .configuration
+                .getConfigurationExtension(PostgreSQLConfigurationExtension::class.java)
+                .isTransactionalLock,
+            "Db.migrate must set $TRANSACTIONAL_LOCK_KEY=false; a transactional lock deadlocks V61",
         )
 
     @Test

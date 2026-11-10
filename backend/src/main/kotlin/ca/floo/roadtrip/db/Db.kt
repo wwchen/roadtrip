@@ -4,6 +4,8 @@ import ca.floo.roadtrip.config.DbConfig
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.configuration.FluentConfiguration
+import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
@@ -35,7 +37,8 @@ fun dataSourceFor(cfg: DbConfig): HikariDataSource {
 // connection idle-in-transaction for the whole run — and CREATE INDEX
 // CONCURRENTLY (V61) then waits on that virtualxid forever. Session-level instead.
 // Set at three sites: here, generateJooq's Flyway, and the `flyway {}` block (both in backend/build.gradle.kts).
-internal val flywaySessionLock = mapOf("flyway.postgresql.transactional.lock" to "false")
+internal fun FluentConfiguration.sessionLevelLock(): FluentConfiguration =
+    apply { getConfigurationExtension(PostgreSQLConfigurationExtension::class.java).isTransactionalLock = false }
 
 fun migrate(ds: DataSource) {
     // baselineOnMigrate handles the case where the DB was hand-bootstrapped
@@ -46,7 +49,7 @@ fun migrate(ds: DataSource) {
         .locations("classpath:db/migration")
         .baselineOnMigrate(true)
         .baselineVersion("0")
-        .configuration(flywaySessionLock)
+        .sessionLevelLock()
         .load()
         .migrate()
 }
