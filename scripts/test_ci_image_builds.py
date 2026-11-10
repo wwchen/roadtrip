@@ -420,6 +420,27 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("node scripts/importer-differential.mjs", job_commands(gate))
         self.assertIn("importer-differential", jobs["ci-passed"]["needs"])
 
+    def test_a_lockfile_edit_runs_the_importer_differential_only_when_the_importers_load_it(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        filters = path_filters()
+        self.assertNotIn("package-lock.json", filters["importer_differential"])
+        self.assertNotIn("package.json", filters["importer_differential"])
+        self.assertIn("package-lock.json", filters["lockfile"])
+
+        changes = jobs["changes"]
+        check = next(step for step in changes["steps"] if step.get("id") == "importer_dependencies")
+        self.assertEqual(check["if"], "steps.filter.outputs.lockfile == 'true'")
+        self.assertIn("node scripts/importer-dependencies-changed.mjs", check["run"])
+        self.assertIn('>> "$GITHUB_OUTPUT"', check["run"])
+        output = changes["outputs"]["importer_differential"]
+        self.assertIn("steps.filter.outputs.importer_differential == 'true'", output)
+        self.assertIn("steps.importer_dependencies.outputs.changed == 'true'", output)
+
+        self.assertIn(
+            "node --test scripts/importer-dependencies-changed.test.mjs",
+            job_commands(jobs["package-tests"]),
+        )
+
     def test_every_pinned_path_exists(self) -> None:
         tracked = tracked_paths()
         self.assertIn(IMPORTER_DIFFERENTIAL, tracked, "git ls-files returned nothing usable")

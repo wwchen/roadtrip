@@ -28,7 +28,7 @@ jobs:
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
       schema_equivalence: ${{ steps.filter.outputs.schema_equivalence }}
       package_tests: ${{ steps.filter.outputs.package_tests }}
-      importer_differential: ${{ steps.filter.outputs.importer_differential }}
+      importer_differential: ${{ steps.filter.outputs.importer_differential == 'true' || steps.importer_dependencies.outputs.changed == 'true' }}
       web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -189,10 +189,10 @@ jobs:
               - 'scripts/importer-*.mjs'
               - 'scripts/schema-reference.mjs'
               - 'scripts/build-workspaces.mjs'
-              - 'package.json'
-              - 'package-lock.json'
               - 'tsconfig.base.json'
               - '.github/workflows/ci.yml'
+            lockfile:
+              - 'package-lock.json'
             web:
               - 'apps/**'
               - 'Dockerfile'
@@ -222,6 +222,18 @@ jobs:
               - '*.gradle.kts'
               - '.editorconfig'
               - '.github/workflows/ci.yml'
+      - name: Did the lockfile change a package the importers load?
+        id: importer_dependencies
+        if: steps.filter.outputs.lockfile == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet --depth=1 origin "$BASE_SHA"
+          git show "$BASE_SHA:package-lock.json" > "$RUNNER_TEMP/base-package-lock.json"
+          changed="$(node scripts/importer-dependencies-changed.mjs "$RUNNER_TEMP/base-package-lock.json" package-lock.json)"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "Importer dependencies changed: $changed"
 
   # Flyway stores a checksum for every migration it has applied, so a V*.sql
   # that already ran is immutable. Editing one only surfaces at deploy time,
@@ -558,6 +570,9 @@ jobs:
       # a clean diff rather than as a failure.
       - name: Check the importer differential's own harness
         run: node --test scripts/importer-differential.test.mjs
+
+      - name: Check which lockfile edits run the importer differential
+        run: node --test scripts/importer-dependencies-changed.test.mjs
 
       - name: Check the Kotlin oracle's comparison machinery
         run: node --test scripts/etl-oracle.test.mjs
