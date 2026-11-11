@@ -63,7 +63,7 @@ rec.gov-bookable cell, and gets a `cart_url` whose cart holds that site.
 - Neon already has `user_booking_credentials` and `user_settings` (`packages/db/migrations/0000_init.sql`),
   empty. `roadtrip_web_writer` (`0003_web_writer.sql`) can write only `app_user` and `user_identity`.
 - Vercel reaches mini-ca through `roadtrip-egress.floo.ca` (Cloudflare tunnel, Cloudflare Access
-  service token, then a bearer on `/internal/availability/fetch`), per
+  service token, then a bearer on `/api/internal/availability/fetch`), per
   `2026-11-05-availability-egress-design.md`.
 
 ## Design
@@ -74,7 +74,7 @@ rec.gov-bookable cell, and gets a `cart_url` whose cart holds that site.
 | --- | --- | --- |
 | Neon | `user_booking_credentials (user_id, provider, username, secret_cipher, updated_at)` | Migration `0004_booking_credentials_writer.sql` grants `roadtrip_web_writer` `SELECT, INSERT, UPDATE, DELETE` on `user_booking_credentials`. The legacy `user_settings.recgov_*` columns are not written. |
 | Vercel (`apps/web`) | `BOOKING_CREDENTIAL_ENCRYPTION_KEY` (base64 of 32 bytes) | Routes in §3, a cipher, a booking egress client, the MFA cookie (§4). |
-| Kotlin on mini-ca | Nothing per user | `/internal/booking/*` relay (§2). |
+| Kotlin on mini-ca | Nothing per user | `/api/internal/booking/*` relay and a profile-keyed core extracted from `RecGovBookingAdapter` (§2); one Caddy matcher. |
 | Companion | Per-`profile_id` browser session cache only | None. |
 
 The decrypted password exists only inside the Vercel function handling a login, and inside the
@@ -83,7 +83,7 @@ relay and companion for the length of that call. It is never logged, returned or
 
 ### 2. The relay
 
-Kotlin registers `POST /internal/booking/{health,login,login/mfa,refresh,verify,atc,signout}` only
+Kotlin registers `POST /api/internal/booking/{health,login,login/mfa,refresh,verify,atc,signout}` only
 when `BOOKING_EGRESS_TOKEN` is set and a companion is configured. It reaches Kotlin by the same
 route as the availability egress (tunnel hostname, Cloudflare Access, Caddy) and requires
 `Authorization: Bearer <BOOKING_EGRESS_TOKEN>`, compared in constant time. The token is separate from
@@ -93,17 +93,45 @@ Every request body is a typed DTO carrying `profile_id`. Only `login` carries `u
 `password`; `login/mfa` carries `challenge_id` and `mfa_code`; `atc` carries `vendor_site_id`,
 `start_date`, `end_date`. Each handler calls the matching `CompanionSessionClient` method:
 
-- `atc` runs `RecGovBookingAdapter`'s preflight with `allowUnattendedRelogin=false` — health, then a
-  cookie refresh if the session is not active, then the hold — so the button path never sends
-  credentials and never logs in unattended, as today.
+- `atc` runs the hold preflight with re-login off — health, then a cookie refresh if the session is
+  not active, then the hold — so the button path never sends credentials and never logs in
+  unattended, as today.
 - `signout` is `logout` then `destroyProfile`, and reports each.
+
+**`RecGovBookingAdapter` cannot be called as it stands.** It is keyed by a roadtrip user, not a
+profile: `AddToCartRequest.ownerUserId` is a `Long`, `profileIdFor` derives the profile from it
+(`RecGovBookingAdapter.kt:242`), `canFulfil` and the re-login path read mini-ca's own
+`user_booking_credentials` through `RecGovCredentialService`, and it records `RecentAtcFires`. The
+relay change therefore extracts a profile-keyed core from the adapter — preflight (health, refresh),
+the `/atc` call and the code-to-category mapping (l.85-113), taking a `profile_id` string and no
+credentials source — that both the adapter and the relay call. The adapter keeps its user-keyed
+shell (credentials check, profile derivation, re-login, fires) for Kotlin's own watches until they
+are retired. The relay passes `profile_id` through verbatim and never derives one.
 
 Every response is one envelope: `{ok, code, category, detail, cart_url, challenge_id, health}`, with
 fields absent where they do not apply. `code` is the companion's code unchanged; `category`
-(`caller_action`, `retry_later`, `upstream`) comes from the adapter's existing mapping, so the
-mapping is not duplicated in TypeScript. Request bodies are excluded from Kotlin's request logging.
+(`caller_action`, `retry_later`, `upstream`) comes from the extracted mapping, so the mapping is not
+duplicated in TypeScript. Request bodies are excluded from Kotlin's request logging.
 
-The relay reads no table, so the move to the worker later is a port of ~200 lines with no data.
+**Timeouts.** A proxied Cloudflare request fails with `524` after 100 seconds, and the companion's
+run timeout is 180 seconds (`BookingConfig.kt:85`). The relay therefore bounds every companion call
+at `BOOKING_RELAY_TIMEOUT` (default 90 seconds), Vercel's booking routes set `maxDuration` above it,
+and the Vercel egress client waits slightly longer than the relay. A relay timeout on `atc` answers
+`retry_later` with the detail that the site may already be in the cart, because the companion may
+finish the hold after the caller has stopped waiting; the response carries the rec.gov cart URL so
+the user can check. Kotlin's 180-second budget is not reachable through the tunnel; if real holds
+need longer than 90 seconds (`roadtrip_booking_atc_duration_milliseconds` p95 in
+`grafana/dashboards/recgov-atc.json` is the number to read before planning), the hold becomes
+asynchronous and this section is reopened.
+
+**Routing.** Internal routes live under `/api/internal/` (the availability egress is
+`/api/internal/availability/fetch`), so the relay is `/api/internal/booking/*`. The egress host's
+Caddy block allowlists one path today (`caddy/Caddyfile:45-51`); it gains a `POST
+/api/internal/booking/*` matcher to `backend:8765`. `roadtrip.floo.ca` already answers 404 for
+`/api/internal/*` (`Caddyfile:31-34`), so the relay is reachable only through the tunnel hostname.
+
+The relay reads no table, so the later move to the worker is a port of the relay and the extracted
+core with no data.
 
 ### 3. Vercel routes
 
@@ -119,7 +147,7 @@ path, body and DTO, and get an `ApiContract` row with every status they serve.
 | `POST /api/settings/recgov/login` | Relay `refresh`; if still not active, decrypt and relay `login`. `mfa_required` sets the MFA cookie (§4). |
 | `POST /api/settings/recgov/login/mfa` | Read and clear the MFA cookie, relay `login/mfa`. |
 | `POST /api/settings/recgov/verify` | Relay `verify`. |
-| `GET /api/settings/recgov/status` | Relay `health`; `RecgovStatusDto`. |
+| `GET /api/settings/recgov/status` | `RecgovStatusDto`: `configured` and `username` from Neon, `session` from relay `health` (not called without a credentials row). |
 | `POST /api/booking/add-to-cart` | The gates of `BookingActionService` in its order, then relay `atc`. |
 
 Layering follows `docs/backend-architecture.md`'s TypeScript equivalent in `apps/web`: route
@@ -149,7 +177,9 @@ unreachable, misconfigured, or answering 401 → 503 `booking_unavailable`. No
 — no companion call: `signed_out` without a roadtrip session, `unsupported` when the campsite has no
 rec.gov booking target, `no_credentials` without a credentials row (or without the encryption key),
 otherwise `ready`. `trigger_kinds` stays empty until watches exist. Provider display names come from
-the same tenant naming Kotlin uses.
+`packages/domain`'s booking tenants, which `campgroundCta.ts` already uses. The matrix response now
+varies by reader, so it is sent with `Cache-Control: private, no-store`; `force-dynamic` alone does
+not say that to a shared cache.
 
 ### 4. The MFA challenge
 
@@ -178,6 +208,7 @@ never addressed by Vercel.
 | `BOOKING_CREDENTIAL_ENCRYPTION_KEY` | Vercel only | unset | Credential and MFA-cookie key. |
 | `BOOKING_FRESHNESS_MAX_AGE` | Vercel | 5 minutes | Gate 4's window. |
 | `MFA_CHALLENGE_TTL` | Vercel | 5 minutes | MFA cookie lifetime. |
+| `BOOKING_RELAY_TIMEOUT` | mini-ca | 90 seconds | Upper bound on one relayed companion call; under Cloudflare's 100-second proxy limit. |
 
 The Cloudflare Access service-token pair is the one the availability egress already sends.
 
@@ -192,7 +223,9 @@ The Cloudflare Access service-token pair is the one the availability egress alre
   - MFA cookie: expiry, wrong user, tampering, cleared after use.
   - Gate 4 fail-open when the stored read fails.
 - **Kotlin:** relay route tests against `CompanionTestServer`: bearer missing or wrong, the route
-  absent when the token is unset, each endpoint's envelope, request bodies not logged.
+  absent when the token is unset, each endpoint's envelope, the `profile_id` passed through verbatim
+  (`n:7` reaches the companion as `n:7`), the timeout answer, request bodies not logged. The
+  existing `RecGovBookingAdapterTest` stays green over the extracted core.
 - **Contract:** every new route has a row; `:backend:contractLedgerCheck` covers the relay's
   bodies.
 - No automated check reaches live rec.gov; none does today.
@@ -202,7 +235,7 @@ The Cloudflare Access service-token pair is the one the availability egress alre
 1. Merge. Kotlin ships the relay dark (token unset); Vercel's booking routes answer 503 and the grid
    reports `no_credentials`.
 2. Migration `0004` runs against Neon.
-3. The owner sets `BOOKING_EGRESS_TOKEN` on mini-ca and deploys, then sets `BOOKING_EGRESS_TOKEN`,
+3. The owner deploys the Caddy matcher, sets `BOOKING_EGRESS_TOKEN` on mini-ca and deploys, then sets `BOOKING_EGRESS_TOKEN`,
    `BOOKING_EGRESS_URL` and `BOOKING_CREDENTIAL_ENCRYPTION_KEY` on Vercel Production.
 4. One manual end to end on production: save, sign in (with MFA), verify, hold one night, check the
    rec.gov cart, remove.
@@ -217,9 +250,15 @@ The Cloudflare Access service-token pair is the one the availability egress alre
 
 ## Risks
 
-- **The password crosses the tunnel.** It is TLS end to end to Cloudflare and inside the tunnel,
-  behind Access plus a bearer, and only on sign-in. This is the accepted cost of D1 against the
-  10-27 spec's worker-only key.
+- **The password crosses Cloudflare in the clear.** TLS ends at Cloudflare's edge, which proxies the
+  request into the tunnel, so the decrypted password is visible to Cloudflare on each sign-in (not on
+  holds). Access plus a bearer keep anyone else out. This, and the key sitting beside the ciphertext's
+  reader on Vercel (a Vercel compromise yields every stored password), are the accepted costs of D1
+  against the 10-27 spec's worker-only key.
+- **Remove depends on mini-ca.** Like Kotlin, remove refuses when the profile wipe fails, so while
+  mini-ca or the relay is down a user cannot delete their stored password. Deleting the Neon row
+  anyway would leave a signed-in rec.gov session on disk with no credential to account for it; the
+  refusal is kept.
 - **A cold cache on the button path fails as `recgov_not_authenticated`** rather than signing in unattended,
   as today. The user signs in again from Settings.
 - **Stale Kotlin-era companion profiles stay on disk** until Kotlin's user state is retired
