@@ -9,6 +9,7 @@
 import nu.studer.gradle.jooq.JooqEdition
 import nu.studer.gradle.jooq.JooqGenerate
 import org.flywaydb.core.Flyway
+import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.testcontainers.containers.PostgreSQLContainer
@@ -210,9 +211,9 @@ dependencies {
     // Domain metrics (ca.floo.roadtrip.observability). API only — the OTel Java
     // agent owns the SDK and the OTLP pipeline, and GlobalOpenTelemetry binds to
     // it at runtime, so nothing here configures an exporter. Pinned to the API
-    // version the agent embeds: opentelemetry-instrumentation-bom 2.29.0
+    // version the agent embeds: opentelemetry-instrumentation-bom 2.33.1
     // (OTEL_JAVAAGENT_VERSION in the Dockerfile) imports opentelemetry-bom
-    // 1.63.0. Bump both together.
+    // 1.67.0. Bump both together.
     implementation("io.opentelemetry:opentelemetry-api:1.67.0")
 
     // Self-documenting /api/docs at runtime from Ktor's routing tree.
@@ -375,11 +376,10 @@ val jooqContainerKey = "jooqPgContainer"
 val migrationDir = layout.projectDirectory.dir("src/main/resources/db/migration")
 val migrationDirPath = migrationDir.asFile.absolutePath
 
-// Mirrors sessionLevelLock in Db.kt (the third site is the `flyway {}` block below):
+// Mirrors flywayFor in Db.kt (the third site is the `flyway {}` block below):
 // a transactional lock leaves Flyway's own connection idle-in-transaction, and V61's
 // CREATE INDEX CONCURRENTLY then waits on that virtualxid forever.
 val flywaySessionLockKey = "postgresql.transactional.lock"
-val flywaySessionLock = mapOf("flyway.$flywaySessionLockKey" to "false")
 
 tasks.named<JooqGenerate>("generateJooq") {
     inputs.files(fileTree(migrationDir.asFile))
@@ -406,7 +406,7 @@ tasks.named<JooqGenerate>("generateJooq") {
             .configure()
             .dataSource(container.jdbcUrl, container.username, container.password)
             .locations("filesystem:$migrationDirPath")
-            .configuration(flywaySessionLock)
+            .apply { getConfigurationExtension(PostgreSQLConfigurationExtension::class.java).isTransactionalLock = false }
             .load()
             .migrate()
 

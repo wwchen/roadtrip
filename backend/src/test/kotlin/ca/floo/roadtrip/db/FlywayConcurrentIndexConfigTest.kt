@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.db
 
 import ca.floo.roadtrip.fixtures.repoFile
-import org.flywaydb.core.Flyway
 import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension
 import org.junit.jupiter.api.Test
+import org.postgresql.ds.PGSimpleDataSource
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -13,7 +13,7 @@ private const val EXECUTE_IN_TRANSACTION_OFF = "executeInTransaction=false"
 private const val BUILD_SCRIPT = "backend/build.gradle.kts"
 private const val JOOQ_TASK = "tasks.named<JooqGenerate>(\"generateJooq\")"
 private const val FLYWAY_BLOCK = "\nflyway {"
-private const val JOOQ_LOCK_SITE = ".configuration(flywaySessionLock)"
+private const val JOOQ_LOCK_SITE = "isTransactionalLock = false"
 private const val PLUGIN_LOCK_SITE = "pluginConfiguration = mapOf(flywaySessionLockKey to \"false\")"
 
 /**
@@ -25,10 +25,7 @@ class FlywayConcurrentIndexConfigTest {
     @Test
     fun `migrate takes a session-level Flyway lock, never a transactional one`() =
         assertFalse(
-            Flyway
-                .configure()
-                .sessionLevelLock()
-                .load()
+            flywayFor(PGSimpleDataSource())
                 .configuration
                 .getConfigurationExtension(PostgreSQLConfigurationExtension::class.java)
                 .isTransactionalLock,
