@@ -166,7 +166,7 @@ as `availabilityEgress.ts` does).
 4. Fresh evidence that a night is taken refuses with 409 `not_available`. The evidence is the
    stored availability on mini-ca: the add-to-cart service asks the availability egress for
    `mode: "stored"` over the window and refuses only on a cell observed unavailable within
-   `BOOKING_FRESHNESS_MAX_AGE` (default 5 minutes). Any failure to read it passes the gate
+   `BOOKING_FRESHNESS_MAX_AGE_SECONDS` (default 300). Any failure to read it passes the gate
    (fail-open, as `BookingActionService.kt:224-241`).
 5. Relay `atc`.
 
@@ -189,8 +189,8 @@ not say that to a shared cache.
 The companion's `challenge_id` must survive between two Vercel invocations without reaching the
 browser readable. Vercel seals `{challenge_id, user_id, expires_at}` with AES-256-GCM under
 `BOOKING_CREDENTIAL_ENCRYPTION_KEY` into an `HttpOnly`, `Secure`, `SameSite=Strict` cookie scoped to
-`/api/settings/recgov/login`, expiring with the companion's challenge (`MFA_CHALLENGE_TTL`, default 5
-minutes). `login/mfa` rejects a cookie that is missing, expired, unreadable or bound to another user
+`/api/settings/recgov/login`, expiring with the companion's challenge (`MFA_CHALLENGE_TTL_SECONDS`, default
+300). `login/mfa` rejects a cookie that is missing, expired, unreadable or bound to another user
 with `mfa_challenge_expired` when expired and `mfa_challenge_unknown` otherwise (the codes in
 `RecGovSessionCodes`), and always clears it.
 
@@ -209,8 +209,8 @@ never addressed by Vercel.
 | `BOOKING_EGRESS_TOKEN` | mini-ca (`secrets/registry.yaml`, consumer `backend`) and Vercel | unset | Relay bearer. Unset on mini-ca: the relay does not exist. Unset on Vercel: booking routes answer 503. |
 | `BOOKING_EGRESS_URL` | Vercel | unset | Base URL of the relay (the egress hostname). |
 | `BOOKING_CREDENTIAL_ENCRYPTION_KEY` | Vercel only | unset | Credential and MFA-cookie key. |
-| `BOOKING_FRESHNESS_MAX_AGE` | Vercel | 5 minutes | Gate 4's window. |
-| `MFA_CHALLENGE_TTL` | Vercel | 5 minutes | MFA cookie lifetime. |
+| `BOOKING_FRESHNESS_MAX_AGE_SECONDS` | Vercel | 300 | Gate 4's window. |
+| `MFA_CHALLENGE_TTL_SECONDS` | Vercel | 300 | MFA cookie lifetime. |
 | `BOOKING_RELAY_TIMEOUT` | mini-ca | 90 seconds | Upper bound on one relayed companion call; under Cloudflare's 100-second proxy limit. |
 
 The Cloudflare Access service-token pair is the one the availability egress already sends.
