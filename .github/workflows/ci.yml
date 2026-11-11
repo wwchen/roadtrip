@@ -28,7 +28,7 @@ jobs:
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
       schema_equivalence: ${{ steps.filter.outputs.schema_equivalence }}
       package_tests: ${{ steps.filter.outputs.package_tests }}
-      importer_differential: ${{ steps.filter.outputs.importer_differential }}
+      importer_differential: ${{ steps.filter.outputs.importer_differential == 'true' || steps.importer_dependencies.outputs.changed == 'true' }}
       web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -189,10 +189,10 @@ jobs:
               - 'scripts/importer-*.mjs'
               - 'scripts/schema-reference.mjs'
               - 'scripts/build-workspaces.mjs'
-              - 'package.json'
-              - 'package-lock.json'
               - 'tsconfig.base.json'
               - '.github/workflows/ci.yml'
+            lockfile:
+              - 'package-lock.json'
             web:
               - 'apps/**'
               - 'Dockerfile'
@@ -222,6 +222,18 @@ jobs:
               - '*.gradle.kts'
               - '.editorconfig'
               - '.github/workflows/ci.yml'
+      - name: Did the lockfile change a package the importers load?
+        id: importer_dependencies
+        if: steps.filter.outputs.lockfile == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet --depth=1 origin "$BASE_SHA"
+          git show "$BASE_SHA:package-lock.json" > "$RUNNER_TEMP/base-package-lock.json"
+          changed="$(node scripts/importer-dependencies-changed.mjs "$RUNNER_TEMP/base-package-lock.json" package-lock.json)"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "Importer dependencies changed: $changed"
 
   # Flyway stores a checksum for every migration it has applied, so a V*.sql
   # that already ran is immutable. Editing one only surfaces at deploy time,
@@ -320,11 +332,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       # Mirrored locally by `make test` (see Makefile), which runs these same
@@ -348,7 +360,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version: '26'
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Install dependencies
@@ -484,11 +496,11 @@ jobs:
           - { name: prove update keys, args: '--prove-update-keys' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -558,6 +570,9 @@ jobs:
       # a clean diff rather than as a failure.
       - name: Check the importer differential's own harness
         run: node --test scripts/importer-differential.test.mjs
+
+      - name: Check which lockfile edits run the importer differential
+        run: node --test scripts/importer-dependencies-changed.test.mjs
 
       - name: Check the Kotlin oracle's comparison machinery
         run: node --test scripts/etl-oracle.test.mjs
@@ -650,7 +665,7 @@ jobs:
 
       - name: Log in to GHCR
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -692,7 +707,7 @@ jobs:
 
       - name: Log in to GHCR
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -728,11 +743,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: Build backend fat-jar
@@ -757,7 +772,7 @@ jobs:
 
       - name: Log in to GHCR
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -799,11 +814,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       # checkApiTypes and contractLedgerCheck both run over the backend's own
@@ -860,11 +875,11 @@ jobs:
       ROADTRIP_PROFILE: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

@@ -9,6 +9,7 @@
 import nu.studer.gradle.jooq.JooqEdition
 import nu.studer.gradle.jooq.JooqGenerate
 import org.flywaydb.core.Flyway
+import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.testcontainers.containers.PostgreSQLContainer
@@ -18,9 +19,9 @@ buildscript {
     repositories { mavenCentral() }
     dependencies {
         classpath("org.testcontainers:postgresql:1.21.4")
-        classpath("org.flywaydb:flyway-core:13.2.0")
-        classpath("org.flywaydb:flyway-database-postgresql:13.2.0")
-        classpath("org.postgresql:postgresql:42.7.13")
+        classpath("org.flywaydb:flyway-core:13.12.1")
+        classpath("org.flywaydb:flyway-database-postgresql:13.12.1")
+        classpath("org.postgresql:postgresql:42.7.14")
     }
 }
 
@@ -28,14 +29,14 @@ plugins {
     application
     kotlin("jvm")
     kotlin("plugin.serialization")
-    id("io.ktor.plugin") version "3.5.2"
-    id("org.flywaydb.flyway") version "13.4.0"
+    id("io.ktor.plugin") version "3.6.1"
+    id("org.flywaydb.flyway") version "13.12.1"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("dev.detekt") version "2.0.0-alpha.6"
     // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
-    id("org.jetbrains.kotlinx.kover") version "0.9.9"
+    id("org.jetbrains.kotlinx.kover") version "0.9.11"
 }
 
 ktlint {
@@ -128,18 +129,18 @@ repositories {
     mavenCentral()
 }
 
-val ktorVersion = "3.5.2"
-val jooqVersion = "3.21.7"
-val postgresVersion = "42.7.13"
-val flywayVersion = "13.2.0"
+val ktorVersion = "3.6.1"
+val jooqVersion = "3.21.9"
+val postgresVersion = "42.7.14"
+val flywayVersion = "13.12.1"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2026b.29"
-val resendVersion = "4.22.0"
-val nimbusJoseVersion = "10.9.1"
+val resendVersion = "4.30.0"
+val nimbusJoseVersion = "10.10"
 val junitVersion = "6.1.3"
 val koinVersion = "4.2.2"
-val playwrightVersion = "1.62.0"
+val playwrightVersion = "1.64.0"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
 
@@ -200,7 +201,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.6.3")
+    implementation("ch.qos.logback:logback-classic:1.6.6")
     // JSON log encoder that emits the fully-formatted message (SLF4J {}
     // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
     // which logged the raw pattern + a separate arguments array. 8.x targets
@@ -210,10 +211,10 @@ dependencies {
     // Domain metrics (ca.floo.roadtrip.observability). API only — the OTel Java
     // agent owns the SDK and the OTLP pipeline, and GlobalOpenTelemetry binds to
     // it at runtime, so nothing here configures an exporter. Pinned to the API
-    // version the agent embeds: opentelemetry-instrumentation-bom 2.29.0
+    // version the agent embeds: opentelemetry-instrumentation-bom 2.33.1
     // (OTEL_JAVAAGENT_VERSION in the Dockerfile) imports opentelemetry-bom
-    // 1.63.0. Bump both together.
-    implementation("io.opentelemetry:opentelemetry-api:1.65.0")
+    // 1.67.0. Bump both together.
+    implementation("io.opentelemetry:opentelemetry-api:1.67.0")
 
     // Self-documenting /api/docs at runtime from Ktor's routing tree.
     implementation("io.ktor:ktor-server-swagger:$ktorVersion")
@@ -237,7 +238,7 @@ dependencies {
     // no identity-provider SDK is on the classpath.
     implementation("com.nimbusds:nimbus-jose-jwt:$nimbusJoseVersion")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.11.0")
     // YAML reader for the POI registry resource.
@@ -259,8 +260,8 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     // In-memory metric reader, so OtelRoadtripMetricsTest can assert the exact
     // instrument names and attributes the dashboards and alert rules query.
-    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.65.0")
-    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.65.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.67.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.67.0")
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
     // MockEngine lets SlackNotifier / AvailabilityClient tests assert request
@@ -375,11 +376,10 @@ val jooqContainerKey = "jooqPgContainer"
 val migrationDir = layout.projectDirectory.dir("src/main/resources/db/migration")
 val migrationDirPath = migrationDir.asFile.absolutePath
 
-// Mirrors flywaySessionLock in Db.kt (the third site is the `flyway {}` block below):
+// Mirrors flywayFor in Db.kt (the third site is the `flyway {}` block below):
 // a transactional lock leaves Flyway's own connection idle-in-transaction, and V61's
 // CREATE INDEX CONCURRENTLY then waits on that virtualxid forever.
 val flywaySessionLockKey = "postgresql.transactional.lock"
-val flywaySessionLock = mapOf("flyway.$flywaySessionLockKey" to "false")
 
 tasks.named<JooqGenerate>("generateJooq") {
     inputs.files(fileTree(migrationDir.asFile))
@@ -406,7 +406,7 @@ tasks.named<JooqGenerate>("generateJooq") {
             .configure()
             .dataSource(container.jdbcUrl, container.username, container.password)
             .locations("filesystem:$migrationDirPath")
-            .configuration(flywaySessionLock)
+            .apply { getConfigurationExtension(PostgreSQLConfigurationExtension::class.java).isTransactionalLock = false }
             .load()
             .migrate()
 
