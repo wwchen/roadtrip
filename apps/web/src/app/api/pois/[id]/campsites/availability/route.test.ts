@@ -62,3 +62,9 @@ test.each(['not_found', 'unknown_campground'] as const)('%s is 404', async (code
   expect(response.status).toBe(404);
   expect((await response.json()).error).toBe(code);
 });
+
+test('the matrix is per reader, so it is never cached by a shared cache', async () => {
+  getAvailabilityWeek.mockResolvedValue(WEEK);
+  const response = await get('7');
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+});

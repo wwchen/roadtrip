@@ -86,3 +86,45 @@ export async function campsitesOf(db: Db, campgroundId: bigint, kinds: readonly 
     maxPeople: row.max_people === null ? null : Number(row.max_people),
   }));
 }
+
+export interface BookingIdentityRow {
+  bookingProvider: string | null;
+  bookingProviderRef: string | null;
+  bookingAliases: BookingAlias[];
+}
+
+export interface CampgroundBookingIdentities {
+  campground: BookingIdentityRow;
+  campsites: BookingIdentityRow[];
+}
+
+function identityOf(row: Record<string, unknown>): BookingIdentityRow {
+  return {
+    bookingProvider: row.booking_provider as string | null,
+    bookingProviderRef: row.booking_provider_ref as string | null,
+    bookingAliases: createColumnDecoder().decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
+  };
+}
+
+export async function campgroundBookingIdentities(
+  db: Db,
+  campgroundId: bigint,
+  campsiteIds: readonly bigint[],
+): Promise<CampgroundBookingIdentities> {
+  const [campground] = await db.execute<Record<string, unknown>>(sql`
+    SELECT booking_provider, booking_provider_ref, booking_aliases FROM campgrounds WHERE id = ${campgroundId}
+  `);
+  const sites =
+    campsiteIds.length === 0
+      ? []
+      : await db.execute<Record<string, unknown>>(sql`
+          SELECT booking_provider, booking_provider_ref, booking_aliases
+          FROM campsites
+          WHERE id = ANY(${pgArrayLiteral(campsiteIds.map(String))}::bigint[])
+          ORDER BY id
+        `);
+  return {
+    campground: campground === undefined ? { bookingProvider: null, bookingProviderRef: null, bookingAliases: [] } : identityOf(campground),
+    campsites: sites.map(identityOf),
+  };
+}
