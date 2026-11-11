@@ -1,10 +1,9 @@
 import { requireAppUser } from '@/server/auth/currentUser';
-import { BOOKING_ROUTE_MAX_DURATION_S } from '@/server/config';
 import { jsonBody } from '@/server/requestBody';
 import { addToCart, liveAddToCartDeps } from '@/server/service/booking/addToCartService';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = BOOKING_ROUTE_MAX_DURATION_S;
+export const maxDuration = 120;
 
 const PRIVATE_NO_STORE = 'private, no-store';
 
