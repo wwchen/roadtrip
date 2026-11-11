@@ -22,6 +22,18 @@ const NEON_AUTH_COOKIE_SECRET_FILE_VARIABLE = 'NEON_AUTH_COOKIE_SECRET_FILE';
 const APP_DATABASE_URL_VARIABLE = 'APP_DATABASE_URL';
 const APP_DATABASE_PASSWORD_FILE_VARIABLE = 'APP_DATABASE_PASSWORD_FILE';
 const ADMIN_EMAILS_VARIABLE = 'ADMIN_EMAILS';
+const BOOKING_EGRESS_URL_VARIABLE = 'BOOKING_EGRESS_URL';
+const BOOKING_EGRESS_TOKEN_VARIABLE = 'BOOKING_EGRESS_TOKEN';
+const BOOKING_FRESHNESS_MAX_AGE_SECONDS_VARIABLE = 'BOOKING_FRESHNESS_MAX_AGE_SECONDS';
+const MFA_CHALLENGE_TTL_SECONDS_VARIABLE = 'MFA_CHALLENGE_TTL_SECONDS';
+const BOOKING_CREDENTIAL_ENCRYPTION_KEY_VARIABLE = 'BOOKING_CREDENTIAL_ENCRYPTION_KEY';
+const BOOKING_KEY_BYTES = 32;
+const BASE64_ENCODING = 'base64';
+const MS_PER_SECOND = 1000;
+const DEFAULT_BOOKING_FRESHNESS_MAX_AGE_SECONDS = 300;
+const MAX_BOOKING_FRESHNESS_MAX_AGE_SECONDS = 86_400;
+const DEFAULT_MFA_CHALLENGE_TTL_SECONDS = 300;
+const MAX_MFA_CHALLENGE_TTL_SECONDS = 3_600;
 const MIN_COOKIE_SECRET_LENGTH = 32;
 const LIST_SEPARATOR = ',';
 
@@ -39,6 +51,8 @@ const DEFAULT_ENABLED_AVAILABILITY_PROVIDERS: readonly string[] = ['aspira', 'ca
 const LIST_JOINER = ', ';
 
 export const AVAILABILITY_EGRESS_TIMEOUT_MS = 25_000;
+export const BOOKING_RELAY_CLIENT_TIMEOUT_MS = 95_000;
+export const BOOKING_ROUTE_MAX_DURATION_S = 120;
 export const AVAILABILITY_STORED_TIMEOUT_MS = 5_000;
 export const STAY_CHECK_FAN_OUT = 3;
 export const STAY_CHECK_PER_POI_TIMEOUT_MS = 45_000;
@@ -59,6 +73,14 @@ const PROVIDER_SEPARATOR = ',';
 const TRUE_LITERAL = 'true';
 const FALSE_LITERAL = 'false';
 const TRAILING_NEWLINES = /[\r\n]+$/;
+
+export interface BookingConfig {
+  relayUrl: URL;
+  relayToken: string;
+  access: EgressAccessCredentials;
+  freshnessMaxAgeMs: number;
+  mfaChallengeTtlMs: number;
+}
 
 export interface SignInConfig {
   neonAuthBaseUrl: URL;
@@ -176,6 +198,53 @@ function availabilityEgressFrom(): AvailabilityEgressConfig | null {
   };
 }
 
+function bookingFrom(): BookingConfig | null {
+  const values = {
+    [BOOKING_EGRESS_URL_VARIABLE]: secretFrom(BOOKING_EGRESS_URL_VARIABLE),
+    [BOOKING_EGRESS_TOKEN_VARIABLE]: secretFrom(BOOKING_EGRESS_TOKEN_VARIABLE),
+  };
+  const missing = Object.entries(values).filter(([, value]) => value === undefined).map(([variable]) => variable);
+  if (missing.length === Object.keys(values).length) return null;
+  if (missing.length > 0) throw new ConfigError(missing.join(LIST_JOINER), 'must be set with the other booking relay settings');
+  let relayUrl: URL;
+  try {
+    relayUrl = new URL(values[BOOKING_EGRESS_URL_VARIABLE] as string);
+  } catch {
+    throw new ConfigError(BOOKING_EGRESS_URL_VARIABLE, 'must be an absolute URL');
+  }
+  const egress = availabilityEgressFrom();
+  if (egress === null) {
+    throw new ConfigError(
+      [AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE, AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE].join(LIST_JOINER),
+      'must be set for the booking relay, which is reached through the same Access policy',
+    );
+  }
+  return {
+    relayUrl,
+    relayToken: values[BOOKING_EGRESS_TOKEN_VARIABLE] as string,
+    access: egress.egressAccess,
+    freshnessMaxAgeMs:
+      boundedIntegerFrom(
+        BOOKING_FRESHNESS_MAX_AGE_SECONDS_VARIABLE,
+        DEFAULT_BOOKING_FRESHNESS_MAX_AGE_SECONDS,
+        MAX_BOOKING_FRESHNESS_MAX_AGE_SECONDS,
+      ) * MS_PER_SECOND,
+    mfaChallengeTtlMs:
+      boundedIntegerFrom(MFA_CHALLENGE_TTL_SECONDS_VARIABLE, DEFAULT_MFA_CHALLENGE_TTL_SECONDS, MAX_MFA_CHALLENGE_TTL_SECONDS) *
+      MS_PER_SECOND,
+  };
+}
+
+function bookingCipherKeyFrom(): Buffer | null {
+  const raw = secretFrom(BOOKING_CREDENTIAL_ENCRYPTION_KEY_VARIABLE);
+  if (raw === undefined) return null;
+  const key = Buffer.from(raw.trim(), BASE64_ENCODING);
+  if (key.length !== BOOKING_KEY_BYTES) {
+    throw new ConfigError(BOOKING_CREDENTIAL_ENCRYPTION_KEY_VARIABLE, `must be base64 of ${BOOKING_KEY_BYTES} bytes`);
+  }
+  return key;
+}
+
 function emailSetFrom(variable: string): ReadonlySet<string> {
   const raw = process.env[variable] ?? '';
   return new Set(
@@ -224,6 +293,12 @@ export const config = {
   },
   get availabilityEgress(): AvailabilityEgressConfig | null {
     return availabilityEgressFrom();
+  },
+  get booking(): BookingConfig | null {
+    return bookingFrom();
+  },
+  get bookingCipherKey(): Buffer | null {
+    return bookingCipherKeyFrom();
   },
   get availabilityTtlSeconds(): number {
     return boundedIntegerFrom(AVAILABILITY_TTL_SECONDS_VARIABLE, DEFAULT_AVAILABILITY_TTL_SECONDS, MAX_AVAILABILITY_TTL_SECONDS);

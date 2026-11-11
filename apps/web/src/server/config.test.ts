@@ -328,3 +328,63 @@ test('an app database URL that already carries a password refuses a password fil
   vi.stubEnv('APP_DATABASE_PASSWORD_FILE', secretFile('other'));
   expect(() => config.signIn).toThrow(/APP_DATABASE_PASSWORD_FILE is set but APP_DATABASE_URL already carries a password/);
 });
+
+const BOOKING_URL = 'https://roadtrip-egress.example.test';
+const BOOKING_TOKEN = 'relay-token';
+const BOOKING_KEY = Buffer.alloc(32, 7).toString('base64');
+
+function stubBooking(values: Partial<Record<string, string>>): void {
+  stubRefresh(ALL_REFRESH);
+  for (const variable of ['BOOKING_EGRESS_URL', 'BOOKING_EGRESS_TOKEN', 'BOOKING_FRESHNESS_MAX_AGE_SECONDS', 'MFA_CHALLENGE_TTL_SECONDS']) {
+    vi.stubEnv(variable, values[variable]);
+  }
+}
+
+test('booking is null when neither the relay URL nor its token is set', () => {
+  stubBooking({});
+  expect(config.booking).toBeNull();
+});
+
+test('booking carries the relay, its bearer, the Access pair and the defaults', () => {
+  stubBooking({ BOOKING_EGRESS_URL: BOOKING_URL, BOOKING_EGRESS_TOKEN: BOOKING_TOKEN });
+  const booking = config.booking;
+  expect(booking?.relayUrl.toString()).toBe(`${BOOKING_URL}/`);
+  expect(booking?.relayToken).toBe(BOOKING_TOKEN);
+  expect(booking?.access).toEqual({ clientId: ACCESS_ID, clientSecret: ACCESS_SECRET });
+  expect(booking?.freshnessMaxAgeMs).toBe(300_000);
+  expect(booking?.mfaChallengeTtlMs).toBe(300_000);
+});
+
+test('booking reads its two windows in seconds', () => {
+  stubBooking({
+    BOOKING_EGRESS_URL: BOOKING_URL,
+    BOOKING_EGRESS_TOKEN: BOOKING_TOKEN,
+    BOOKING_FRESHNESS_MAX_AGE_SECONDS: '120',
+    MFA_CHALLENGE_TTL_SECONDS: '60',
+  });
+  expect(config.booking?.freshnessMaxAgeMs).toBe(120_000);
+  expect(config.booking?.mfaChallengeTtlMs).toBe(60_000);
+});
+
+test('a partial booking configuration is a ConfigError naming the missing one', () => {
+  stubBooking({ BOOKING_EGRESS_URL: BOOKING_URL });
+  expect(() => config.booking).toThrow(/BOOKING_EGRESS_TOKEN/);
+});
+
+test('booking without the egress Access pair is a ConfigError', () => {
+  stubBooking({ BOOKING_EGRESS_URL: BOOKING_URL, BOOKING_EGRESS_TOKEN: BOOKING_TOKEN });
+  stubRefresh([]);
+  expect(() => config.booking).toThrow(/AVAILABILITY_EGRESS_ACCESS_CLIENT_ID/);
+});
+
+test('the booking cipher key is null when unset and 32 bytes when set', () => {
+  vi.stubEnv('BOOKING_CREDENTIAL_ENCRYPTION_KEY', undefined);
+  expect(config.bookingCipherKey).toBeNull();
+  vi.stubEnv('BOOKING_CREDENTIAL_ENCRYPTION_KEY', BOOKING_KEY);
+  expect(config.bookingCipherKey?.length).toBe(32);
+});
+
+test('a booking cipher key that is not 32 bytes is a ConfigError', () => {
+  vi.stubEnv('BOOKING_CREDENTIAL_ENCRYPTION_KEY', Buffer.alloc(16).toString('base64'));
+  expect(() => config.bookingCipherKey).toThrow(ConfigError);
+});
