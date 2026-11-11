@@ -108,3 +108,49 @@ export async function findCampsitesOfPoi(db: Db, poiId: bigint, kinds: readonly 
     };
   });
 }
+
+export interface BookableCampsite {
+  id: bigint;
+  dataProvider: string;
+  dataProviderRef: string;
+  bookingProvider: string | null;
+  bookingProviderRef: string | null;
+  bookingAliases: BookingAlias[];
+  campground: {
+    dataProvider: string;
+    dataProviderRef: string;
+    bookingProvider: string | null;
+    bookingProviderRef: string | null;
+    bookingAliases: BookingAlias[];
+  };
+}
+
+export async function findBookableCampsite(db: Db, campsiteId: bigint): Promise<BookableCampsite | null> {
+  const rows = await db.execute<Record<string, unknown>>(sql`
+    SELECT c.id, c.data_provider, c.data_provider_ref, c.booking_provider, c.booking_provider_ref, c.booking_aliases,
+           cg.data_provider AS cg_data_provider, cg.data_provider_ref AS cg_data_provider_ref,
+           cg.booking_provider AS cg_booking_provider, cg.booking_provider_ref AS cg_booking_provider_ref,
+           cg.booking_aliases AS cg_booking_aliases
+    FROM campsites c
+    JOIN campgrounds cg ON cg.id = c.campground_id
+    WHERE c.id = ${campsiteId} AND c.deleted_at IS NULL AND cg.deleted_at IS NULL
+  `);
+  const [row] = rows;
+  if (row === undefined) return null;
+  const decoder = createColumnDecoder();
+  return {
+    id: BigInt(row.id as string),
+    dataProvider: row.data_provider as string,
+    dataProviderRef: row.data_provider_ref as string,
+    bookingProvider: row.booking_provider as string | null,
+    bookingProviderRef: row.booking_provider_ref as string | null,
+    bookingAliases: decoder.decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
+    campground: {
+      dataProvider: row.cg_data_provider as string,
+      dataProviderRef: row.cg_data_provider_ref as string,
+      bookingProvider: row.cg_booking_provider as string | null,
+      bookingProviderRef: row.cg_booking_provider_ref as string | null,
+      bookingAliases: decoder.decode('booking_aliases', bookingAliasesShape, row.cg_booking_aliases) ?? [],
+    },
+  };
+}

@@ -1,4 +1,7 @@
 export type {
+  AddToCartCapabilityDto,
+  AddToCartRequestDto,
+  AddToCartResponseDto,
   ApiErrorSchema,
   AvailabilityCacheBlock,
   AvailabilityCellDto,
@@ -29,6 +32,7 @@ export type {
   MeResponseDto,
   NotificationsDto,
   ProfileDto,
+  ProviderRefDto,
   RecgovLoginResponseDto,
   RecgovStatusDto,
   SettingsResponseDto,
