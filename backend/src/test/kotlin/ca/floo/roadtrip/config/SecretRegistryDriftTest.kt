@@ -45,6 +45,7 @@ class SecretRegistryDriftTest {
             "RECGOV_FIRE_TIMEOUT",
             "BOOKING_FRESHNESS_MAX_AGE",
             "BOOKING_MAX_KEEP_WARM_PROFILES",
+            "BOOKING_RELAY_TIMEOUT",
         )
 
     @Test
