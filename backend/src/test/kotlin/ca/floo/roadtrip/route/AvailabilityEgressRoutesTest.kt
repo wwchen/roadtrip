@@ -24,6 +24,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityEgressController
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CellTransitionSink
+import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -44,7 +45,6 @@ import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -54,6 +54,8 @@ private const val CAMPGROUND_REF = "egress-cg"
 private const val CAMPSITE_REF = "egress-site-1"
 private const val SECOND_CAMPSITE_REF = "egress-site-2"
 private const val WINDOW_LEAD_DAYS = 2L
+private const val CAMPGROUND_LAT = 37.74
+private const val CAMPGROUND_LNG = -119.56
 private const val WINDOW_DAYS = 3L
 private const val DEFAULT_WEEK_DAYS = 7L
 private val observedAt: Instant = Instant.parse("2026-07-30T12:00:00Z")
@@ -62,7 +64,10 @@ private val alwaysStale: Duration = Duration.ZERO
 private val wire = Json { ignoreUnknownKeys = true }
 
 class AvailabilityEgressRoutesTest : SharedDbTest() {
-    private val start: LocalDate = LocalDate.now(ZoneOffset.UTC).plusDays(WINDOW_LEAD_DAYS)
+    private val start: LocalDate =
+        AvailabilityDateResolver(PoiRepo(ctx))
+            .earliestDate(CoordinateTimeZones.resolve(lat = CAMPGROUND_LAT, lng = CAMPGROUND_LNG))
+            .plusDays(WINDOW_LEAD_DAYS)
     private val end: LocalDate = start.plusDays(WINDOW_DAYS)
 
     @BeforeEach
@@ -72,8 +77,8 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
             ctx.seedCatalogPoi(
                 sourceId = CAMPGROUND_REF,
                 name = "Egress CG",
-                lon = -119.56,
-                lat = 37.74,
+                lon = CAMPGROUND_LNG,
+                lat = CAMPGROUND_LAT,
                 bookingProvider = "recgov",
                 bookingProviderRef = "232447",
             )

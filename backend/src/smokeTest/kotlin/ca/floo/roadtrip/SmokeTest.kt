@@ -614,7 +614,7 @@ class SmokeTest {
             val about = drawer.locator(".rt-poi-slot--goodToKnow")
             assertThat(about).containsText("Clear Lake State Park offers rental cabins")
             assertFalse(
-                about.textContent().contains("Raw-only description"),
+                about.textContent().orEmpty().contains("Raw-only description"),
                 "drawer prose should render DTO description, not raw upstream description",
             )
             // Provenance is what is left once everything that is trip content has been
@@ -630,11 +630,11 @@ class SmokeTest {
             assertThat(details).hasCount(1)
             assertThat(details).containsText("rc-629")
             assertFalse(
-                details.textContent().contains("Raw-only description"),
+                details.textContent().orEmpty().contains("Raw-only description"),
                 "source metadata should not render raw upstream description",
             )
             assertFalse(
-                details.textContent().contains("raw-only.jpg"),
+                details.textContent().orEmpty().contains("raw-only.jpg"),
                 "source metadata should not render raw upstream media",
             )
             val heroImage =
