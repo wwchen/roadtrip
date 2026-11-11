@@ -63,7 +63,8 @@ rec.gov-bookable cell, and gets a `cart_url` whose cart holds that site.
 - Neon already has `user_booking_credentials` and `user_settings` (`packages/db/migrations/0000_init.sql`),
   empty. `roadtrip_web_writer` (`0003_web_writer.sql`) can write only `app_user` and `user_identity`.
 - Vercel reaches mini-ca through `roadtrip-egress.floo.ca` (Cloudflare tunnel, Cloudflare Access
-  service token, then a bearer on `/api/internal/availability/fetch`), per
+  service token, then Caddy to `/api/internal/availability/fetch`, enabled by
+  `AVAILABILITY_EGRESS_ENABLED`; Cloudflare Access is that route's only caller check), per
   `2026-11-05-availability-egress-design.md`.
 
 ## Design
@@ -86,8 +87,9 @@ relay and companion for the length of that call. It is never logged, returned or
 Kotlin registers `POST /api/internal/booking/{health,login,login/mfa,refresh,verify,atc,signout}` only
 when `BOOKING_EGRESS_TOKEN` is set and a companion is configured. It reaches Kotlin by the same
 route as the availability egress (tunnel hostname, Cloudflare Access, Caddy) and requires
-`Authorization: Bearer <BOOKING_EGRESS_TOKEN>`, compared in constant time. The token is separate from
-`AVAILABILITY_EGRESS_TOKEN` so either can be revoked alone.
+`Authorization: Bearer <BOOKING_EGRESS_TOKEN>`, compared in constant time. The availability egress
+relies on Cloudflare Access alone; the relay adds the bearer because it carries passwords, so a
+misconfigured Access policy is not enough to reach it.
 
 Every request body is a typed DTO carrying `profile_id`. Only `login` carries `username` and
 `password`; `login/mfa` carries `challenge_id` and `mfa_code`; `atc` carries `vendor_site_id`,
@@ -174,9 +176,10 @@ unreachable, misconfigured, or answering 401 → 503 `booking_unavailable`. No
 `BOOKING_CREDENTIAL_ENCRYPTION_KEY` → the credentials routes answer 503 `booking_unavailable`.
 
 **The grid's state.** `availabilityMatrixService` computes `add_to_cart.state` from data Vercel holds
-— no companion call: `signed_out` without a roadtrip session, `unsupported` when the campsite has no
-rec.gov booking target, `no_credentials` without a credentials row (or without the encryption key),
-otherwise `ready`. `trigger_kinds` stays empty until watches exist. Provider display names come from
+— no companion call — in `WatchCapabilityService.addToCartState`'s order: `unsupported` unless every
+campsite in the matrix has a rec.gov booking target, then `signed_out` without a roadtrip session,
+then `no_credentials` without a credentials row (or without the encryption key), otherwise `ready`.
+`provider` and `provider_display` are set whenever the state is not `unsupported`. `trigger_kinds` stays empty until watches exist. Provider display names come from
 `packages/domain`'s booking tenants, which `campgroundCta.ts` already uses. The matrix response now
 varies by reader, so it is sent with `Cache-Control: private, no-store`; `force-dynamic` alone does
 not say that to a shared cache.
