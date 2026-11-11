@@ -182,12 +182,11 @@ export async function completeMfa(
     return ok({ status: 'failed', error: opened.code, detail }, 'clear');
   }
   if (deps.relay === null) return ok({ status: 'failed', error: COMPANION_UNAVAILABLE }, 'clear');
-  const answer = loginAnswer(
+  return loginAnswer(
     user,
     await deps.relay('login/mfa', { profile_id: profileIdFor(user.id), challenge_id: opened.challengeId, mfa_code: code.trim() }),
     deps,
   );
-  return answer.cookie === undefined ? { ...answer, cookie: 'clear' } : answer;
 }
 
 export async function verify(user: AppUserRow, deps: RecgovDeps): Promise<ServiceAnswer<object>> {

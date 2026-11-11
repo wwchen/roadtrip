@@ -200,3 +200,19 @@ test('status reports a pending challenge from a live cookie', async () => {
   const relay = vi.fn().mockResolvedValue({ ok: true, status: 200, answer: { ok: false, health: 'never_logged_in' } });
   expect((await status(USER, cookie, deps(stored(), relay))).body).toMatchObject({ mfa_pending: true });
 });
+
+test.each([
+  ['the profile is busy', answer({ code: 'profile_busy', category: 'retry_later' })],
+  ['mini-ca is unreachable', { ok: false, code: 'unreachable' } as RelayResult],
+  ['the relay timed out', answer({ code: 'relay_timeout', category: 'retry_later' }, 504)],
+])('an mfa submit that fails because %s keeps the challenge cookie for a retry', async (_label, result) => {
+  const cookie = sealMfaChallenge(KEY, { challengeId: 'ch-9', userId: 7n, expiresAt: NOW + 60_000 });
+  const answered = await completeMfa(USER, { code: '1' }, cookie, deps(stored(), vi.fn().mockResolvedValue(result)));
+  expect(answered.cookie).toBeUndefined();
+});
+
+test('a rejected code ends the challenge and clears the cookie', async () => {
+  const cookie = sealMfaChallenge(KEY, { challengeId: 'ch-9', userId: 7n, expiresAt: NOW + 60_000 });
+  const relay = vi.fn().mockResolvedValue(answer({ code: 'mfa_invalid', category: 'caller_action' }));
+  expect((await completeMfa(USER, { code: '1' }, cookie, deps(stored(), relay))).cookie).toBe('clear');
+});

@@ -189,10 +189,10 @@ not say that to a shared cache.
 The companion's `challenge_id` must survive between two Vercel invocations without reaching the
 browser readable. Vercel seals `{challenge_id, user_id, expires_at}` with AES-256-GCM under
 `BOOKING_CREDENTIAL_ENCRYPTION_KEY` into an `HttpOnly`, `Secure`, `SameSite=Strict` cookie scoped to
-`/api/settings/recgov/login`, expiring with the companion's challenge (`MFA_CHALLENGE_TTL_SECONDS`, default
+`/api/settings/recgov` (so `/status` sees it and reports `mfa_pending`), expiring with the companion's challenge (`MFA_CHALLENGE_TTL_SECONDS`, default
 300). `login/mfa` rejects a cookie that is missing, expired, unreadable or bound to another user
 with `mfa_challenge_expired` when expired and `mfa_challenge_unknown` otherwise (the codes in
-`RecGovSessionCodes`), and always clears it.
+`RecGovSessionCodes`), and clears it on success or on a code that ends the challenge, keeping it through a transient failure so the code can be retried.
 
 ### 5. Profile ids
 

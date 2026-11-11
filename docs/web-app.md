@@ -309,7 +309,7 @@ Spec: `docs/superpowers/specs/2026-11-10-add-to-cart-on-vercel-design.md`.
 - A Vercel user's companion profile is `n:<app_user.id>`, so it never collides with a Kotlin
   user's numeric profile on mini-ca.
 - The MFA challenge id waits between `/login` and `/login/mfa` in a sealed, `HttpOnly`,
-  `SameSite=Strict` cookie (`__Secure-recgov-mfa`, path `/api/settings/recgov/login`) bound to the
+  `SameSite=Strict` cookie (`__Secure-recgov-mfa`, path `/api/settings/recgov`, so `/status` can report a pending challenge) bound to the
   user, instead of Kotlin's in-memory map.
 - `POST /api/booking/add-to-cart` runs Kotlin's gates (window, rec.gov target, stored credentials,
   a refusal only on a night seen taken within `BOOKING_FRESHNESS_MAX_AGE_SECONDS` through the

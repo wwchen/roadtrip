@@ -62,7 +62,7 @@ test('mfa_required sets the sealed challenge cookie on the login path only', asy
   const response = await loginRoute.POST();
   const cookie = response.headers.get('set-cookie') ?? '';
   expect(cookie).toContain('__Secure-recgov-mfa=sealed');
-  expect(cookie).toContain('Path=/api/settings/recgov/login');
+  expect(cookie).toContain('Path=/api/settings/recgov;');
   expect(cookie).toContain('Max-Age=120');
   expect(cookie).toContain('HttpOnly');
   expect(cookie).toContain('Secure');
@@ -86,6 +86,10 @@ test('status reads the cookie and is never cached', async () => {
   expect(response.headers.get('cache-control')).toBe('private, no-store');
 });
 
-test('routes that reach mini-ca allow the relay its full timeout', () => {
-  for (const route of [root, loginRoute, mfaRoute, verifyRoute, statusRoute]) expect(route.maxDuration).toBe(120);
+test('routes that reach mini-ca once allow the relay its full timeout', () => {
+  for (const route of [root, mfaRoute, verifyRoute, statusRoute]) expect(route.maxDuration).toBe(120);
+});
+
+test('login, which can make a refresh call and then a sign-in call, allows both', () => {
+  expect(loginRoute.maxDuration).toBe(200);
 });
