@@ -60,10 +60,11 @@ async function byEmail(db: Executor, email: string): Promise<AppUserRow | undefi
 }
 
 async function refreshed(db: Executor, user: AppUserRow, claims: IdentityClaims): Promise<AppUserRow> {
-  if (user.emailVerified === claims.emailVerified && user.displayName === claims.displayName) return user;
+  const displayName = user.displayName ?? claims.displayName;
+  if (user.emailVerified === claims.emailVerified && user.displayName === displayName) return user;
   const [row] = await db
     .update(appUser)
-    .set({ emailVerified: claims.emailVerified, displayName: claims.displayName, updatedAt: sql`now()` })
+    .set({ emailVerified: claims.emailVerified, displayName, updatedAt: sql`now()` })
     .where(eq(appUser.id, user.id))
     .returning(userColumns);
   return row ?? user;
@@ -99,4 +100,19 @@ export async function linkedAppUser(db: Db, claims: IdentityClaims): Promise<App
   const existing = await byIdentity(db, claims.subject);
   if (existing !== undefined) return refreshed(db, existing, claims);
   return refreshed(db, await created(db, claims), claims);
+}
+
+export interface ProfilePatch {
+  displayName?: string;
+  theme?: UserTheme;
+}
+
+export async function updateProfile(db: Db, userId: bigint, patch: ProfilePatch): Promise<AppUserRow> {
+  const [row] = await db
+    .update(appUser)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(eq(appUser.id, userId))
+    .returning(userColumns);
+  if (row === undefined) throw new Error(`app user ${userId} not found`);
+  return row;
 }

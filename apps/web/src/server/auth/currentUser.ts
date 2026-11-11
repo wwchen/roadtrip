@@ -9,6 +9,11 @@ const STATUS_UNAUTHORIZED = 401;
 const UNAUTHENTICATED = 'unauthenticated';
 const CURRENT_USER_LOG = 'current user:';
 const PROFILE_ID_PREFIX = 'n:';
+const ADMIN_ROLE = 'admin';
+
+export function rolesFor(user: AppUserRow, adminEmails: ReadonlySet<string>): string[] {
+  return user.emailVerified && adminEmails.has(user.email.toLowerCase()) ? [ADMIN_ROLE] : [];
+}
 
 export function profileIdFor(userId: bigint): string {
   return `${PROFILE_ID_PREFIX}${userId}`;
