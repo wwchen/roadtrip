@@ -1,7 +1,7 @@
 import { appUser, userBookingCredentials, userSettings } from '@roadtrip/db';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest';
 import { startCatalogFixture, type CatalogFixture } from '../testing/catalogFixture';
-import { RECGOV_PROVIDER, findCredentials, removeCredentials, upsertCredentials } from './bookingCredentialsRepo';
+import { RECGOV_PROVIDER, findCredentials, removeCredentials, updateCredentialsUsername, upsertCredentials } from './bookingCredentialsRepo';
 import { notificationsFor } from './userSettingsRepo';
 
 let fixture: CatalogFixture;
@@ -63,4 +63,12 @@ test('stored notification settings are read, never the Slack token', async () =>
     slack_configured: true,
     slack_token_hint: 'abcd',
   });
+});
+
+test('a username-only update keeps the sealed password', async () => {
+  await upsertCredentials(fixture.writeDb, userId, RECGOV_PROVIDER, 'old@example.com', Buffer.from([7, 7]));
+  await updateCredentialsUsername(fixture.writeDb, userId, RECGOV_PROVIDER, 'new@example.com');
+  const found = await findCredentials(fixture.writeDb, userId, RECGOV_PROVIDER);
+  expect(found?.username).toBe('new@example.com');
+  expect(found?.secretCipher.equals(Buffer.from([7, 7]))).toBe(true);
 });

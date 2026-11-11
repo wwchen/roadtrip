@@ -33,3 +33,7 @@ export async function removeCredentials(db: Db, userId: bigint, provider: string
   const removed = await db.delete(userBookingCredentials).where(ownedBy(userId, provider)).returning({ userId: userBookingCredentials.userId });
   return removed.length > 0;
 }
+
+export async function updateCredentialsUsername(db: Db, userId: bigint, provider: string, username: string): Promise<void> {
+  await db.update(userBookingCredentials).set({ username, updatedAt: sql`now()` }).where(ownedBy(userId, provider));
+}

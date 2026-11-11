@@ -29,6 +29,8 @@ export type {
   MeResponseDto,
   NotificationsDto,
   ProfileDto,
+  RecgovLoginResponseDto,
+  RecgovStatusDto,
   SettingsResponseDto,
   UpdateProfileRequest,
   BookingSettingsDto,
