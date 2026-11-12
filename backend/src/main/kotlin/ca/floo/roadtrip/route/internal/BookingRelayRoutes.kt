@@ -95,8 +95,9 @@ private suspend inline fun <reified T> ApplicationCall.withBody(answer: (T) -> R
 }
 
 private fun ApplicationCall.bearerMatches(token: String): Boolean {
-    val presented = request.header(HttpHeaders.Authorization)?.removePrefix(BEARER_PREFIX) ?: return false
-    return MessageDigest.isEqual(presented.toByteArray(), token.toByteArray())
+    val header = request.header(HttpHeaders.Authorization) ?: return false
+    if (!header.startsWith(BEARER_PREFIX)) return false
+    return MessageDigest.isEqual(header.substring(BEARER_PREFIX.length).toByteArray(), token.toByteArray())
 }
 
 private fun String.toLocalDateOrNull(): LocalDate? =

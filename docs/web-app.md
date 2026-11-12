@@ -160,8 +160,9 @@ How the call reaches mini-ca:
    Auth policy admits only requests carrying the service token in
    `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`, and Cloudflare refuses the rest at its edge
    before anything reaches mini-ca.
-2. Caddy's `roadtrip-egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to
-   the backend and answers `404` to everything else; every other host answers `404` for
+2. Caddy's `roadtrip-egress.floo.ca` block proxies `POST /api/internal/availability/fetch`, the
+   booking relay (`POST /api/internal/booking/*`) and the Kotlin availability reads Vercel forwards
+   to the backend, and answers `404` to everything else; every other host answers `404` for
    `/api/internal/*`.
 3. The backend mounts that route only when `AVAILABILITY_EGRESS_ENABLED` is `true`: on in
    `docker-compose.yml` (production), off in sandboxes. It has no credential of its own. Cells are

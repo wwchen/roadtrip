@@ -187,6 +187,21 @@ class BookingRelayRoutesTest {
         }
 
     @Test
+    fun `the token without the Bearer scheme is 401`() =
+        relay {
+            everyPath.forEach { (path, body) ->
+                val response =
+                    client.post("$PREFIX/$path") {
+                        contentType(ContentType.Application.Json)
+                        header(HttpHeaders.Authorization, TOKEN)
+                        setBody(body)
+                    }
+                assertEquals(HttpStatusCode.Unauthorized, response.status, path)
+            }
+            assertTrue(companion.calls.isEmpty())
+        }
+
+    @Test
     fun `a malformed body is 400`() =
         relay {
             assertEquals(HttpStatusCode.BadRequest, call("atc", """{"profile_id":"$PROFILE_ID"}""").status)
