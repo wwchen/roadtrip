@@ -33,6 +33,12 @@ PACKAGE_TYPECHECKS = (
     "npm run typecheck --workspace @roadtrip/db",
 )
 FLYWAY_MIGRATIONS = "backend/src/main/resources/db/migration"
+NEON_MIGRATE_CALLER_CONDITION = (
+    "${{ !cancelled() && github.event_name == 'push' && "
+    "github.ref == 'refs/heads/master' && "
+    "needs.ci-passed.result == 'success' }}"
+)
+NEON_MIGRATE_JOB_CONDITION = "${{ !cancelled() && github.ref == 'refs/heads/master' }}"
 
 KOTLIN_PACKAGE_ROOT = "backend/src/main/kotlin/ca/floo/roadtrip"
 # The importer's entry point and the two trees it is built from. Every file
@@ -206,18 +212,26 @@ def step_by_name(job: dict, name: str) -> dict:
 
 class DeploymentContractTest(unittest.TestCase):
     def test_neon_migrations_run_on_master_only(self) -> None:
-        jobs = workflow("ci.yml")["jobs"]
-        job = jobs["neon-migrate"]
-        condition = job.get("if", "")
-        self.assertIn("github.event_name == 'push'", condition)
-        self.assertIn("github.ref == 'refs/heads/master'", condition)
-        self.assertIn("needs.ci-passed.result == 'success'", condition)
+        job = workflow("ci.yml")["jobs"]["neon-migrate"]
+        self.assertEqual(NEON_MIGRATE_CALLER_CONDITION, job.get("if"))
         self.assertIn("ci-passed", job["needs"])
-        migrate = step_by_name(job, "Apply Neon migrations")
+        self.assertEqual("./.github/workflows/neon-migrate.yml", job["uses"])
+        self.assertEqual(
+            "${{ secrets.NEON_MIGRATE_URL }}", job["secrets"]["NEON_MIGRATE_URL"]
+        )
+        reusable = workflow("neon-migrate.yml")
+        triggers = workflow_triggers(reusable)
+        self.assertIn("workflow_call", triggers)
+        self.assertIn("workflow_dispatch", triggers)
+        migrate_job = reusable["jobs"]["migrate"]
+        self.assertEqual(NEON_MIGRATE_JOB_CONDITION, migrate_job.get("if"))
+        migrate = step_by_name(migrate_job, "Apply Neon migrations")
         self.assertIn("npm run migrate --workspace @roadtrip/db", migrate["run"])
-        self.assertIn('if [ -z "$DATABASE_URL" ]', migrate["run"])
-        self.assertIn("::warning::", migrate["run"])
         self.assertEqual("${{ secrets.NEON_MIGRATE_URL }}", migrate["env"]["DATABASE_URL"])
+        self.assertIn('if [ -z "$DATABASE_URL" ]', migrate["run"])
+        self.assertIn("::error::", migrate["run"])
+        self.assertIn("exit 1", migrate["run"])
+        self.assertNotIn("::warning::", migrate["run"])
 
     def test_ci_publishes_every_immutable_image(self) -> None:
         jobs = workflow("ci.yml")["jobs"]
