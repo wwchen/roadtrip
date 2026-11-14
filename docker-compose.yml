@@ -17,7 +17,7 @@ services:
   # without an extension install step.
   postgres:
     profiles: [pois]
-    image: postgis/postgis:16-3.4
+    image: postgis/postgis:17-3.5
     # The image may run its entrypoint as `postgres`. Starting the entrypoint
     # as root lets it fix ownership on a freshly-created bind mount before it
     # drops privileges to the postgres user for the server itself. This is
