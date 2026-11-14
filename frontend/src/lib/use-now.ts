@@ -3,6 +3,8 @@
 // last render, and a deadline (a cooldown) re-renders once, when it passes.
 import { useEffect, useState } from 'react';
 
+export const CHECKED_AGO_TICK_MS = 30_000;
+
 /** `Date.now()`, re-read every [intervalMs] while [active]. */
 export function useNow(intervalMs: number, active = true): number {
   const [now, setNow] = useState(() => Date.now());

@@ -1,9 +1,8 @@
 import { AuthRow } from '@/features/account/AuthRow';
 import { AlertsPanel } from '@/features/alerts/AlertsPanel';
-import { AvailabilityWeek } from '@/features/availability/AvailabilityWeek';
-import { PoiDrawer } from '@/features/drawer/PoiDrawer';
 import { MapProvider } from '@/features/map/MapProvider';
 import { MapView } from '@/features/map/MapView';
+import { MapPlaceSurface } from '@/features/place/PlaceSurface';
 import { TopBar } from '@/features/trip/TopBar';
 
 /** The page-owned composition boundary between otherwise independent map features. */
@@ -13,9 +12,7 @@ export function MapPage() {
       <TopBar alerts={<AlertsPanel />} />
       <AuthRow />
       <MapView />
-      <PoiDrawer
-        renderCampgroundAvailability={(feature) => <AvailabilityWeek feature={feature} />}
-      />
+      <MapPlaceSurface />
     </MapProvider>
   );
 }

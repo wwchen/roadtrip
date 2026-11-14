@@ -8,7 +8,7 @@
 // live here: it goes through `lib/upstream-html.ts`, which is the only sanctioned
 // `dangerouslySetInnerHTML` path.
 
-import { bookingCopy } from '@/lib/strings';
+import { bookingCopy, placeCopy } from '@/lib/strings';
 import type { AlertDto, CampgroundDetail, PriceDto } from '@/api/poi-api';
 
 /** POI properties after `flattenHydratedPoi`, which is deliberately open. */
@@ -553,18 +553,28 @@ function sourcesLabel(sources: unknown): string {
 const SYMBOL_CURRENCIES = ['USD', 'CAD'];
 const DEFAULT_CURRENCY = 'USD';
 
+function money(amount: number, currency: unknown): string {
+  const code = (firstText(currency) || DEFAULT_CURRENCY).toUpperCase();
+  const symbol = SYMBOL_CURRENCIES.includes(code) ? '$' : `${code} `;
+  return `${symbol}${formatNumber(amount)}`;
+}
+
 /** `$25`, `$25-$40`, or `CAD 30` for currencies with no familiar symbol. */
 function priceRange(price: PriceDto | undefined): string {
   const min = finiteNumber(price?.minimum);
   const max = finiteNumber(price?.maximum);
   if (min == null && max == null) return '';
 
-  const currency = (firstText(price?.currency) || DEFAULT_CURRENCY).toUpperCase();
-  const symbol = SYMBOL_CURRENCIES.includes(currency) ? '$' : `${currency} `;
-  const format = (n: number) => `${symbol}${formatNumber(n)}`;
+  const format = (n: number) => money(n, price?.currency);
 
   if (min != null && max != null && min !== max) return `${format(min)}-${format(max)}`;
   return format((min ?? max) as number);
+}
+
+export function priceFromLabel(p: Props): string {
+  const price = typed(p).price;
+  const min = finiteNumber(price?.minimum);
+  return min == null ? '' : placeCopy.priceFrom(money(min, price?.currency));
 }
 
 /** `14:00` → `2:00 PM`; anything that is not a clock time passes through. */

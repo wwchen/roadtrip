@@ -45,7 +45,3 @@ export function startOfLocalMonth(date: Date): Date {
 export function addLocalMonths(date: Date, months: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + months, 1);
 }
-
-export function sameLocalDay(a: Date, b: Date): boolean {
-  return localYmd(a) === localYmd(b);
-}
