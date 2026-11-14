@@ -2,6 +2,7 @@ import type { Db } from '@roadtrip/db';
 import { shippedTenantRegistry, type CampsiteKind } from '@roadtrip/domain';
 import { appDb } from '../../appDb';
 import { currentAppUser } from '../../auth/currentUser';
+import { signInConfigured } from '../../auth/signInConfigured';
 import { fetchEgress, type EgressResult } from '../../client/availabilityEgress';
 import { AVAILABILITY_STORED_TIMEOUT_MS, config } from '../../config';
 import type {
@@ -207,7 +208,7 @@ async function readerCapabilities(db: Db, target: WeekTarget): Promise<Availabil
       reader !== null && config.bookingCipherKey !== null && (await findCredentials(appDb(), reader.id, RECGOV_PROVIDER)) !== null;
     return {
       trigger_kinds: [],
-      add_to_cart: addToCartCapability(identities.campsites, identities.campground, reader, credentialed, shippedTenantRegistry()),
+      add_to_cart: addToCartCapability(identities.campsites, identities.campground, reader, credentialed, shippedTenantRegistry(), signInConfigured()),
     };
   } catch (error) {
     console.warn(CAPABILITY_LOG, error instanceof Error ? error.name : typeof error);
