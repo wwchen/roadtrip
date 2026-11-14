@@ -12,12 +12,14 @@ export function addToCartCapability(
   reader: AppUserRow | null,
   credentialed: boolean,
   tenants: TenantRegistry,
+  signInOn: boolean,
 ): AddToCartCapabilityDto {
   if (campsites.length === 0) return UNSUPPORTED;
   const targets = campsites.map((campsite) => recgovTargetFor(campsite, campground, tenants));
   const [first] = targets;
   if (first === undefined || first === null || targets.some((target) => target === null)) return UNSUPPORTED;
   const named = { provider: RECGOV_PROVIDER, provider_display: first.providerDisplay };
+  if (!signInOn) return UNSUPPORTED;
   if (reader === null) return { state: 'signed_out', ...named };
   return { state: credentialed ? 'ready' : 'no_credentials', ...named };
 }
