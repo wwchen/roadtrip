@@ -282,9 +282,11 @@ and Google with the production OAuth client; set the email provider to Resend's 
 `roadtrip_web_writer`'s password.
 
 Migrations reach Neon through the `neon-migrate` job in `ci.yml`: on a master push, after
-`ci-passed`, it runs `npm run migrate --workspace @roadtrip/db` with the `NEON_MIGRATE_URL`
-repository secret (an owner connection string). Without the secret it skips with a warning, so
-it never blocks the mini-ca deploy; a failing migration fails CI.
+`ci-passed` succeeds, it calls the `Neon migrate` workflow, which runs
+`npm run migrate --workspace @roadtrip/db` with the `NEON_MIGRATE_URL` repository secret (an owner
+connection string). Without the secret the job fails, so a missing secret or a failing migration
+fails the CI run, and because mini-ca deploys only after a successful CI run it holds that deploy
+too. The same workflow can be run by hand from the Actions tab, on `master` only.
 
 ## Previews
 
