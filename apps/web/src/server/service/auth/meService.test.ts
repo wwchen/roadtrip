@@ -19,6 +19,7 @@ const usersReturning = (row: Partial<AppUserRow> = {}) =>
     emailVerified: claims.emailVerified,
     displayName: claims.displayName,
     theme: 'dark',
+    status: 'active',
     ...row,
   }));
 
@@ -36,6 +37,10 @@ test('no port means sign-in is disabled', async () => {
 
 test('no session is anonymous with sign-in enabled', async () => {
   expect(await meFor(portWith(async () => null), usersReturning(), ADMINS)).toEqual(ANONYMOUS);
+});
+
+test('a disabled account answers anonymous', async () => {
+  expect(await meFor(portWith(async () => sessionUser), usersReturning({ status: 'disabled' }), ADMINS)).toEqual(ANONYMOUS);
 });
 
 test('a signed-in admin', async () => {

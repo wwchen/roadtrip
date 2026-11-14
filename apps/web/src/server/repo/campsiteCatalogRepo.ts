@@ -1,8 +1,12 @@
-import { attributesShape, bookingAliasesShape, photosShape, type Db } from '@roadtrip/db';
+import { attributesShape, photosShape, type Db } from '@roadtrip/db';
 import type { BookingAlias, CampsiteAttribute, CampsiteKind } from '@roadtrip/domain';
 import { sql } from 'drizzle-orm';
+import { bookingIdentityOf } from '../mapper/row/bookingIdentityRow';
+import type { BookableCampsite } from '../service/booking/model';
 import { pgArrayLiteral } from './availabilityReadRepo';
 import { createColumnDecoder } from './columnDecoder';
+
+const CAMPGROUND_PREFIX = 'cg_';
 
 export interface CampsiteCatalogRow {
   id: bigint;
@@ -54,9 +58,7 @@ export async function findCampgroundsOfPoi(db: Db, poiId: bigint): Promise<Camps
   `);
   return rows.map((row) => ({
     campgroundId: BigInt(row.id as string),
-    bookingProvider: row.booking_provider as string | null,
-    bookingProviderRef: row.booking_provider_ref as string | null,
-    bookingAliases: createColumnDecoder().decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
+    ...bookingIdentityOf(row, createColumnDecoder()),
   }));
 }
 
@@ -102,27 +104,9 @@ export async function findCampsitesOfPoi(db: Db, poiId: bigint, kinds: readonly 
       reservationUrl: row.reservation_url as string | null,
       dataProvider: row.data_provider as string,
       dataProviderRef: row.data_provider_ref as string,
-      bookingProvider: row.booking_provider as string | null,
-      bookingProviderRef: row.booking_provider_ref as string | null,
-      bookingAliases: decoder.decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
+      ...bookingIdentityOf(row, decoder),
     };
   });
-}
-
-export interface BookableCampsite {
-  id: bigint;
-  dataProvider: string;
-  dataProviderRef: string;
-  bookingProvider: string | null;
-  bookingProviderRef: string | null;
-  bookingAliases: BookingAlias[];
-  campground: {
-    dataProvider: string;
-    dataProviderRef: string;
-    bookingProvider: string | null;
-    bookingProviderRef: string | null;
-    bookingAliases: BookingAlias[];
-  };
 }
 
 export async function findBookableCampsite(db: Db, campsiteId: bigint): Promise<BookableCampsite | null> {
@@ -142,15 +126,11 @@ export async function findBookableCampsite(db: Db, campsiteId: bigint): Promise<
     id: BigInt(row.id as string),
     dataProvider: row.data_provider as string,
     dataProviderRef: row.data_provider_ref as string,
-    bookingProvider: row.booking_provider as string | null,
-    bookingProviderRef: row.booking_provider_ref as string | null,
-    bookingAliases: decoder.decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
+    ...bookingIdentityOf(row, decoder),
     campground: {
       dataProvider: row.cg_data_provider as string,
       dataProviderRef: row.cg_data_provider_ref as string,
-      bookingProvider: row.cg_booking_provider as string | null,
-      bookingProviderRef: row.cg_booking_provider_ref as string | null,
-      bookingAliases: decoder.decode('booking_aliases', bookingAliasesShape, row.cg_booking_aliases) ?? [],
+      ...bookingIdentityOf(row, decoder, CAMPGROUND_PREFIX),
     },
   };
 }

@@ -1,8 +1,8 @@
 import { userSettings, type Db } from '@roadtrip/db';
 import { eq } from 'drizzle-orm';
-import type { NotificationsDto } from '../contract';
+import type { NotificationSettings } from '../service/settings/model';
 
-export async function notificationsFor(db: Db, userId: bigint, loginEmail: string): Promise<NotificationsDto> {
+export async function notificationsFor(db: Db, userId: bigint, loginEmail: string): Promise<NotificationSettings> {
   const [row] = await db
     .select({
       notificationEmail: userSettings.notificationEmail,
@@ -13,9 +13,9 @@ export async function notificationsFor(db: Db, userId: bigint, loginEmail: strin
     .from(userSettings)
     .where(eq(userSettings.userId, userId));
   return {
-    notification_email: row?.notificationEmail ?? loginEmail,
-    ...(row?.slackChannel == null ? {} : { slack_channel: row.slackChannel }),
-    slack_configured: row?.slackConfigured != null,
-    ...(row?.slackTokenHint == null ? {} : { slack_token_hint: row.slackTokenHint }),
+    notificationEmail: row?.notificationEmail ?? loginEmail,
+    slackChannel: row?.slackChannel ?? null,
+    slackConfigured: row?.slackConfigured != null,
+    slackTokenHint: row?.slackTokenHint ?? null,
   };
 }

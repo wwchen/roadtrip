@@ -1,4 +1,5 @@
 import { appUser, userIdentity } from '@roadtrip/db';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest';
 import { startCatalogFixture, type CatalogFixture } from '../testing/catalogFixture';
 import {
@@ -12,6 +13,8 @@ import {
 
 const CONCURRENT_FIRST_CALLS = 5;
 const DEFAULT_THEME = 'system';
+const ACTIVE_STATUS = 'active';
+const DISABLED_STATUS = 'disabled';
 
 let fixture: CatalogFixture;
 
@@ -43,10 +46,16 @@ beforeEach(async () => {
 
 test('a new identity creates one app_user and one user_identity', async () => {
   const user = await linkedAppUser(fixture.writeDb, claims());
-  expect(user).toMatchObject({ email: 'will@example.com', emailVerified: true, displayName: 'Will', theme: DEFAULT_THEME });
+  expect(user).toMatchObject({ email: 'will@example.com', emailVerified: true, displayName: 'Will', theme: DEFAULT_THEME, status: ACTIVE_STATUS });
   expect(await counts()).toEqual({ users: 1, identities: 1 });
   const [identity] = await fixture.writeDb.select().from(userIdentity);
   expect(identity).toMatchObject({ provider: NEON_AUTH_PROVIDER, subject: 'subject-a', userId: user.id });
+});
+
+test('a disabled account is read with its status', async () => {
+  const user = await linkedAppUser(fixture.writeDb, claims());
+  await fixture.writeDb.update(appUser).set({ status: DISABLED_STATUS }).where(eq(appUser.id, user.id));
+  expect(await linkedAppUser(fixture.writeDb, claims())).toMatchObject({ id: user.id, status: DISABLED_STATUS });
 });
 
 test('the same identity again returns the same id and keeps the name the user chose', async () => {

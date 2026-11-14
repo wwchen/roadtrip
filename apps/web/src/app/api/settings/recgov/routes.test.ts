@@ -1,20 +1,33 @@
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { sealMfaChallenge } from '@/server/auth/mfaChallengeCookie';
+import { challengeCodec } from '@/server/mapper/http/recgovHttp';
+import { memoryVault } from '@/server/testing/memoryVault';
 
-const requireAppUser = vi.fn();
-const service = {
-  save: vi.fn(),
-  remove: vi.fn(),
-  login: vi.fn(),
-  completeMfa: vi.fn(),
+const KEY = Buffer.alloc(32, 5);
+const NOW = Date.parse('2026-12-01T00:00:00Z');
+const clock = { now: () => NOW };
+const STORED = { username: 'rec@example.com', password: 'hunter2' };
+const FAILED = { kind: 'failed', refusal: { category: 'upstream', code: 'recgov_refresh_failed' } };
+
+const currentAppUser = vi.fn();
+const gateway = {
+  hold: vi.fn(),
+  signIn: vi.fn(),
+  submitMfa: vi.fn(),
+  refresh: vi.fn(),
   verify: vi.fn(),
-  status: vi.fn(),
+  health: vi.fn(),
+  signOut: vi.fn(),
 };
-vi.mock('@/server/auth/currentUser', () => ({ requireAppUser }));
-vi.mock('@/server/service/settings/recgovCredentialService', async (original) => ({
-  ...(await original<object>()),
-  liveRecgovDeps: () => ({}),
-  ...service,
+vi.mock('@/server/auth/currentUser', () => ({ currentAppUser: () => currentAppUser() }));
+vi.mock('@/server/wiring/recgovPorts', () => ({
+  recgovPorts: () => ({ gateway, vault: memoryVault(STORED).vault, clock, mfaChallengeTtlMs: 300_000, challenges: challengeCodec(KEY, clock) }),
 }));
+
+beforeEach(() => {
+  currentAppUser.mockReset();
+  for (const fn of Object.values(gateway)) fn.mockReset();
+});
 
 const root = await import('./route');
 const loginRoute = await import('./login/route');
@@ -22,8 +35,7 @@ const mfaRoute = await import('./login/mfa/route');
 const verifyRoute = await import('./verify/route');
 const statusRoute = await import('./status/route');
 
-const USER = { id: 7n };
-const UNAUTHENTICATED = Response.json({ error: 'unauthenticated' }, { status: 401 });
+const USER = { id: 7n, email: 'a@b.test', emailVerified: true, displayName: null, theme: 'system', status: 'active' };
 const request = (method: string, body?: string, cookie?: string) =>
   new Request('http://localhost/api/settings/recgov', {
     method,
@@ -31,7 +43,7 @@ const request = (method: string, body?: string, cookie?: string) =>
     headers: cookie === undefined ? {} : { cookie },
   });
 
-test('every route answers 401 to an anonymous caller and calls no service', async () => {
+test('every route answers 401 to an anonymous caller, never cached, and calls no gateway', async () => {
   const calls = [
     () => root.PUT(request('PUT', '{}')),
     () => root.DELETE(),
@@ -41,48 +53,44 @@ test('every route answers 401 to an anonymous caller and calls no service', asyn
     () => statusRoute.GET(request('GET')),
   ];
   for (const call of calls) {
-    requireAppUser.mockResolvedValueOnce(UNAUTHENTICATED.clone());
-    expect((await call()).status).toBe(401);
+    currentAppUser.mockResolvedValueOnce(null);
+    const response = await call();
+    expect(response.status).toBe(401);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
   }
-  for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
-});
-
-test('a service refusal keeps its status and body', async () => {
-  requireAppUser.mockResolvedValue(USER);
-  service.save.mockResolvedValue({ status: 502, body: { error: 'recgov_profile_wipe_failed', detail: 'x' } });
-  const response = await root.PUT(request('PUT', '{"username":"a"}'));
-  expect(response.status).toBe(502);
-  expect(await response.json()).toEqual({ error: 'recgov_profile_wipe_failed', detail: 'x' });
-  expect(service.save.mock.calls[0]![1]).toEqual({ username: 'a' });
+  for (const fn of Object.values(gateway)) expect(fn).not.toHaveBeenCalled();
 });
 
 test('mfa_required sets the sealed challenge cookie on the login path only', async () => {
-  requireAppUser.mockResolvedValue(USER);
-  service.login.mockResolvedValue({ status: 200, body: { status: 'mfa_required' }, cookie: { value: 'sealed', maxAgeSeconds: 120 } });
+  currentAppUser.mockResolvedValue(USER);
+  gateway.refresh.mockResolvedValue(FAILED);
+  gateway.signIn.mockResolvedValue({ kind: 'mfa_required', challengeId: 'ch-9', expiresAt: '2026-12-01T00:02:00Z' });
   const response = await loginRoute.POST();
   const cookie = response.headers.get('set-cookie') ?? '';
-  expect(cookie).toContain('__Secure-recgov-mfa=sealed');
+  expect(cookie).toContain('__Secure-recgov-mfa=');
   expect(cookie).toContain('Path=/api/settings/recgov;');
   expect(cookie).toContain('Max-Age=120');
   expect(cookie).toContain('HttpOnly');
   expect(cookie).toContain('Secure');
   expect(cookie).toContain('SameSite=Strict');
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
 });
 
-test('the mfa route hands the service the cookie and clears it', async () => {
-  requireAppUser.mockResolvedValue(USER);
-  service.completeMfa.mockResolvedValue({ status: 200, body: { status: 'ok' }, cookie: 'clear' });
-  const response = await mfaRoute.POST(request('POST', '{"code":"123456"}', 'other=1; __Secure-recgov-mfa=sealed-value'));
-  expect(service.completeMfa.mock.calls[0]![1]).toEqual({ code: '123456' });
-  expect(service.completeMfa.mock.calls[0]![2]).toBe('sealed-value');
+test('the mfa route hands the gateway the challenge the cookie names and clears it', async () => {
+  currentAppUser.mockResolvedValue(USER);
+  gateway.submitMfa.mockResolvedValue({ kind: 'signed_in' });
+  const sealed = sealMfaChallenge(KEY, { challengeId: 'ch-9', userId: 7n, expiresAt: NOW + 60_000 });
+  const response = await mfaRoute.POST(request('POST', '{"code":"123456"}', `other=1; __Secure-recgov-mfa=${sealed}`));
+  expect(gateway.submitMfa).toHaveBeenCalledWith(7n, 'ch-9', '123456');
   expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
 });
 
 test('status reads the cookie and is never cached', async () => {
-  requireAppUser.mockResolvedValue(USER);
-  service.status.mockResolvedValue({ status: 200, body: { configured: false, session: 'not_configured', mfa_pending: false } });
-  const response = await statusRoute.GET(request('GET', undefined, '__Secure-recgov-mfa=v'));
-  expect(service.status.mock.calls[0]![1]).toBe('v');
+  currentAppUser.mockResolvedValue(USER);
+  gateway.health.mockResolvedValue({ kind: 'never_logged_in' });
+  const sealed = sealMfaChallenge(KEY, { challengeId: 'ch-9', userId: 7n, expiresAt: NOW + 60_000 });
+  const response = await statusRoute.GET(request('GET', undefined, `__Secure-recgov-mfa=${sealed}`));
+  expect(await response.json()).toMatchObject({ configured: true, mfa_pending: true });
   expect(response.headers.get('cache-control')).toBe('private, no-store');
 });
 

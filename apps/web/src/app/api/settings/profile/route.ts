@@ -1,17 +1,12 @@
-import { apiError } from '@/server/contractIds';
-import { requireAppUser } from '@/server/auth/currentUser';
-import { jsonBody } from '@/server/requestBody';
-import { updateCurrentProfile } from '@/server/service/settings/settingsService';
+import { parseProfilePatch, settingsAnswer } from '@/server/mapper/http/settingsHttp';
+import { updateProfile } from '@/server/service/settings/settingsController';
+import { settingsPorts } from '@/server/wiring/settingsPorts';
+import { signedIn } from '@/server/wiring/signedIn';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_BAD_REQUEST = 400;
-const PRIVATE_NO_STORE = 'private, no-store';
-
-export async function PUT(request: Request): Promise<Response> {
-  const user = await requireAppUser();
-  if (user instanceof Response) return user;
-  const result = await updateCurrentProfile(user, await jsonBody(request));
-  if (!result.ok) return apiError(STATUS_BAD_REQUEST, result.error, result.detail);
-  return Response.json(result.settings, { headers: { 'cache-control': PRIVATE_NO_STORE } });
-}
+export const PUT = signedIn(async ({ user, readJson }) => {
+  const patch = parseProfilePatch(await readJson());
+  if (patch.kind === 'invalid') return patch.answer;
+  return settingsAnswer(await updateProfile(user, patch.value, settingsPorts()));
+});

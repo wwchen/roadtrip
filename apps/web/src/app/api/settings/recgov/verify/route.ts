@@ -1,12 +1,9 @@
-import { requireAppUser } from '@/server/auth/currentUser';
-import { serviceResponse } from '@/server/serviceResponse';
-import { liveRecgovDeps, verify } from '@/server/service/settings/recgovCredentialService';
+import { verifyAnswer } from '@/server/mapper/http/recgovHttp';
+import { verifySession } from '@/server/service/settings/recgovCredentialController';
+import { recgovPorts } from '@/server/wiring/recgovPorts';
+import { signedIn } from '@/server/wiring/signedIn';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-export async function POST(): Promise<Response> {
-  const user = await requireAppUser();
-  if (user instanceof Response) return user;
-  return serviceResponse(await verify(user, liveRecgovDeps()));
-}
+export const POST = signedIn(async ({ user }) => verifyAnswer(await verifySession(user, recgovPorts())));

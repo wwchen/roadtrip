@@ -1,15 +1,13 @@
-import { requireAppUser } from '@/server/auth/currentUser';
-import { jsonBody } from '@/server/requestBody';
-import { addToCart, liveAddToCartDeps } from '@/server/service/booking/addToCartService';
+import { addToCartAnswer, parseAddToCart } from '@/server/mapper/http/addToCartHttp';
+import { addToCart } from '@/server/service/booking/addToCartController';
+import { bookingPorts } from '@/server/wiring/bookingPorts';
+import { signedIn } from '@/server/wiring/signedIn';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-const PRIVATE_NO_STORE = 'private, no-store';
-
-export async function POST(request: Request): Promise<Response> {
-  const user = await requireAppUser();
-  if (user instanceof Response) return user;
-  const answer = await addToCart(user, await jsonBody(request), liveAddToCartDeps());
-  return Response.json(answer.body, { status: answer.status, headers: { 'cache-control': PRIVATE_NO_STORE } });
-}
+export const POST = signedIn(async ({ user, readJson }) => {
+  const command = parseAddToCart(await readJson());
+  if (command.kind === 'invalid') return command.answer;
+  return addToCartAnswer(await addToCart(user, command.value, bookingPorts()));
+});

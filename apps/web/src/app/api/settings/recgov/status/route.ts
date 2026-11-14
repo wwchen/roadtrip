@@ -1,13 +1,12 @@
-import { mfaCookieFrom } from '@/server/auth/mfaChallengeCookie';
-import { requireAppUser } from '@/server/auth/currentUser';
-import { serviceResponse } from '@/server/serviceResponse';
-import { liveRecgovDeps, status } from '@/server/service/settings/recgovCredentialService';
+import { pendingChallenge, statusAnswer } from '@/server/mapper/http/recgovHttp';
+import { recgovStatus } from '@/server/service/settings/recgovCredentialController';
+import { recgovPorts } from '@/server/wiring/recgovPorts';
+import { signedIn } from '@/server/wiring/signedIn';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-export async function GET(request: Request): Promise<Response> {
-  const user = await requireAppUser();
-  if (user instanceof Response) return user;
-  return serviceResponse(await status(user, mfaCookieFrom(request), liveRecgovDeps()));
-}
+export const GET = signedIn(async ({ user, request }) => {
+  const ports = recgovPorts();
+  return statusAnswer(await recgovStatus(user, pendingChallenge(request, user, ports.challenges), ports));
+});

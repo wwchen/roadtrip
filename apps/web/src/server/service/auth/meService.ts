@@ -1,3 +1,4 @@
+import { ACTIVE_USER_STATUS } from '@roadtrip/domain';
 import { appDb } from '@/server/appDb';
 import { UNKNOWN_FAILURE, type AuthPort } from '@/server/auth/authPort';
 import { signInSetup } from '@/server/auth/signInConfigured';
@@ -36,6 +37,7 @@ export async function meFor(
       emailVerified: sessionUser.emailVerified,
       displayName: sessionUser.name,
     });
+    if (row.status !== ACTIVE_USER_STATUS) return ANONYMOUS;
     return {
       authenticated: true,
       auth_enabled: true,

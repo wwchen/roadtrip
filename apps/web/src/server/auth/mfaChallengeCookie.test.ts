@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { MFA_CHALLENGE_EXPIRED, MFA_CHALLENGE_UNKNOWN, openMfaChallenge, sealMfaChallenge } from './mfaChallengeCookie';
+import { MFA_CHALLENGE_EXPIRED, MFA_CHALLENGE_UNKNOWN } from '../service/settings/model';
+import { openMfaChallenge, sealMfaChallenge } from './mfaChallengeCookie';
 
 const KEY = Buffer.alloc(32, 3);
 const NOW = Date.parse('2026-12-01T00:00:00Z');

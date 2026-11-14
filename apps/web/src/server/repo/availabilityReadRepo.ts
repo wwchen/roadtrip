@@ -1,6 +1,7 @@
 import { bookingAliasesShape, type AVAILABILITY_STATUSES, type Db } from '@roadtrip/db';
 import type { BookingAlias, CampsiteKind } from '@roadtrip/domain';
 import { sql } from 'drizzle-orm';
+import { bookingIdentityOf, type BookingIdentityRow } from '../mapper/row/bookingIdentityRow';
 import { createColumnDecoder } from './columnDecoder';
 
 export type AvailabilityStatus = (typeof AVAILABILITY_STATUSES)[number];
@@ -87,23 +88,9 @@ export async function campsitesOf(db: Db, campgroundId: bigint, kinds: readonly 
   }));
 }
 
-export interface BookingIdentityRow {
-  bookingProvider: string | null;
-  bookingProviderRef: string | null;
-  bookingAliases: BookingAlias[];
-}
-
 export interface CampgroundBookingIdentities {
   campground: BookingIdentityRow;
   campsites: BookingIdentityRow[];
-}
-
-function identityOf(row: Record<string, unknown>): BookingIdentityRow {
-  return {
-    bookingProvider: row.booking_provider as string | null,
-    bookingProviderRef: row.booking_provider_ref as string | null,
-    bookingAliases: createColumnDecoder().decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
-  };
 }
 
 export async function campgroundBookingIdentities(
@@ -123,8 +110,9 @@ export async function campgroundBookingIdentities(
           WHERE id = ANY(${pgArrayLiteral(campsiteIds.map(String))}::bigint[])
           ORDER BY id
         `);
+  const decoder = createColumnDecoder();
   return {
-    campground: campground === undefined ? { bookingProvider: null, bookingProviderRef: null, bookingAliases: [] } : identityOf(campground),
-    campsites: sites.map(identityOf),
+    campground: campground === undefined ? { bookingProvider: null, bookingProviderRef: null, bookingAliases: [] } : bookingIdentityOf(campground, decoder),
+    campsites: sites.map((site) => bookingIdentityOf(site, decoder)),
   };
 }
