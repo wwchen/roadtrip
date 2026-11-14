@@ -11,20 +11,20 @@ export const RELAY_ANSWERS: {
   health: RelayAnswer<SessionHealth>;
   signOut: RelayAnswer<SignOutResult>;
 } = {
-  hold: { answer: { ok: true, cart_url: 'u' }, result: { kind: 'held', cartUrl: 'u' } },
-  signIn: { answer: { ok: true }, result: { kind: 'signed_in' } },
+  hold: { answer: { outcome: 'held', cart_url: 'u' }, result: { kind: 'held', cartUrl: 'u' } },
+  signIn: { answer: { outcome: 'signed_in' }, result: { kind: 'signed_in' } },
   submitMfa: {
-    answer: { ok: false, code: 'mfa_required', challenge_id: 'ch-10' },
+    answer: { outcome: 'mfa_required', challenge_id: 'ch-10' },
     result: { kind: 'mfa_required', challengeId: 'ch-10' },
   },
-  refresh: { answer: { ok: true }, result: { kind: 'ok' } },
+  refresh: { answer: { outcome: 'ok' }, result: { kind: 'ok' } },
   verify: {
-    answer: { ok: false, code: 'x', category: 'caller_action' },
-    result: { kind: 'failed', refusal: { category: 'caller_action', code: 'x' } },
+    answer: { outcome: 'failed', failure: { code: 'recgov_not_authenticated', category: 'caller_action' } },
+    result: { kind: 'failed', refusal: { category: 'caller_action', code: 'recgov_not_authenticated' } },
   },
-  health: { answer: { ok: true, health: 'active' }, result: { kind: 'active' } },
+  health: { answer: { session: 'active' }, result: { kind: 'active' } },
   signOut: {
-    answer: { ok: true, profile_destroyed: true, signed_out: true },
+    answer: { outcome: 'wiped', profile_destroyed: true, signed_out: true },
     result: { kind: 'wiped', signedOut: true },
   },
 };

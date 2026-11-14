@@ -357,13 +357,13 @@ object ApiContract {
                     ).map { ApiBody(it, AvailabilityErrorDto::class) },
                 conditional = true,
             ),
-            bookingRelayEndpoint("health", BookingRelayProfileRequest::class),
-            bookingRelayEndpoint("refresh", BookingRelayProfileRequest::class),
-            bookingRelayEndpoint("verify", BookingRelayProfileRequest::class),
-            bookingRelayEndpoint("signout", BookingRelayProfileRequest::class),
-            bookingRelayEndpoint("login", BookingRelayLoginRequest::class),
-            bookingRelayEndpoint("login/mfa", BookingRelayMfaRequest::class),
-            bookingRelayEndpoint("atc", BookingRelayAtcRequest::class),
+            bookingRelayEndpoint("health", BookingRelayProfileRequest::class, BookingRelayHealthDto::class),
+            bookingRelayEndpoint("refresh", BookingRelayProfileRequest::class, BookingRelayActionDto::class),
+            bookingRelayEndpoint("verify", BookingRelayProfileRequest::class, BookingRelayActionDto::class),
+            bookingRelayEndpoint("signout", BookingRelayProfileRequest::class, BookingRelaySignOutDto::class),
+            bookingRelayEndpoint("login", BookingRelayLoginRequest::class, BookingRelayLoginDto::class),
+            bookingRelayEndpoint("login/mfa", BookingRelayMfaRequest::class, BookingRelayLoginDto::class),
+            bookingRelayEndpoint("atc", BookingRelayAtcRequest::class, BookingRelayHoldDto::class),
             ApiEndpoint(
                 ApiMethod.POST,
                 "/api/pois/{id}/campsites/availability/refresh",
@@ -616,12 +616,13 @@ private val watchRefusals =
 private fun bookingRelayEndpoint(
     segment: String,
     request: KClass<*>,
+    result: KClass<*>,
 ): ApiEndpoint =
     ApiEndpoint(
         ApiMethod.POST,
         "/api/internal/booking/$segment",
         request = request,
-        success = ApiBody(HTTP_OK, BookingRelayResponseDto::class),
-        errors = apiErrors(HTTP_BAD_REQUEST, HTTP_UNAUTHORIZED) + ApiBody(HTTP_GATEWAY_TIMEOUT, BookingRelayResponseDto::class),
+        success = ApiBody(HTTP_OK, result),
+        errors = apiErrors(HTTP_BAD_REQUEST, HTTP_UNAUTHORIZED) + ApiBody(HTTP_GATEWAY_TIMEOUT, result),
         conditional = true,
     )

@@ -13,6 +13,7 @@ import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.booking.BookingRelayController
+import ca.floo.roadtrip.service.booking.ProfileHoldOutcome
 import ca.floo.roadtrip.service.booking.RelayAnswer
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -39,29 +40,34 @@ internal fun Route.bookingRelayRoutes(
 ) {
     val expected = token ?: return
     relay("health", "Rec.gov session health for one profile", expected) { call ->
-        call.withBody<BookingRelayProfileRequest> { controller.health(it.profileId) }
+        call.withBody<BookingRelayProfileRequest, _, _>({ controller.health(it.profileId) }, { toHealthDto() })
     }
     relay("refresh", "Refresh one profile's rec.gov session from its cookies", expected) { call ->
-        call.withBody<BookingRelayProfileRequest> { controller.refresh(it.profileId) }
+        call.withBody<BookingRelayProfileRequest, _, _>({ controller.refresh(it.profileId) }, { toActionDto() })
     }
     relay("verify", "Dry-run check of one profile's rec.gov cart", expected) { call ->
-        call.withBody<BookingRelayProfileRequest> { controller.verify(it.profileId) }
+        call.withBody<BookingRelayProfileRequest, _, _>({ controller.verify(it.profileId) }, { toActionDto() })
     }
     relay("signout", "Sign one profile out of rec.gov and destroy it", expected) { call ->
-        call.withBody<BookingRelayProfileRequest> { controller.signout(it.profileId) }
+        call.withBody<BookingRelayProfileRequest, _, _>({ controller.signout(it.profileId) }, { toSignOutDto() })
     }
     relay("login", "Sign one profile in to rec.gov with the credentials in the body", expected) { call ->
-        call.withBody<BookingRelayLoginRequest> { controller.login(it) }
+        call.withBody<BookingRelayLoginRequest, _, _>(
+            { controller.login(it.profileId, it.username, it.password) },
+            { toLoginDto() },
+        )
     }
     relay("login/mfa", "Complete one profile's rec.gov MFA challenge", expected) { call ->
-        call.withBody<BookingRelayMfaRequest> { controller.completeMfa(it) }
+        call.withBody<BookingRelayMfaRequest, _, _>(
+            { controller.completeMfa(it.profileId, it.challengeId, it.mfaCode) },
+            { toLoginDto() },
+        )
     }
     relay("atc", "Hold one rec.gov site in one profile's cart", expected) { call ->
-        call.withBody<BookingRelayAtcRequest> { request ->
-            val arrival = request.startDate.toLocalDateOrNull()
-            val checkout = request.endDate.toLocalDateOrNull()
-            if (arrival == null || checkout == null) null else controller.atc(request, arrival, checkout)
-        }
+        call.withBody<BookingRelayAtcRequest, _, _>(
+            { controller.atcOrNull(it) },
+            { toHoldDto() },
+        )
     }
 }
 
@@ -81,16 +87,19 @@ private fun Route.relay(
         .access(RouteAccess.Anonymous)
 }
 
-private suspend inline fun <reified T> ApplicationCall.withBody(answer: (T) -> RelayAnswer?) {
+private suspend inline fun <reified T, V, reified D> ApplicationCall.withBody(
+    answer: (T) -> RelayAnswer<V>?,
+    toDto: RelayAnswer<V>.() -> D,
+) {
     val request =
         when (val body = receiveJsonBody<T>()) {
             is RouteBodyResult.Invalid -> return respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
             is RouteBodyResult.Valid -> body.value
         }
-    when (val result = answer(request)) {
-        null -> respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
-        is RelayAnswer.Answered -> respondEncodedJson(result.body)
-        is RelayAnswer.TimedOut -> respondEncodedJson(result.body, HttpStatusCode.GatewayTimeout)
+    val result = answer(request) ?: return respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
+    when (result) {
+        is RelayAnswer.Answered -> respondEncodedJson(result.toDto())
+        RelayAnswer.TimedOut -> respondEncodedJson(result.toDto(), HttpStatusCode.GatewayTimeout)
     }
 }
 
@@ -106,3 +115,10 @@ private fun String.toLocalDateOrNull(): LocalDate? =
     } catch (_: DateTimeParseException) {
         null
     }
+
+private suspend fun BookingRelayController.atcOrNull(request: BookingRelayAtcRequest): RelayAnswer<ProfileHoldOutcome>? {
+    val arrival = request.startDate.toLocalDateOrNull()
+    val checkout = request.endDate.toLocalDateOrNull()
+    if (arrival == null || checkout == null) return null
+    return atc(request.profileId, request.vendorSiteId, arrival, checkout)
+}

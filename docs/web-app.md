@@ -343,6 +343,13 @@ relay on; unset, it is not registered. `BOOKING_RELAY_TIMEOUT` (default `90s`) b
 The egress host's Caddy block routes `POST /api/internal/booking/*` to the backend;
 `roadtrip.floo.ca` answers 404 for `/api/internal/*`.
 
+Have the web app and the backend on the same relay format before these variables are set, and keep
+them so while they are. The format carries no version and neither side reads the other's shape.
+When the two differ, the web app reads every relay answer as malformed and reports a failure for
+an operation the backend completed: a hold that is in the cart, a sign-out that wiped the
+profile. The web app deploys on merge and the backend deploys afterwards, so check the backend's
+deployed commit first, and roll the two back together.
+
 ## Previews
 
 Each preview deployment gets its own Neon branch, `preview/<git branch>`, from the Neon Postgres

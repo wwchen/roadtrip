@@ -1,6 +1,16 @@
 package ca.floo.roadtrip.route
 
-import ca.floo.roadtrip.model.api.BookingRelayResponseDto
+import ca.floo.roadtrip.model.api.BookingRelayActionDto
+import ca.floo.roadtrip.model.api.BookingRelayActionOutcome
+import ca.floo.roadtrip.model.api.BookingRelayFailureCategory
+import ca.floo.roadtrip.model.api.BookingRelayHealthDto
+import ca.floo.roadtrip.model.api.BookingRelayHoldDto
+import ca.floo.roadtrip.model.api.BookingRelayHoldOutcome
+import ca.floo.roadtrip.model.api.BookingRelayLoginDto
+import ca.floo.roadtrip.model.api.BookingRelayLoginOutcome
+import ca.floo.roadtrip.model.api.BookingRelaySession
+import ca.floo.roadtrip.model.api.BookingRelaySignOutDto
+import ca.floo.roadtrip.model.api.BookingRelaySignOutOutcome
 import ca.floo.roadtrip.route.internal.bookingRelayRoutes
 import ca.floo.roadtrip.service.booking.BookingRelayController
 import ca.floo.roadtrip.service.booking.RECGOV_CART_URL
@@ -31,7 +41,6 @@ import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -166,7 +175,15 @@ class BookingRelayRoutesTest {
             setBody(body)
         }
 
-    private suspend fun HttpResponse.envelope(): BookingRelayResponseDto = wire.decodeFromString(bodyAsText())
+    private suspend fun HttpResponse.hold(): BookingRelayHoldDto = wire.decodeFromString(bodyAsText())
+
+    private suspend fun HttpResponse.login(): BookingRelayLoginDto = wire.decodeFromString(bodyAsText())
+
+    private suspend fun HttpResponse.action(): BookingRelayActionDto = wire.decodeFromString(bodyAsText())
+
+    private suspend fun HttpResponse.health(): BookingRelayHealthDto = wire.decodeFromString(bodyAsText())
+
+    private suspend fun HttpResponse.signOut(): BookingRelaySignOutDto = wire.decodeFromString(bodyAsText())
 
     @Test
     fun `routes are absent when the token is unset`() =
@@ -214,9 +231,9 @@ class BookingRelayRoutesTest {
             val response = call("atc", atcBody)
 
             assertEquals(HttpStatusCode.OK, response.status)
-            val envelope = response.envelope()
-            assertTrue(envelope.ok)
-            assertEquals(RECGOV_CART_URL, envelope.cartUrl)
+            val held = response.hold()
+            assertEquals(BookingRelayHoldOutcome.HELD, held.outcome)
+            assertEquals(RECGOV_CART_URL, held.cartUrl)
             assertEquals(listOf("health:$PROFILE_ID"), companion.calls)
             assertEquals(
                 PROFILE_ID,
@@ -239,11 +256,11 @@ class BookingRelayRoutesTest {
         relay {
             atc.outcome = RecGovAtcOutcome.Failed(RecGovSessionCodes.PROFILE_BUSY, null)
 
-            val envelope = call("atc", atcBody).envelope()
+            val blocked = call("atc", atcBody).hold()
 
-            assertFalse(envelope.ok)
-            assertEquals(RecGovSessionCodes.PROFILE_BUSY, envelope.code)
-            assertEquals("retry_later", envelope.category)
+            assertEquals(BookingRelayHoldOutcome.BLOCKED, blocked.outcome)
+            assertEquals(RecGovSessionCodes.PROFILE_BUSY, blocked.failure?.code)
+            assertEquals(BookingRelayFailureCategory.RETRY_LATER, blocked.failure?.category)
         }
 
     @Test
@@ -252,10 +269,10 @@ class BookingRelayRoutesTest {
             companion.health = CompanionSessionHealth.NeverLoggedIn
             companion.refreshResult = CompanionActionResult.Failed(RecGovSessionCodes.REFRESH_FAILED)
 
-            val envelope = call("atc", atcBody).envelope()
+            val blocked = call("atc", atcBody).hold()
 
-            assertFalse(envelope.ok)
-            assertEquals("caller_action", envelope.category)
+            assertEquals(BookingRelayHoldOutcome.BLOCKED, blocked.outcome)
+            assertEquals(BookingRelayFailureCategory.CALLER_ACTION, blocked.failure?.category)
             assertTrue(companion.logins.isEmpty())
             assertTrue(atc.payloads.isEmpty())
         }
@@ -265,21 +282,21 @@ class BookingRelayRoutesTest {
         relay {
             companion.loginResult = CompanionLoginResult.MfaRequired("ch-9", "2026-12-01T00:05:00Z")
 
-            val envelope = call("login", loginBody).envelope()
+            val login = call("login", loginBody).login()
 
-            assertFalse(envelope.ok)
-            assertEquals(RecGovSessionCodes.MFA_REQUIRED, envelope.code)
-            assertEquals("ch-9", envelope.challengeId)
-            assertEquals("2026-12-01T00:05:00Z", envelope.expiresAt)
+            assertEquals(BookingRelayLoginOutcome.MFA_REQUIRED, login.outcome)
+            assertEquals("ch-9", login.challengeId)
+            assertEquals("2026-12-01T00:05:00Z", login.expiresAt)
+            assertNull(login.failure)
             assertEquals(listOf(Triple(PROFILE_ID, "camper@example.com", "hunter2")), companion.logins)
         }
 
     @Test
     fun `mfa completes the named challenge`() =
         relay {
-            val envelope = call("login/mfa", mfaBody).envelope()
+            val login = call("login/mfa", mfaBody).login()
 
-            assertTrue(envelope.ok)
+            assertEquals(BookingRelayLoginOutcome.SIGNED_IN, login.outcome)
             assertEquals(listOf(Triple(PROFILE_ID, "ch-1", "123456")), companion.mfas)
         }
 
@@ -288,11 +305,10 @@ class BookingRelayRoutesTest {
         relay {
             companion.health = CompanionSessionHealth.Inactive(RecGovSessionCodes.SESSION_LAPSED)
 
-            val envelope = call("health", profileBody).envelope()
+            val health = call("health", profileBody).health()
 
-            assertFalse(envelope.ok)
-            assertEquals("inactive", envelope.health)
-            assertEquals(RecGovSessionCodes.SESSION_LAPSED, envelope.code)
+            assertEquals(BookingRelaySession.INACTIVE, health.session)
+            assertEquals(RecGovSessionCodes.SESSION_LAPSED, health.code)
         }
 
     @Test
@@ -300,11 +316,11 @@ class BookingRelayRoutesTest {
         relay {
             companion.verifyResult = CompanionActionResult.Failed(RecGovSessionCodes.NOT_AUTHENTICATED, "no session")
 
-            assertTrue(call("refresh", profileBody).envelope().ok)
-            val verified = call("verify", profileBody).envelope()
-            assertFalse(verified.ok)
-            assertEquals(RecGovSessionCodes.NOT_AUTHENTICATED, verified.code)
-            assertEquals("no session", verified.detail)
+            assertEquals(BookingRelayActionOutcome.OK, call("refresh", profileBody).action().outcome)
+            val verified = call("verify", profileBody).action()
+            assertEquals(BookingRelayActionOutcome.FAILED, verified.outcome)
+            assertEquals(RecGovSessionCodes.NOT_AUTHENTICATED, verified.failure?.code)
+            assertEquals("no session", verified.failure?.detail)
         }
 
     @Test
@@ -312,11 +328,11 @@ class BookingRelayRoutesTest {
         relay {
             companion.logoutResult = CompanionActionResult.Failed("recgov_logout_failed")
 
-            val envelope = call("signout", profileBody).envelope()
+            val signOut = call("signout", profileBody).signOut()
 
-            assertTrue(envelope.ok)
-            assertEquals(false, envelope.signedOut)
-            assertEquals(true, envelope.profileDestroyed)
+            assertEquals(BookingRelaySignOutOutcome.WIPED, signOut.outcome)
+            assertEquals(false, signOut.signedOut)
+            assertEquals(true, signOut.profileDestroyed)
             assertEquals(listOf("logout:$PROFILE_ID", "destroy:$PROFILE_ID"), companion.calls)
         }
 
@@ -325,11 +341,11 @@ class BookingRelayRoutesTest {
         relay {
             companion.destroyResult = CompanionActionResult.Failed("profile_destroy_failed")
 
-            val envelope = call("signout", profileBody).envelope()
+            val signOut = call("signout", profileBody).signOut()
 
-            assertFalse(envelope.ok)
-            assertEquals(false, envelope.profileDestroyed)
-            assertEquals("profile_destroy_failed", envelope.code)
+            assertEquals(BookingRelaySignOutOutcome.FAILED, signOut.outcome)
+            assertEquals(false, signOut.profileDestroyed)
+            assertEquals("profile_destroy_failed", signOut.failure?.code)
         }
 
     @Test
@@ -339,13 +355,16 @@ class BookingRelayRoutesTest {
 
             val hold = call("atc", atcBody)
             assertEquals(HttpStatusCode.GatewayTimeout, hold.status)
-            val envelope = hold.envelope()
-            assertEquals("relay_timeout", envelope.code)
-            assertEquals("retry_later", envelope.category)
-            assertEquals(RECGOV_CART_URL, envelope.cartUrl)
+            val timedOut = hold.hold()
+            assertEquals(BookingRelayHoldOutcome.TIMED_OUT, timedOut.outcome)
+            assertEquals("relay_timeout", timedOut.failure?.code)
+            assertEquals(BookingRelayFailureCategory.RETRY_LATER, timedOut.failure?.category)
+            assertEquals(RECGOV_CART_URL, timedOut.cartUrl)
 
             val health = call("health", profileBody)
             assertEquals(HttpStatusCode.GatewayTimeout, health.status)
-            assertNull(health.envelope().cartUrl)
+            val healthBody = health.health()
+            assertEquals(BookingRelaySession.UNAVAILABLE, healthBody.session)
+            assertEquals("relay_timeout", healthBody.code)
         }
 }

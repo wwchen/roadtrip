@@ -559,6 +559,11 @@ Found by an adversarial review of the four pull requests, after they were opened
     repository "decides nothing", who reads `config`, and that the guard "fails the build"). They
     now say what the code does and what the guard checks, and a list under them says where the
     code does not match yet and which code has no rule.
+18. The relay reader accepts a tagged body only at a success status or 504, the statuses the relay
+    answers with. A tagged body at any other status reads as `rejected`. Section 6 left the status
+    unchecked once a body carried a tag, as the old reader had.
+19. The two relay formats do not overlap and carry no version, so the two sides must be on the same
+    one whenever booking is on. `docs/web-app.md` says so beside the variables that switch it on.
 
 ## Left to the builder
 
