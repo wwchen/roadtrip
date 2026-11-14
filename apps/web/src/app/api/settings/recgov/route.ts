@@ -1,19 +1,15 @@
-import { requireAppUser } from '@/server/auth/currentUser';
-import { jsonBody } from '@/server/requestBody';
-import { serviceResponse } from '@/server/serviceResponse';
-import { liveRecgovDeps, remove, save } from '@/server/service/settings/recgovCredentialService';
+import { parseCredentials, removeAnswer, saveAnswer } from '@/server/mapper/http/recgovHttp';
+import { removeCredentials, saveCredentials } from '@/server/service/settings/recgovCredentialController';
+import { recgovPorts } from '@/server/wiring/recgovPorts';
+import { signedIn } from '@/server/wiring/signedIn';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-export async function PUT(request: Request): Promise<Response> {
-  const user = await requireAppUser();
-  if (user instanceof Response) return user;
-  return serviceResponse(await save(user, await jsonBody(request), liveRecgovDeps()));
-}
+export const PUT = signedIn(async ({ user, readJson }) => {
+  const command = parseCredentials(await readJson());
+  if (command.kind === 'invalid') return command.answer;
+  return saveAnswer(await saveCredentials(user, command.value, recgovPorts()));
+});
 
-export async function DELETE(): Promise<Response> {
-  const user = await requireAppUser();
-  if (user instanceof Response) return user;
-  return serviceResponse(await remove(user, liveRecgovDeps()));
-}
+export const DELETE = signedIn(async ({ user }) => removeAnswer(await removeCredentials(user, recgovPorts())));

@@ -1,9 +1,6 @@
 import type { Db } from '@roadtrip/db';
 import { shippedTenantRegistry, type CampsiteKind } from '@roadtrip/domain';
-import { appDb } from '../../appDb';
-import { currentAppUser } from '../../auth/currentUser';
-import { signInConfigured } from '../../auth/signInConfigured';
-import { fetchEgress, type EgressResult } from '../../client/availabilityEgress';
+import { fetchEgress, type EgressFetch } from '../../client/availabilityEgress';
 import { AVAILABILITY_STORED_TIMEOUT_MS, config } from '../../config';
 import type {
   AvailabilityEgressRequestDto,
@@ -14,7 +11,6 @@ import type {
 } from '../../contract';
 import { toContractId } from '../../contractIds';
 import { serverDb } from '../../db';
-import { RECGOV_PROVIDER, findCredentials } from '../../repo/bookingCredentialsRepo';
 import {
   campgroundBookingIdentities,
   campsitesOf,
@@ -24,6 +20,8 @@ import {
   type CampsiteKey,
   type StoredCell,
 } from '../../repo/availabilityReadRepo';
+import { capabilityDto } from '../../mapper/http/capabilityHttp';
+import { liveReaderStanding } from '../../wiring/readerStanding';
 import { addToCartCapability } from '../booking/addToCartCapability';
 import { addDays, poiDateContext } from '../booking/dateContext';
 import { fuseWeek, weekCache } from './matrixFusion';
@@ -65,7 +63,7 @@ export interface WeekSettings {
   now: Date;
 }
 
-export type EgressFetch = (request: AvailabilityEgressRequestDto) => Promise<EgressResult>;
+export type { EgressFetch };
 
 export type WatchCapabilitiesLookup = (target: WeekTarget) => Promise<AvailabilityWatchCapabilitiesDto>;
 
@@ -203,12 +201,9 @@ export function currentWeekSettings(): WeekSettings {
 async function readerCapabilities(db: Db, target: WeekTarget): Promise<AvailabilityWatchCapabilitiesDto> {
   try {
     const identities = await campgroundBookingIdentities(db, target.campground.campgroundId, target.campsites.map((campsite) => campsite.id));
-    const reader = await currentAppUser();
-    const credentialed =
-      reader !== null && config.bookingCipherKey !== null && (await findCredentials(appDb(), reader.id, RECGOV_PROVIDER)) !== null;
     return {
       trigger_kinds: [],
-      add_to_cart: addToCartCapability(identities.campsites, identities.campground, reader, credentialed, shippedTenantRegistry(), signInConfigured()),
+      add_to_cart: capabilityDto(addToCartCapability(identities.campsites, identities.campground, await liveReaderStanding(), shippedTenantRegistry())),
     };
   } catch (error) {
     console.warn(CAPABILITY_LOG, error instanceof Error ? error.name : typeof error);

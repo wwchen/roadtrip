@@ -1,12 +1,12 @@
-import { requireAppUser } from '@/server/auth/currentUser';
-import { serviceResponse } from '@/server/serviceResponse';
-import { liveRecgovDeps, login } from '@/server/service/settings/recgovCredentialService';
+import { loginAnswer } from '@/server/mapper/http/recgovHttp';
+import { signIn } from '@/server/service/settings/recgovCredentialController';
+import { recgovPorts } from '@/server/wiring/recgovPorts';
+import { signedIn } from '@/server/wiring/signedIn';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 200;
 
-export async function POST(): Promise<Response> {
-  const user = await requireAppUser();
-  if (user instanceof Response) return user;
-  return serviceResponse(await login(user, liveRecgovDeps()));
-}
+export const POST = signedIn(async ({ user }) => {
+  const ports = recgovPorts();
+  return loginAnswer(await signIn(user, ports), ports.challenges);
+});

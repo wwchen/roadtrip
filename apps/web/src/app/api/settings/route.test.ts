@@ -1,24 +1,40 @@
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 
-const requireAppUser = vi.fn();
-const currentSettings = vi.fn();
-vi.mock('@/server/auth/currentUser', () => ({ requireAppUser }));
-vi.mock('@/server/service/settings/settingsService', () => ({ currentSettings }));
+const currentAppUser = vi.fn();
+const notifications = vi.fn();
+const saveProfile = vi.fn();
+const USER = { id: 7n, email: 'camper@example.com', emailVerified: true, displayName: null, theme: 'system', status: 'active' };
+vi.mock('@/server/auth/currentUser', () => ({ currentAppUser }));
+vi.mock('@/server/wiring/settingsPorts', () => ({
+  settingsPorts: () => ({
+    vault: { status: async () => ({ kind: 'none' }) },
+    adminEmails: new Set<string>(),
+    notifications,
+    saveProfile,
+  }),
+}));
 const { GET } = await import('./route');
 
+beforeEach(() => {
+  currentAppUser.mockReset();
+  notifications.mockReset();
+  saveProfile.mockReset();
+});
+
 test('an anonymous caller gets 401', async () => {
-  requireAppUser.mockResolvedValue(Response.json({ error: 'unauthenticated' }, { status: 401 }));
+  currentAppUser.mockResolvedValue(null);
   const response = await GET();
   expect(response.status).toBe(401);
-  expect(currentSettings).not.toHaveBeenCalled();
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(notifications).not.toHaveBeenCalled();
 });
 
 test('a signed-in caller gets their settings, never cached', async () => {
-  const user = { id: 7n };
-  requireAppUser.mockResolvedValue(user);
-  currentSettings.mockResolvedValue({ booking: { recgov_configured: false } });
+  currentAppUser.mockResolvedValue(USER);
+  notifications.mockResolvedValue({ notificationEmail: USER.email, slackChannel: null, slackConfigured: false, slackTokenHint: null });
   const response = await GET();
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
-  expect(currentSettings).toHaveBeenCalledWith(user);
+  expect(await response.json()).toMatchObject({ booking: { recgov_configured: false } });
+  expect(notifications).toHaveBeenCalledWith(7n, 'camper@example.com');
 });

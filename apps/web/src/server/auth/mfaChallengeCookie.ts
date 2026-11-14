@@ -1,16 +1,9 @@
 import { decryptSecret, encryptSecret } from '../crypto/secretCipher';
+import { MFA_CHALLENGE_EXPIRED, MFA_CHALLENGE_UNKNOWN, type MfaChallenge } from '../service/settings/model';
 
 export const MFA_COOKIE = '__Secure-recgov-mfa';
 export const MFA_COOKIE_PATH = '/api/settings/recgov';
-export const MFA_CHALLENGE_UNKNOWN = 'mfa_challenge_unknown';
-export const MFA_CHALLENGE_EXPIRED = 'mfa_challenge_expired';
 const COOKIE_ENCODING = 'base64url';
-
-export interface MfaChallenge {
-  challengeId: string;
-  userId: bigint;
-  expiresAt: number;
-}
 
 interface SealedChallenge {
   c: string;

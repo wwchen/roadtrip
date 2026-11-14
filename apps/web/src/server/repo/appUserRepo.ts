@@ -1,5 +1,6 @@
-import { appUser, userIdentity, type Db, type UserTheme } from '@roadtrip/db';
+import { appUser, userIdentity, type Db, type UserStatus, type UserTheme } from '@roadtrip/db';
 import { and, eq, sql } from 'drizzle-orm';
+import type { ProfilePatch } from '../service/settings/model';
 
 export const NEON_AUTH_PROVIDER = 'neon-auth';
 
@@ -16,6 +17,7 @@ export interface AppUserRow {
   emailVerified: boolean;
   displayName: string | null;
   theme: UserTheme;
+  status: UserStatus;
 }
 
 export class EmailTakenError extends Error {
@@ -40,6 +42,7 @@ const userColumns = {
   emailVerified: appUser.emailVerified,
   displayName: appUser.displayName,
   theme: appUser.theme,
+  status: appUser.status,
 };
 
 async function byIdentity(db: Executor, subject: string): Promise<AppUserRow | undefined> {
@@ -100,11 +103,6 @@ export async function linkedAppUser(db: Db, claims: IdentityClaims): Promise<App
   const existing = await byIdentity(db, claims.subject);
   if (existing !== undefined) return refreshed(db, existing, claims);
   return refreshed(db, await created(db, claims), claims);
-}
-
-export interface ProfilePatch {
-  displayName?: string;
-  theme?: UserTheme;
 }
 
 export async function updateProfile(db: Db, userId: bigint, patch: ProfilePatch): Promise<AppUserRow> {

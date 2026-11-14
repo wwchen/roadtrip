@@ -1,7 +1,8 @@
 import { userBookingCredentials, type Db } from '@roadtrip/db';
 import { and, eq, sql } from 'drizzle-orm';
+import { RECGOV_PROVIDER } from '../service/booking/model';
 
-export const RECGOV_PROVIDER = 'recgov';
+export { RECGOV_PROVIDER };
 
 export interface StoredCredentials {
   username: string;

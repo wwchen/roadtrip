@@ -30,6 +30,8 @@ export type EgressResult =
   | { kind: 'cells'; body: AvailabilityEgressResponseDto }
   | { kind: 'error'; status: number; code: string | null; body: AvailabilityErrorDto | null };
 
+export type EgressFetch = (request: AvailabilityEgressRequestDto) => Promise<EgressResult>;
+
 export async function fetchEgress(endpoint: EgressEndpoint, request: AvailabilityEgressRequestDto, timeoutMs: number): Promise<EgressResult> {
   let response: Response;
   try {

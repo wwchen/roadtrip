@@ -1,12 +1,33 @@
 import assert from 'node:assert/strict';
+import { statSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { Worker } from 'node:worker_threads';
-import { findClientBoundaryViolations } from './check-server-only-imports.mjs';
+import { candidatePaths, findClientBoundaryViolations, findEnvReadViolations, findLayerViolations, LAYER_RULES, REPO_ROOT } from './check-server-only-imports.mjs';
 import { findModuleSpecifiers } from './module-specifiers.mjs';
 
+function isFile(candidate) {
+  try {
+    return statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDirectory(candidate) {
+  try {
+    return statSync(candidate).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+
+const WEB_SOURCE_ROOT = path.join(REPO_ROOT, 'apps/web/src');
+const PATH_ENTRY_PREFIXES = ['server/', 'app/'];
+const DIRECTORY_ENTRY_SUFFIX = '/';
 const CLIENT = "'use client';\n";
 const ADJACENT_BLOCK_COMMENTS = 64;
 const SCAN_HARD_TIMEOUT_MS = 10_000;
@@ -307,4 +328,278 @@ test('does not read NEXT_PUBLIC_ in prose files', async (context) => {
   context.after(() => rm(root, { recursive: true, force: true }));
 
   assert.deepEqual(await findClientBoundaryViolations(root), []);
+});
+
+const SERVICE_FILE = 'src/server/service/booking/x.ts';
+const REPO_RULE = { name: 'service', from: ['server/service/'], forbid: ['server/repo/'] };
+
+async function layerFixture(context, files) {
+  const root = await fixture(files);
+  context.after(() => rm(root, { recursive: true, force: true }));
+  return root;
+}
+
+test('a forbidden directory import is reported with its rule name', async (context) => {
+  const root = await layerFixture(context, {
+    [SERVICE_FILE]: "const a = 1;\nimport { r } from '@/server/repo/bookings';",
+    'src/server/repo/bookings.ts': 'export const r = 1;',
+    'src/server/service/booking/ok.ts': "import { r } from '@/server/contract';",
+    'src/server/contract.ts': 'export const c = 1;',
+  });
+
+  const violations = await findLayerViolations(root, [REPO_RULE]);
+
+  assert.deepEqual(violations, [
+    'apps/web/src/server/service/booking/x.ts:2: imports @/server/repo/bookings (service may not import server/repo/)',
+  ]);
+});
+
+test('a type-only import counts', async (context) => {
+  const root = await layerFixture(context, {
+    [SERVICE_FILE]: "import type { X } from '@/server/contract';",
+    'src/server/contract.ts': 'export type X = string;',
+  });
+
+  const violations = await findLayerViolations(root, [
+    { name: 'service', from: ['server/service/'], forbid: ['server/contract'] },
+  ]);
+
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0].includes('imports @/server/contract (service may not import server/contract)'));
+});
+
+test('an alias specifier and a relative one reach the same target', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/service/booking/a.ts': "import { r } from '@/server/repo/bookings';",
+    'src/server/service/booking/b.ts': "import { r } from '../../repo/bookings';",
+    'src/server/service/booking/c.ts': "import { r } from '../../repo/missing';",
+    'src/server/repo/bookings.ts': 'export const r = 1;',
+    'src/server/repo/bookingsHelper.ts': 'export const h = 1;',
+    'src/server/service/booking/d.ts': "import { h } from '@/server/repo/bookingsHelper';",
+  });
+
+  const exactModule = await findLayerViolations(root, [
+    { name: 'service', from: ['server/service/'], forbid: ['server/repo/bookings'] },
+  ]);
+  const directory = await findLayerViolations(root, [REPO_RULE]);
+
+  assert.equal(exactModule.length, 2);
+  assert.ok(exactModule.some((line) => line.startsWith('apps/web/src/server/service/booking/a.ts:1:')));
+  assert.ok(exactModule.some((line) => line.startsWith('apps/web/src/server/service/booking/b.ts:1:')));
+  assert.equal(directory.length, 4);
+  assert.ok(directory.some((line) => line.includes('c.ts:1: imports ../../repo/missing')));
+});
+
+test('a forbidden package and its subpaths are reported', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/service/booking/a.ts': "import { headers } from 'next/headers';\nimport { sql } from 'drizzle-orm';\nimport x from 'nextra';",
+  });
+
+  const violations = await findLayerViolations(root, [
+    { name: 'service', from: ['server/service/'], forbid: ['next', 'drizzle-orm'] },
+  ]);
+
+  assert.deepEqual(violations, [
+    'apps/web/src/server/service/booking/a.ts:1: imports next/headers (service may not import next)',
+    'apps/web/src/server/service/booking/a.ts:2: imports drizzle-orm (service may not import drizzle-orm)',
+  ]);
+});
+
+test('an only rule reports anything outside its list', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/mapper/a.ts':
+      "import { c } from '@/server/contract';\nimport { r } from '@/server/repo/bookings';\nimport fs from 'node:fs';\nimport { z } from 'zod';",
+    'src/server/contract.ts': 'export const c = 1;',
+    'src/server/repo/bookings.ts': 'export const r = 1;',
+  });
+
+  const violations = await findLayerViolations(root, [
+    { name: 'mapper', from: ['server/mapper/'], only: ['server/contract', 'zod'] },
+  ]);
+
+  assert.deepEqual(violations, [
+    'apps/web/src/server/mapper/a.ts:2: imports @/server/repo/bookings (mapper may import only server/contract, zod)',
+    'apps/web/src/server/mapper/a.ts:3: imports node:fs (mapper may import only server/contract, zod)',
+  ]);
+});
+
+test('a RegExp entry matches by resolved path', async (context) => {
+  const root = await layerFixture(context, {
+    'src/app/api/route.ts': "import { c } from '@/server/booking/BookingController';\nimport { d } from '@/server/booking/other';",
+    'src/server/booking/BookingController.ts': 'export const c = 1;',
+    'src/server/booking/other.ts': 'export const d = 1;',
+  });
+
+  const violations = await findLayerViolations(root, [
+    { name: 'route', from: [/^app\/api\/.*route\.ts$/], forbid: [/Controller\.ts$/] },
+  ]);
+
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0].includes('route.ts:1: imports @/server/booking/BookingController (route may not import /Controller\\.ts$/)'));
+});
+
+test('test files are exempt', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/service/booking/x.test.ts': "import { r } from '@/server/repo/bookings';\nconst e = process.env.X;",
+    'src/server/repo/bookings.ts': 'export const r = 1;',
+  });
+
+  assert.deepEqual(await findLayerViolations(root, [REPO_RULE]), []);
+  assert.deepEqual(await findEnvReadViolations(root), []);
+});
+
+test('process.env is reported outside server/config.ts, and not in config.ts or a test', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/config.ts': 'export const url = process.env.DATABASE_URL;',
+    'src/server/other.ts': 'const a = 1;\nexport const b = process.env.B;',
+    'src/server/configuration.ts': 'export const c = process.env.C;',
+    'src/server/other.test.ts': 'export const d = process.env.D;',
+    'src/server/notes.md': 'process.env.E',
+  });
+
+  const violations = await findEnvReadViolations(root);
+
+  assert.deepEqual(violations, [
+    'apps/web/src/server/configuration.ts:1: reads process.env',
+    'apps/web/src/server/other.ts:2: reads process.env',
+  ]);
+});
+
+test('process.env is reported in each of its ordinary spellings', async (context) => {
+  const spellings = {
+    'src/server/a.ts': "const key = process['env'].A;",
+    'src/server/b.ts': 'const { env } = process;',
+    'src/server/c.ts': "import { env } from 'node:process';",
+    'src/server/d.ts': "const env = require('process').env;",
+    'src/server/e.ts': 'const key = process?.env.E;',
+    'src/server/f.ts': "const key = globalThis['process'];",
+    'src/server/g.ts': 'const runtime = process;',
+    'src/server/h.ts': 'const key = globalThis.process.env.H;',
+    'src/server/i.ts': 'const key = (process as unknown as { env: Record<string, string> }).env.I;',
+    'src/server/j.ts': 'const key = process!.env.J;',
+    'src/server/k.ts': "import 'node:process';",
+    'src/server/l.ts': 'const { env } = process as NodeJS.Process;',
+    'src/server/m.ts': 'const key = process[NAME];',
+    'src/server/n.ts': "const env = (await import('node:process')).env;",
+  };
+  const root = await layerFixture(context, spellings);
+
+  const violations = await findEnvReadViolations(root);
+
+  assert.deepEqual(
+    violations,
+    Object.keys(spellings).map((file) => `apps/web/${file}:1: reads process.env`),
+  );
+});
+
+test('prose and names that only mention a process are not reported', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/copy.ts': "export const copy = 'We could not process your request, so nothing was saved.';",
+    'src/server/names.ts': 'export const processing = 1;\nexport function processQueue(process_id: number) { return process_id; }',
+    'src/server/kinds.ts': "export const step = { kind: 'process' };\nexport type Phase = 'process' | 'done';\nexport const isStep = (kind: string) => kind === \"process\";",
+  });
+
+  assert.deepEqual(await findEnvReadViolations(root), []);
+});
+
+test('a file a rule excepts is skipped while the rest of its directory is checked', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/service/booking/legacy.ts': "import { r } from '@/server/repo/bookings';",
+    [SERVICE_FILE]: "import { r } from '@/server/repo/bookings';",
+    'src/server/repo/bookings.ts': 'export const r = 1;',
+  });
+
+  const violations = await findLayerViolations(root, [{ ...REPO_RULE, except: ['server/service/booking/legacy.ts'] }]);
+
+  assert.deepEqual(violations, [
+    'apps/web/src/server/service/booking/x.ts:1: imports @/server/repo/bookings (service may not import server/repo/)',
+  ]);
+});
+
+test('the shipped table covers a file added to a layered directory', async (context) => {
+  const root = await layerFixture(context, {
+    'src/server/service/booking/holdController.ts': "import { r } from '@/server/repo/holds';",
+    'src/server/service/settings/flow.ts': "import { rows } from '@roadtrip/db';",
+    'src/server/service/settings/typesController.ts': "import type { X } from '../../../../../../frontend/src/api/generated/api-types';",
+    'src/server/service/trips/model.ts': "import type { X } from '@/server/contract';",
+    'src/server/service/trips/tripController.ts': "import { r } from '@/server/repo/holds';\nimport type { T } from './ports';",
+    'src/server/service/trips/ports.ts': 'export type T = string;',
+    'src/server/repo/holds.ts': "import type { X } from '@/server/contract';",
+    'src/server/repo/typed.ts': "import type { X } from '../../../../../frontend/src/api/generated/api-types';",
+    'src/server/client/holds.ts': "import { r } from '@/server/repo/holds';",
+    'src/server/mapper/http/who.ts': "import { currentAppUser } from '@/server/auth/currentUser';",
+    'src/server/mapper/relay/newWire.ts': "import { config } from '@/server/config';",
+    'src/server/mapper/row/newRow.ts': "import type { X } from '../../../../../../frontend/src/api/generated/api-types';",
+    'src/app/api/og/route.tsx': "import { r } from '@/server/repo/holds';",
+    'src/server/auth/currentUser.ts': 'export const currentAppUser = 1;',
+    'src/server/contract.ts': 'export type X = string;',
+    'src/app/api/trips/route.ts': "import { db } from '@/server/db';",
+    'src/app/(account)/api/holds/route.ts': "import { config } from '@/server/config';",
+    'src/server/db.ts': 'export const db = 1;',
+    'src/server/config.ts': 'export const config = 1;',
+  });
+
+  const reported = (await findLayerViolations(root)).map((line) => line.replace(/:\d+: imports \S+ \((.+?) may.*$/, ' -> $1'));
+
+  assert.deepEqual(reported.sort(), [
+    'apps/web/src/app/(account)/api/holds/route.ts -> route',
+    'apps/web/src/app/api/og/route.tsx -> route',
+    'apps/web/src/app/api/trips/route.ts -> route',
+    'apps/web/src/server/client/holds.ts -> client',
+    'apps/web/src/server/mapper/http/who.ts -> http mapper',
+    'apps/web/src/server/mapper/relay/newWire.ts -> relay mapper',
+    'apps/web/src/server/mapper/row/newRow.ts -> row mapper',
+    'apps/web/src/server/repo/holds.ts -> repository',
+    'apps/web/src/server/repo/typed.ts -> repository',
+    'apps/web/src/server/service/booking/holdController.ts -> controller',
+    'apps/web/src/server/service/settings/flow.ts -> controller',
+    'apps/web/src/server/service/settings/typesController.ts -> controller',
+    'apps/web/src/server/service/trips/model.ts -> model',
+    'apps/web/src/server/service/trips/tripController.ts -> controller',
+  ]);
+});
+
+test('the shipped table passes on this repository', async () => {
+  assert.deepEqual(await findLayerViolations(REPO_ROOT), []);
+  assert.deepEqual(await findEnvReadViolations(REPO_ROOT), []);
+});
+
+test('the shipped table names every rule the spec lists', () => {
+  assert.deepEqual(LAYER_RULES.map((rule) => rule.name).sort(), [
+    'availability matrix',
+    'client',
+    'controller',
+    'http mapper',
+    'model',
+    'relay mapper',
+    'repository',
+    'route',
+    'row mapper',
+  ]);
+});
+
+test('every path in the shipped table names something that exists', () => {
+  const missing = [];
+  for (const rule of LAYER_RULES) {
+    for (const entry of [...(rule.from ?? []), ...(rule.forbid ?? []), ...(rule.only ?? []), ...(rule.except ?? [])]) {
+      if (typeof entry !== 'string' || !PATH_ENTRY_PREFIXES.some((prefix) => entry.startsWith(prefix))) continue;
+      const target = path.join(WEB_SOURCE_ROOT, entry);
+      const exists = entry.endsWith(DIRECTORY_ENTRY_SUFFIX) ? isDirectory(target) : candidatePaths(target).some(isFile);
+      if (!exists) missing.push(`${rule.name}: ${entry}`);
+    }
+  }
+  assert.deepEqual(missing, []);
+});
+
+test('every file the shipped table excepts still breaks its rule', async () => {
+  const stale = [];
+  for (const rule of LAYER_RULES) {
+    if (!rule.except) continue;
+    const { except, ...whole } = rule;
+    const violations = await findLayerViolations(REPO_ROOT, [whole]);
+    for (const entry of except) {
+      if (!violations.some((line) => line.startsWith(`apps/web/src/${entry}:`))) stale.push(`${rule.name}: ${entry}`);
+    }
+  }
+  assert.deepEqual(stale, []);
 });
