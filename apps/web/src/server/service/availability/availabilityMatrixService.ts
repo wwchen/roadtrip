@@ -1,5 +1,7 @@
 import type { Db } from '@roadtrip/db';
-import type { CampsiteKind } from '@roadtrip/domain';
+import { shippedTenantRegistry, type CampsiteKind } from '@roadtrip/domain';
+import { appDb } from '../../appDb';
+import { currentAppUser } from '../../auth/currentUser';
 import { fetchEgress, type EgressResult } from '../../client/availabilityEgress';
 import { AVAILABILITY_STORED_TIMEOUT_MS, config } from '../../config';
 import type {
@@ -11,7 +13,9 @@ import type {
 } from '../../contract';
 import { toContractId } from '../../contractIds';
 import { serverDb } from '../../db';
+import { RECGOV_PROVIDER, findCredentials } from '../../repo/bookingCredentialsRepo';
 import {
+  campgroundBookingIdentities,
   campsitesOf,
   findAvailabilityCampground,
   providerRefKey,
@@ -19,6 +23,7 @@ import {
   type CampsiteKey,
   type StoredCell,
 } from '../../repo/availabilityReadRepo';
+import { addToCartCapability } from '../booking/addToCartCapability';
 import { addDays, poiDateContext } from '../booking/dateContext';
 import { fuseWeek, weekCache } from './matrixFusion';
 
@@ -29,6 +34,7 @@ const STATUS_NOT_FOUND = 404;
 const STATUS_NOT_IMPLEMENTED = 501;
 const DEFAULT_WEEK_DAYS = 7;
 const CATALOG_DRIFT_LOG = 'availability catalog drift';
+const CAPABILITY_LOG = 'availability watch capabilities';
 
 export type AvailabilityTargetCode = 'not_found' | 'unknown_campground';
 
@@ -59,6 +65,10 @@ export interface WeekSettings {
 }
 
 export type EgressFetch = (request: AvailabilityEgressRequestDto) => Promise<EgressResult>;
+
+export type WatchCapabilitiesLookup = (target: WeekTarget) => Promise<AvailabilityWatchCapabilitiesDto>;
+
+const gatedCapabilities: WatchCapabilitiesLookup = async () => GATED_WATCH_CAPABILITIES;
 
 export interface WeekTarget {
   campground: AvailabilityCampgroundRow;
@@ -130,15 +140,19 @@ export async function availabilityWeek(
   endDate: string | null,
   settings: WeekSettings,
   fetchStored: EgressFetch | null,
+  watchCapabilities: WatchCapabilitiesLookup = gatedCapabilities,
 ): Promise<PoiCampsitesAvailabilityResponseDto> {
   const target = await weekTarget(db, poiId, siteTypes);
-  const stored = await storedWeek(target, startDate, endDate, fetchStored, settings.now);
+  const [stored, capabilities] = await Promise.all([
+    storedWeek(target, startDate, endDate, fetchStored, settings.now),
+    watchCapabilities(target),
+  ]);
   const base = {
     poi_id: toContractId(poiId),
     start_date: stored.start_date,
     end_date: stored.end_date,
     ...(stored.latest_date === undefined ? {} : { latest_date: stored.latest_date }),
-    watch_capabilities: GATED_WATCH_CAPABILITIES,
+    watch_capabilities: capabilities,
   };
   const known = new Set(stored.campsites.map((campsite) => providerRefKey(campsite.data_provider, campsite.data_provider_ref)));
   const tracked = target.campsites.filter((campsite) => known.has(campsite.key));
@@ -168,9 +182,35 @@ export async function getAvailabilityWeek(
   startDate: string | null,
   endDate: string | null,
 ): Promise<PoiCampsitesAvailabilityResponseDto> {
-  return availabilityWeek(await serverDb(), poiId, siteTypes, startDate, endDate, currentWeekSettings(), configuredEgress(AVAILABILITY_STORED_TIMEOUT_MS));
+  const db = await serverDb();
+  return availabilityWeek(
+    db,
+    poiId,
+    siteTypes,
+    startDate,
+    endDate,
+    currentWeekSettings(),
+    configuredEgress(AVAILABILITY_STORED_TIMEOUT_MS),
+    (target) => readerCapabilities(db, target),
+  );
 }
 
 export function currentWeekSettings(): WeekSettings {
   return { ttlSeconds: config.availabilityTtlSeconds, now: new Date() };
+}
+
+async function readerCapabilities(db: Db, target: WeekTarget): Promise<AvailabilityWatchCapabilitiesDto> {
+  try {
+    const identities = await campgroundBookingIdentities(db, target.campground.campgroundId, target.campsites.map((campsite) => campsite.id));
+    const reader = await currentAppUser();
+    const credentialed =
+      reader !== null && config.bookingCipherKey !== null && (await findCredentials(appDb(), reader.id, RECGOV_PROVIDER)) !== null;
+    return {
+      trigger_kinds: [],
+      add_to_cart: addToCartCapability(identities.campsites, identities.campground, reader, credentialed, shippedTenantRegistry()),
+    };
+  } catch (error) {
+    console.warn(CAPABILITY_LOG, error instanceof Error ? error.name : typeof error);
+    return GATED_WATCH_CAPABILITIES;
+  }
 }

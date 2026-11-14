@@ -357,6 +357,13 @@ object ApiContract {
                     ).map { ApiBody(it, AvailabilityErrorDto::class) },
                 conditional = true,
             ),
+            bookingRelayEndpoint("health", BookingRelayProfileRequest::class),
+            bookingRelayEndpoint("refresh", BookingRelayProfileRequest::class),
+            bookingRelayEndpoint("verify", BookingRelayProfileRequest::class),
+            bookingRelayEndpoint("signout", BookingRelayProfileRequest::class),
+            bookingRelayEndpoint("login", BookingRelayLoginRequest::class),
+            bookingRelayEndpoint("login/mfa", BookingRelayMfaRequest::class),
+            bookingRelayEndpoint("atc", BookingRelayAtcRequest::class),
             ApiEndpoint(
                 ApiMethod.POST,
                 "/api/pois/{id}/campsites/availability/refresh",
@@ -604,4 +611,17 @@ private val watchRefusals =
         HTTP_FORBIDDEN,
         HTTP_NOT_FOUND,
         HTTP_INTERNAL_SERVER_ERROR,
+    )
+
+private fun bookingRelayEndpoint(
+    segment: String,
+    request: KClass<*>,
+): ApiEndpoint =
+    ApiEndpoint(
+        ApiMethod.POST,
+        "/api/internal/booking/$segment",
+        request = request,
+        success = ApiBody(HTTP_OK, BookingRelayResponseDto::class),
+        errors = apiErrors(HTTP_BAD_REQUEST, HTTP_UNAUTHORIZED) + ApiBody(HTTP_GATEWAY_TIMEOUT, BookingRelayResponseDto::class),
+        conditional = true,
     )

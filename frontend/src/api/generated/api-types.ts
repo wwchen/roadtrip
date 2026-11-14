@@ -268,6 +268,42 @@ export interface BookingRefDto {
   ref: string;
 }
 
+export interface BookingRelayAtcRequest {
+  profile_id: string;
+  vendor_site_id: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface BookingRelayLoginRequest {
+  profile_id: string;
+  username: string;
+  password: string;
+}
+
+export interface BookingRelayMfaRequest {
+  profile_id: string;
+  challenge_id: string;
+  mfa_code: string;
+}
+
+export interface BookingRelayProfileRequest {
+  profile_id: string;
+}
+
+export interface BookingRelayResponseDto {
+  ok: boolean;
+  code?: string;
+  category?: string;
+  detail?: string;
+  cart_url?: string;
+  challenge_id?: string;
+  expires_at?: string;
+  health?: string;
+  signed_out?: boolean;
+  profile_destroyed?: boolean;
+}
+
 export interface BookingSettingsDto {
   recgov_configured: boolean;
   recgov_username?: string;
@@ -884,6 +920,13 @@ export const API_ENDPOINTS = [
   { method: 'GET', path: '/api/health', request: null, requestRequired: true, success: { status: 200, type: 'HealthResponseDto' }, errors: [] },
   { method: 'GET', path: '/api/health/ready', request: null, requestRequired: true, success: { status: 200, type: 'ReadinessResponseDto' }, errors: [{ status: 503, type: 'ReadinessResponseDto' }] },
   { method: 'POST', path: '/api/internal/availability/fetch', request: 'AvailabilityEgressRequestDto', requestRequired: true, success: { status: 200, type: 'AvailabilityEgressResponseDto' }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 404, type: 'AvailabilityErrorDto' }, { status: 501, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
+  { method: 'POST', path: '/api/internal/booking/atc', request: 'BookingRelayAtcRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayResponseDto' }] },
+  { method: 'POST', path: '/api/internal/booking/health', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayResponseDto' }] },
+  { method: 'POST', path: '/api/internal/booking/login', request: 'BookingRelayLoginRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayResponseDto' }] },
+  { method: 'POST', path: '/api/internal/booking/login/mfa', request: 'BookingRelayMfaRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayResponseDto' }] },
+  { method: 'POST', path: '/api/internal/booking/refresh', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayResponseDto' }] },
+  { method: 'POST', path: '/api/internal/booking/signout', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayResponseDto' }] },
+  { method: 'POST', path: '/api/internal/booking/verify', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayResponseDto' }] },
   { method: 'GET', path: '/api/me', request: null, requestRequired: true, success: { status: 200, type: 'MeResponseDto' }, errors: [] },
   { method: 'POST', path: '/api/pois', request: 'PoisRequestSchema', requestRequired: true, success: { status: 200, type: 'PoiFeatureCollectionSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }] },
   { method: 'POST', path: '/api/pois/availability/stays', request: 'StayCheckRequestDto', requestRequired: true, success: { status: 200, type: null, events: { answer: 'StayAnswerDto', done: 'StayCheckDoneDto' } }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },

@@ -36,6 +36,7 @@ import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.route.common.apiContractDrift
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.internal.availabilityEgressRoutes
+import ca.floo.roadtrip.route.internal.bookingRelayRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
 import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.auth.AuthController
@@ -68,6 +69,7 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.configuredSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingActionService
+import ca.floo.roadtrip.service.booking.BookingRelayController
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.geocode.GeocodeService
 import ca.floo.roadtrip.service.health.ReadinessService
@@ -124,6 +126,7 @@ internal fun Application.registerKoinRoutes() {
     val schedulerScope: CoroutineScope by inject()
     val transitionSink: CellTransitionSink by inject()
     val staticDir: File by inject(named("staticDir"))
+    val companionChannel: CompanionChannel by inject()
 
     // Resolve the session into a Principal once per request, ambient for every
     // route including anonymous ones. Null wiring (auth not configured) resolves
@@ -144,6 +147,14 @@ internal fun Application.registerKoinRoutes() {
         settingsRoutes(userSettings)
         recgovSettingsRoutes(recgovCredentials)
         bookingRoutes(bookingActions)
+        val relayCompanion = companionChannel.session
+        val relayAtc = companionChannel.atc
+        if (relayCompanion != null && relayAtc != null) {
+            bookingRelayRoutes(
+                BookingRelayController(relayCompanion, relayAtc, config.booking.relay.timeout),
+                config.booking.relay.token,
+            )
+        }
         poiRoutes(poiService)
         campgroundRoutes(campgroundSearchService, config.campgroundSearch)
         availabilityWatchRoutes(

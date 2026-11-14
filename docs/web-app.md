@@ -160,8 +160,9 @@ How the call reaches mini-ca:
    Auth policy admits only requests carrying the service token in
    `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`, and Cloudflare refuses the rest at its edge
    before anything reaches mini-ca.
-2. Caddy's `roadtrip-egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to
-   the backend and answers `404` to everything else; every other host answers `404` for
+2. Caddy's `roadtrip-egress.floo.ca` block proxies `POST /api/internal/availability/fetch`, the
+   booking relay (`POST /api/internal/booking/*`) and the Kotlin availability reads Vercel forwards
+   to the backend, and answers `404` to everything else; every other host answers `404` for
    `/api/internal/*`.
 3. The backend mounts that route only when `AVAILABILITY_EGRESS_ENABLED` is `true`: on in
    `docker-compose.yml` (production), off in sandboxes. It has no credential of its own. Cells are
@@ -233,8 +234,11 @@ Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it thr
   user id); a verified email joins the account that already has it. Admin comes from
   `ADMIN_EMAILS`.
 - `app_user` and `user_identity` are written by the `roadtrip_web_writer` role
-  (`packages/db/migrations/0003_web_writer.sql`), which can write only those two tables.
+  (`packages/db/migrations/0003_web_writer.sql`), which can also keep `user_booking_credentials`
+  and read `user_settings` (`0004_booking_credentials_writer.sql`) and nothing else.
   `roadtrip_web` stays read-only.
+- A session fills `app_user.display_name` only while it is empty, so a name edited in Settings
+  is not overwritten by the Neon Auth name on the next request.
 
 Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
 
@@ -261,7 +265,7 @@ Postgres:
   URL-encoded, so no password appears in the Tiltfile or the Tilt UI. The compose `web` service,
   which only production's `web` profile runs, has no sign-in settings.
 - `roadtrip_web_writer` comes from Flyway's `R__web_writer_grants.sql` (held equal to Drizzle's
-  `0003` by `webWriteGrants.test.ts`). Both web roles get their passwords from `postgres-init/` on
+  `0003` and `0004` by `webWriteGrants.test.ts`). Both web roles get their passwords from `postgres-init/` on
   first init only. A local database created before those scripts needs them once, with the stack
   up:
   `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_DB_PASSWORD_FILE=/run/secrets/web_db_password postgres /docker-entrypoint-initdb.d/20-web-reader.sh`
@@ -287,6 +291,57 @@ Migrations reach Neon through the `neon-migrate` job in `ci.yml`: on a master pu
 connection string). Without the secret the job fails, so a missing secret or a failing migration
 fails the CI run, and because mini-ca deploys only after a successful CI run it holds that deploy
 too. The same workflow can be run by hand from the Actions tab, on `master` only.
+
+## Rec.gov settings and add to cart on Vercel
+
+Spec: `docs/superpowers/specs/2026-11-10-add-to-cart-on-vercel-design.md`.
+
+- `GET /api/settings`, `PUT /api/settings/profile` (display name, theme) and the rec.gov routes under
+  `/api/settings/recgov` (save, remove, `/login`, `/login/mfa`, `/verify`, `/status`) run on Vercel
+  with the Kotlin bodies and codes. The email and Slack write routes are not ported; those panels
+  answer 404 until watches move.
+- The rec.gov password is stored in Neon's `user_booking_credentials`, AES-256-GCM under
+  `BOOKING_CREDENTIAL_ENCRYPTION_KEY` (the same layout as Kotlin's `SecretCipher`, held equal by
+  `secret-cipher-vectors.json`). The key exists only on Vercel. mini-ca stores nothing about a
+  Vercel user.
+- Every call that needs the companion goes to the booking relay on mini-ca,
+  `POST https://roadtrip-egress.floo.ca/api/internal/booking/<call>`, with the same Cloudflare
+  Access pair as the availability egress plus `Authorization: Bearer <BOOKING_EGRESS_TOKEN>`.
+  Only sign-in sends the decrypted password. Cloudflare terminates TLS, so it sees the password
+  on that call.
+- A Vercel user's companion profile is `n:<app_user.id>`, so it never collides with a Kotlin
+  user's numeric profile on mini-ca.
+- The MFA challenge id waits between `/login` and `/login/mfa` in a sealed, `HttpOnly`,
+  `SameSite=Strict` cookie (`__Secure-recgov-mfa`, path `/api/settings/recgov`, so `/status` can report a pending challenge) bound to the
+  user, instead of Kotlin's in-memory map.
+- `POST /api/booking/add-to-cart` runs Kotlin's gates (window, rec.gov target, stored credentials,
+  a refusal only on a night seen taken within `BOOKING_FRESHNESS_MAX_AGE_SECONDS` through the
+  availability egress's stored read), then the relay's hold. The availability matrix's
+  `watch_capabilities.add_to_cart` is computed per reader, so the matrix is sent
+  `private, no-store`.
+- The relay bounds each companion call at 90 seconds, under Cloudflare's 100-second proxy limit.
+  A hold that runs out answers 409 `relay_timeout`; the companion may still finish it, so the
+  detail tells the user to check the cart.
+
+Vercel Production variables (the first three together, or none):
+
+| Variable | Value |
+|---|---|
+| `BOOKING_EGRESS_URL` | `https://roadtrip-egress.floo.ca` |
+| `BOOKING_EGRESS_TOKEN` | The same value as mini-ca's `BOOKING_EGRESS_TOKEN` (`openssl rand -base64 32`) |
+| `BOOKING_CREDENTIAL_ENCRYPTION_KEY` | Base64 of 32 random bytes (`openssl rand -base64 32`); losing it makes every stored password unreadable |
+| `BOOKING_FRESHNESS_MAX_AGE_SECONDS` | Optional, default `300` |
+| `MFA_CHALLENGE_TTL_SECONDS` | Optional, default `300` |
+
+The relay also needs `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`. Without the relay variables
+the rec.gov routes answer `companion_unavailable` and add to cart answers 503
+`booking_unavailable`; without the key, saving answers 503 `encryption_unavailable` and the grid
+shows `no_credentials`.
+
+On mini-ca, `BOOKING_EGRESS_TOKEN` (`./secrets/manage.py set BOOKING_EGRESS_TOKEN prod`) turns the
+relay on; unset, it is not registered. `BOOKING_RELAY_TIMEOUT` (default `90s`) bounds each call.
+The egress host's Caddy block routes `POST /api/internal/booking/*` to the backend;
+`roadtrip.floo.ca` answers 404 for `/api/internal/*`.
 
 ## Previews
 

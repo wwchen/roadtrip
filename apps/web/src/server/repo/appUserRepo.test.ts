@@ -1,7 +1,14 @@
 import { appUser, userIdentity } from '@roadtrip/db';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest';
 import { startCatalogFixture, type CatalogFixture } from '../testing/catalogFixture';
-import { EmailTakenError, NEON_AUTH_PROVIDER, UnverifiedIdentityError, linkedAppUser, type IdentityClaims } from './appUserRepo';
+import {
+  EmailTakenError,
+  NEON_AUTH_PROVIDER,
+  UnverifiedIdentityError,
+  linkedAppUser,
+  updateProfile,
+  type IdentityClaims,
+} from './appUserRepo';
 
 const CONCURRENT_FIRST_CALLS = 5;
 const DEFAULT_THEME = 'system';
@@ -42,12 +49,34 @@ test('a new identity creates one app_user and one user_identity', async () => {
   expect(identity).toMatchObject({ provider: NEON_AUTH_PROVIDER, subject: 'subject-a', userId: user.id });
 });
 
-test('the same identity again returns the same id and refreshes the profile', async () => {
+test('the same identity again returns the same id and keeps the name the user chose', async () => {
   const first = await linkedAppUser(fixture.writeDb, claims({ displayName: 'Old' }));
   const second = await linkedAppUser(fixture.writeDb, claims({ displayName: 'New' }));
   expect(second.id).toBe(first.id);
-  expect(second).toMatchObject({ emailVerified: true, displayName: 'New' });
+  expect(second).toMatchObject({ emailVerified: true, displayName: 'Old' });
   expect(await counts()).toEqual({ users: 1, identities: 1 });
+});
+
+test('a session fills a display name the user has not set', async () => {
+  const first = await linkedAppUser(fixture.writeDb, claims({ displayName: null }));
+  const second = await linkedAppUser(fixture.writeDb, claims({ displayName: 'From Neon' }));
+  expect(second.id).toBe(first.id);
+  expect(second.displayName).toBe('From Neon');
+});
+
+test('a name edited in Settings survives the next session', async () => {
+  const user = await linkedAppUser(fixture.writeDb, claims({ displayName: 'Neon Name' }));
+  await updateProfile(fixture.writeDb, user.id, { displayName: 'Chosen' });
+  expect((await linkedAppUser(fixture.writeDb, claims({ displayName: 'Neon Name' }))).displayName).toBe('Chosen');
+});
+
+test('updateProfile changes only the fields it is given', async () => {
+  const user = await linkedAppUser(fixture.writeDb, claims());
+  const themed = await updateProfile(fixture.writeDb, user.id, { theme: 'dark' });
+  expect(themed).toMatchObject({ displayName: 'Will', theme: 'dark' });
+  const renamed = await updateProfile(fixture.writeDb, user.id, { displayName: 'Bill' });
+  expect(renamed).toMatchObject({ displayName: 'Bill', theme: 'dark' });
+  expect(await updateProfile(fixture.writeDb, user.id, {})).toMatchObject({ displayName: 'Bill', theme: 'dark' });
 });
 
 test('a second verified identity with the same email, in any case, joins the existing user', async () => {
