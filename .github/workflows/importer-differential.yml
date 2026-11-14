@@ -1,0 +1,61 @@
+name: Importer differential
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'packages/worker/**'
+      - 'packages/db/src/**'
+      - 'packages/domain/src/**'
+      - 'backend/src/main/kotlin/ca/floo/roadtrip/service/etl/**'
+      - 'backend/src/main/kotlin/ca/floo/roadtrip/tools/**'
+      - 'backend/src/main/kotlin/ca/floo/roadtrip/client/reserveamerica/ReserveAmericaCatalogParser.kt'
+      - 'backend/src/main/resources/poi-registry.yaml'
+      - 'data/raw/**'
+      - 'scripts/importer-*.mjs'
+      - 'scripts/schema-reference.mjs'
+      - 'scripts/build-workspaces.mjs'
+      - '.github/workflows/importer-differential.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  importer-differential:
+    name: importer-differential (${{ matrix.mode.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - { name: single pass, args: '' }
+          - { name: passes 2, args: '--passes 2' }
+          - { name: prove update keys, args: '--prove-update-keys' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Diff the TypeScript importer against the Kotlin one over every capture
+        run: node scripts/importer-differential.mjs ${{ matrix.mode.args }}

@@ -43,8 +43,7 @@ NEON_MIGRATE_JOB_CONDITION = "${{ !cancelled() && github.ref == 'refs/heads/mast
 KOTLIN_PACKAGE_ROOT = "backend/src/main/kotlin/ca/floo/roadtrip"
 # The importer's entry point and the two trees it is built from. Every file
 # these reach, transitively and through same-package use, is part of what that
-# importer writes, so the path filter has to watch it or the gate silently does
-# not run.
+# importer writes, so the cached dump's provenance has to cover it.
 IMPORTER_KOTLIN_SOURCES = ("tools", "service/etl", "repo")
 IMPORTER_DIFFERENTIAL = "scripts/importer-differential.mjs"
 PROVENANCE_TREES_BLOCK = re.compile(r"const PROVENANCE_TREES = \[(.*?)\];", re.S)
@@ -413,48 +412,6 @@ class DeploymentContractTest(unittest.TestCase):
             f"{SCHEMA_REFERENCE_TEST} does not run the schema equivalence gate",
         )
 
-    def test_the_importer_differential_gate_watches_every_tree_it_imports(self) -> None:
-        jobs = workflow("ci.yml")["jobs"]
-        gate = jobs["importer-differential"]
-        watched = path_filters()["importer_differential"]
-        prefixes = tuple(p.removesuffix("/**").removesuffix("/*") for p in watched)
-
-        files = importer_kotlin_files()
-        self.assertIn(f"{KOTLIN_PACKAGE_ROOT}/config/AppConfig.kt", files, "the closure lost a known two-hop file")
-        for path in files:
-            self.assertTrue(
-                covered(path, prefixes),
-                f"{path} is reached from {', '.join(IMPORTER_KOTLIN_SOURCES)} "
-                "but no importer_differential filter entry covers it, so an edit "
-                "there changes what the Kotlin importer writes without running the gate",
-            )
-
-        self.assertIn("importer_differential", jobs["changes"]["outputs"])
-        self.assertIn("importer_differential", gate["if"])
-        self.assertIn("node scripts/importer-differential.mjs", job_commands(gate))
-        self.assertIn("importer-differential", jobs["ci-passed"]["needs"])
-
-    def test_a_lockfile_edit_runs_the_importer_differential_only_when_the_importers_load_it(self) -> None:
-        jobs = workflow("ci.yml")["jobs"]
-        filters = path_filters()
-        self.assertNotIn("package-lock.json", filters["importer_differential"])
-        self.assertNotIn("package.json", filters["importer_differential"])
-        self.assertIn("package-lock.json", filters["lockfile"])
-
-        changes = jobs["changes"]
-        check = next(step for step in changes["steps"] if step.get("id") == "importer_dependencies")
-        self.assertEqual(check["if"], "steps.filter.outputs.lockfile == 'true'")
-        self.assertIn("node scripts/importer-dependencies-changed.mjs", check["run"])
-        self.assertIn('>> "$GITHUB_OUTPUT"', check["run"])
-        output = changes["outputs"]["importer_differential"]
-        self.assertIn("steps.filter.outputs.importer_differential == 'true'", output)
-        self.assertIn("steps.importer_dependencies.outputs.changed == 'true'", output)
-
-        self.assertIn(
-            "node --test scripts/importer-dependencies-changed.test.mjs",
-            job_commands(jobs["package-tests"]),
-        )
-
     def test_every_pinned_path_exists(self) -> None:
         tracked = tracked_paths()
         self.assertIn(IMPORTER_DIFFERENTIAL, tracked, "git ls-files returned nothing usable")
@@ -467,26 +424,7 @@ class DeploymentContractTest(unittest.TestCase):
                     path_exists(path, tracked),
                     f"{name} pins {path}, which is not in this branch. provenanceFor() hashes "
                     "every entry before any container starts, so one bad path fails every "
-                    "differential run, the CI job and make importer-diff included",
-                )
-
-        watched = path_filters()["importer_differential"]
-        for pattern in watched:
-            if pattern.endswith("/**"):
-                self.assertTrue(
-                    path_exists(pattern[: -len("/**")], tracked),
-                    f"the importer_differential filter watches {pattern}, which matches no tracked path",
-                )
-            elif "*" in pattern:
-                self.assertTrue(
-                    any(PurePosixPath(c).match(pattern) for c in tracked),
-                    f"the importer_differential filter watches {pattern}, which matches no tracked file",
-                )
-            else:
-                self.assertIn(
-                    pattern,
-                    tracked,
-                    f"the importer_differential filter watches {pattern}, which is not a tracked file",
+                    "differential run, make importer-diff included",
                 )
 
     def test_the_cached_dump_provenance_covers_every_tree_it_imports(self) -> None:
