@@ -11,6 +11,8 @@ Before frontend component, page, or design-system changes, read `docs/frontend-c
 
 Before changes that touch campsite availability, alerts, or any reservation-provider integration (rec.gov, Aspira, Camis, future vendors), read `docs/reservation-providers.md`.
 
+Before changes under `apps/web`, read `apps/web/AGENTS.md`.
+
 Backend layering rules:
 - Prefer typed Kotlin/Java DTOs (`@Serializable` data classes or existing schema classes) for request/response bodies. Do not hand-build JSON strings in routes when a DTO can represent the shape.
 - Services take a `UnitOfWork` (when several writes must land together) or the repo handles they use — never a `DSLContext`. `org.jooq` appears only under `repo/`, `db/`, and `di/InfraModule.kt`; `LayeringGuardTest` fails the build otherwise.
