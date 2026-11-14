@@ -110,7 +110,7 @@ credentials source — that both the adapter and the relay call. The adapter kee
 shell (credentials check, profile derivation, re-login, fires) for Kotlin's own watches until they
 are retired. The relay passes `profile_id` through verbatim and never derives one.
 
-Every response is one envelope: `{ok, code, category, detail, cart_url, challenge_id, health}`, with
+(Superseded on 2026-11-14: each operation now answers its own tagged body. See `2026-11-14-booking-in-layers-design.md`, section 6.) Every response is one envelope: `{ok, code, category, detail, cart_url, challenge_id, health}`, with
 fields absent where they do not apply. `code` is the companion's code unchanged; `category`
 (`caller_action`, `retry_later`, `upstream`) comes from the extracted mapping, so the mapping is not
 duplicated in TypeScript. Request bodies are excluded from Kotlin's request logging.

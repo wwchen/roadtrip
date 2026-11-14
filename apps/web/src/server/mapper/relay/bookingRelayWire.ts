@@ -1,9 +1,20 @@
 import type {
+  BookingRelayActionDto,
+  BookingRelayActionOutcome,
   BookingRelayAtcRequest,
+  BookingRelayFailureCategory,
+  BookingRelayFailureDto,
+  BookingRelayHealthDto,
+  BookingRelayHoldDto,
+  BookingRelayHoldOutcome,
+  BookingRelayLoginDto,
+  BookingRelayLoginOutcome,
   BookingRelayLoginRequest,
   BookingRelayMfaRequest,
   BookingRelayProfileRequest,
-  BookingRelayResponseDto,
+  BookingRelaySession,
+  BookingRelaySignOutDto,
+  BookingRelaySignOutOutcome,
 } from '@/server/contract';
 import type {
   ActionResult,
@@ -23,17 +34,25 @@ const PROFILE_ID_PREFIX = 'n:';
 const FIRST_SUCCESS_STATUS = 200;
 const FIRST_REDIRECT_STATUS = 300;
 const STATUS_GATEWAY_TIMEOUT = 504;
-const MFA_REQUIRED_CODE = 'mfa_required';
-const FALLBACK_CATEGORY: RefusalCategory = 'upstream';
-const REFUSAL_CATEGORIES: readonly string[] = ['caller_action', 'retry_later', 'upstream'] satisfies RefusalCategory[];
-const HEALTH_ACTIVE = 'active';
-const HEALTH_NEVER_LOGGED_IN = 'never_logged_in';
-const HEALTH_INACTIVE = 'inactive';
-const HEALTH_CHECK_FAILED = 'check_failed';
-const HEALTH_UNAVAILABLE = 'unavailable';
+const OUTCOME_FIELD = 'outcome' satisfies keyof BookingRelayHoldDto;
+const SESSION_FIELD = 'session' satisfies keyof BookingRelayHealthDto;
+const REFUSAL_CATEGORIES: readonly (RefusalCategory & BookingRelayFailureCategory)[] = ['caller_action', 'retry_later', 'upstream'];
+
+const HOLD = { held: 'held', blocked: 'blocked', timedOut: 'timed_out' } as const satisfies Record<string, BookingRelayHoldOutcome>;
+const LOGIN = { signedIn: 'signed_in', mfaRequired: 'mfa_required', failed: 'failed', timedOut: 'timed_out' } as const satisfies Record<string, BookingRelayLoginOutcome>;
+const ACTION = { ok: 'ok', failed: 'failed', timedOut: 'timed_out' } as const satisfies Record<string, BookingRelayActionOutcome>;
+const SIGN_OUT = { wiped: 'wiped', failed: 'failed', timedOut: 'timed_out' } as const satisfies Record<string, BookingRelaySignOutOutcome>;
+const HEALTH = {
+  active: 'active',
+  neverLoggedIn: 'never_logged_in',
+  inactive: 'inactive',
+  checkFailed: 'check_failed',
+  unavailable: 'unavailable',
+} as const satisfies Record<string, BookingRelaySession>;
 
 type Unavailable = { kind: 'unavailable'; fault: GatewayFault };
-type Opened = { status: number; envelope: BookingRelayResponseDto };
+type Raw<T> = { [K in keyof T]?: unknown };
+type Tagged = { [K in typeof OUTCOME_FIELD | typeof SESSION_FIELD]?: unknown };
 
 const MALFORMED: Unavailable = { kind: 'unavailable', fault: 'malformed' };
 
@@ -57,118 +76,142 @@ export function atcRequest(userId: bigint, vendorSiteId: string, window: StayWin
   return { profile_id: profileId(userId), vendor_site_id: vendorSiteId, start_date: window.startDate, end_date: window.endDate };
 }
 
-function isEnvelope(body: unknown): body is BookingRelayResponseDto {
-  return typeof body === 'object' && body !== null && typeof (body as { ok?: unknown }).ok === 'boolean';
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isSuccessStatus(status: number): boolean {
-  return status >= FIRST_SUCCESS_STATUS && status < FIRST_REDIRECT_STATUS;
+function isTagged(body: unknown): body is Tagged {
+  return isObject(body) && (typeof body[OUTCOME_FIELD] === 'string' || typeof body[SESSION_FIELD] === 'string');
 }
 
-function shapeFaultOf(status: number): GatewayFault {
-  return isSuccessStatus(status) ? 'malformed' : 'rejected';
+function isAnswerStatus(status: number): boolean {
+  return (status >= FIRST_SUCCESS_STATUS && status < FIRST_REDIRECT_STATUS) || status === STATUS_GATEWAY_TIMEOUT;
+}
+
+function answerFault(status: number, body: unknown): GatewayFault | null {
+  if (!isAnswerStatus(status)) return 'rejected';
+  return isTagged(body) ? null : 'malformed';
 }
 
 export function shapeFault(exchange: RelayExchange): GatewayFault | null {
-  if (exchange.kind === 'fault' || isEnvelope(exchange.body)) return null;
-  return shapeFaultOf(exchange.status);
+  return exchange.kind === 'fault' ? null : answerFault(exchange.status, exchange.body);
 }
 
-function open(exchange: RelayExchange): Opened | Unavailable {
-  if (exchange.kind === 'fault') return { kind: 'unavailable', fault: exchange.fault };
-  if (isEnvelope(exchange.body)) return { status: exchange.status, envelope: exchange.body };
-  return { kind: 'unavailable', fault: shapeFaultOf(exchange.status) };
+function open<T>(exchange: RelayExchange): Raw<T> | GatewayFault {
+  if (exchange.kind === 'fault') return exchange.fault;
+  return answerFault(exchange.status, exchange.body) ?? (exchange.body as Raw<T>);
 }
 
-function isUnavailable(opened: Opened | Unavailable): opened is Unavailable {
-  return 'kind' in opened;
+function unavailable(fault: GatewayFault): Unavailable {
+  return { kind: 'unavailable', fault };
 }
 
-function categoryOf(value: string | undefined): RefusalCategory {
-  return REFUSAL_CATEGORIES.includes(value ?? '') ? (value as RefusalCategory) : FALLBACK_CATEGORY;
-}
-
-function refusalOf(envelope: BookingRelayResponseDto): Refusal | null {
-  if (typeof envelope.code !== 'string') return null;
-  const refusal: Refusal = { category: categoryOf(envelope.category), code: envelope.code };
-  if (typeof envelope.detail === 'string') refusal.detail = envelope.detail;
-  return refusal;
-}
-
-function codeAndDetail(envelope: BookingRelayResponseDto): { code?: string; detail?: string } {
-  const out: { code?: string; detail?: string } = {};
-  if (typeof envelope.code === 'string') out.code = envelope.code;
-  if (typeof envelope.detail === 'string') out.detail = envelope.detail;
+function stringFields<T, K extends keyof T & string>(body: Raw<T>, ...keys: K[]): { [P in K]?: string } {
+  const out: { [P in K]?: string } = {};
+  for (const key of keys) {
+    const value = body[key];
+    if (typeof value === 'string') out[key] = value;
+  }
   return out;
 }
 
-function isTimeout(status: number): boolean {
-  return status === STATUS_GATEWAY_TIMEOUT;
+function categoryOf(value: unknown): RefusalCategory | null {
+  return REFUSAL_CATEGORIES.find((category) => category === value) ?? null;
+}
+
+function refusalOf(body: Raw<{ failure: BookingRelayFailureDto }>): Refusal | null {
+  const failure: unknown = body.failure;
+  if (!isObject(failure)) return null;
+  const category = categoryOf(failure.category);
+  if (category === null || typeof failure.code !== 'string') return null;
+  return { category, code: failure.code, ...stringFields<BookingRelayFailureDto, 'detail'>(failure, 'detail') };
+}
+
+function refused<R>(body: Raw<{ failure: BookingRelayFailureDto }>, build: (refusal: Refusal) => R): R | Unavailable {
+  const refusal = refusalOf(body);
+  return refusal === null ? MALFORMED : build(refusal);
 }
 
 export function decodeHold(exchange: RelayExchange): HoldResult {
-  const opened = open(exchange);
-  if (isUnavailable(opened)) return opened;
-  const { status, envelope } = opened;
-  if (envelope.ok) return typeof envelope.cart_url === 'string' ? { kind: 'held', cartUrl: envelope.cart_url } : MALFORMED;
-  const refusal = refusalOf(envelope);
-  if (refusal === null) return MALFORMED;
-  if (!isTimeout(status)) return { kind: 'blocked', refusal };
-  return typeof envelope.cart_url === 'string' ? { kind: 'timed_out', refusal, cartUrl: envelope.cart_url } : { kind: 'timed_out', refusal };
+  const body = open<BookingRelayHoldDto>(exchange);
+  if (typeof body === 'string') return unavailable(body);
+  switch (body.outcome) {
+    case HOLD.held:
+      return typeof body.cart_url === 'string' ? { kind: 'held', cartUrl: body.cart_url } : MALFORMED;
+    case HOLD.blocked:
+      return refused(body, (refusal) => ({ kind: 'blocked', refusal }));
+    case HOLD.timedOut:
+      return refused(body, (refusal) => ({ kind: 'timed_out', refusal, ...(typeof body.cart_url === 'string' ? { cartUrl: body.cart_url } : {}) }));
+    default:
+      return MALFORMED;
+  }
 }
 
 export function decodeLogin(exchange: RelayExchange): LoginResult {
-  const opened = open(exchange);
-  if (isUnavailable(opened)) return opened;
-  const { status, envelope } = opened;
-  if (envelope.ok) return { kind: 'signed_in' };
-  if (envelope.code === MFA_REQUIRED_CODE) {
-    if (typeof envelope.challenge_id !== 'string') return MALFORMED;
-    return typeof envelope.expires_at === 'string'
-      ? { kind: 'mfa_required', challengeId: envelope.challenge_id, expiresAt: envelope.expires_at }
-      : { kind: 'mfa_required', challengeId: envelope.challenge_id };
+  const body = open<BookingRelayLoginDto>(exchange);
+  if (typeof body === 'string') return unavailable(body);
+  switch (body.outcome) {
+    case LOGIN.signedIn:
+      return { kind: 'signed_in' };
+    case LOGIN.mfaRequired:
+      return typeof body.challenge_id === 'string'
+        ? { kind: 'mfa_required', challengeId: body.challenge_id, ...(typeof body.expires_at === 'string' ? { expiresAt: body.expires_at } : {}) }
+        : MALFORMED;
+    case LOGIN.failed:
+      return refused(body, (refusal) => ({ kind: 'failed', refusal }));
+    case LOGIN.timedOut:
+      return refused(body, (refusal) => ({ kind: 'timed_out', refusal }));
+    default:
+      return MALFORMED;
   }
-  const refusal = refusalOf(envelope);
-  if (refusal === null) return MALFORMED;
-  return isTimeout(status) ? { kind: 'timed_out', refusal } : { kind: 'failed', refusal };
 }
 
 export function decodeAction(exchange: RelayExchange): ActionResult {
-  const opened = open(exchange);
-  if (isUnavailable(opened)) return opened;
-  const { status, envelope } = opened;
-  if (envelope.ok) return { kind: 'ok' };
-  const refusal = refusalOf(envelope);
-  if (refusal === null) return MALFORMED;
-  return isTimeout(status) ? { kind: 'timed_out', refusal } : { kind: 'failed', refusal };
+  const body = open<BookingRelayActionDto>(exchange);
+  if (typeof body === 'string') return unavailable(body);
+  switch (body.outcome) {
+    case ACTION.ok:
+      return { kind: 'ok' };
+    case ACTION.failed:
+      return refused(body, (refusal) => ({ kind: 'failed', refusal }));
+    case ACTION.timedOut:
+      return refused(body, (refusal) => ({ kind: 'timed_out', refusal }));
+    default:
+      return MALFORMED;
+  }
 }
 
 export function decodeHealth(exchange: RelayExchange): SessionHealth {
-  const opened = open(exchange);
-  if (isUnavailable(opened)) return { kind: 'unavailable' };
-  const { envelope } = opened;
-  switch (envelope.health) {
-    case HEALTH_ACTIVE:
+  const body = open<BookingRelayHealthDto>(exchange);
+  if (typeof body === 'string') return { kind: 'unavailable' };
+  switch (body.session) {
+    case HEALTH.active:
       return { kind: 'active' };
-    case HEALTH_NEVER_LOGGED_IN:
+    case HEALTH.neverLoggedIn:
       return { kind: 'never_logged_in' };
-    case HEALTH_INACTIVE:
-      return { kind: 'inactive', ...(typeof envelope.code === 'string' ? { code: envelope.code } : {}) };
-    case HEALTH_CHECK_FAILED:
-      return { kind: 'check_failed', ...codeAndDetail(envelope) };
-    case HEALTH_UNAVAILABLE:
+    case HEALTH.inactive:
+      return { kind: 'inactive', ...stringFields<BookingRelayHealthDto, 'code'>(body, 'code') };
+    case HEALTH.checkFailed:
+      return { kind: 'check_failed', ...stringFields<BookingRelayHealthDto, 'code' | 'detail'>(body, 'code', 'detail') };
+    case HEALTH.unavailable:
     default:
-      return { kind: 'unavailable', ...codeAndDetail(envelope) };
+      return { kind: 'unavailable', ...stringFields<BookingRelayHealthDto, 'code' | 'detail'>(body, 'code', 'detail') };
   }
 }
 
 export function decodeSignOut(exchange: RelayExchange): SignOutResult {
-  const opened = open(exchange);
-  if (isUnavailable(opened)) return opened;
-  const { status, envelope } = opened;
-  const signedOut = envelope.signed_out === true;
-  if (envelope.profile_destroyed === true) return { kind: 'wiped', signedOut };
-  const refusal = envelope.ok ? null : refusalOf(envelope);
-  if (refusal === null) return MALFORMED;
-  return isTimeout(status) ? { kind: 'timed_out', refusal } : { kind: 'failed', signedOut, refusal };
+  const body = open<BookingRelaySignOutDto>(exchange);
+  if (typeof body === 'string') return unavailable(body);
+  const { signed_out: signedOut, profile_destroyed: profileDestroyed } = body;
+  if (typeof signedOut !== 'boolean' || typeof profileDestroyed !== 'boolean') return MALFORMED;
+  switch (body.outcome) {
+    case SIGN_OUT.wiped:
+      return { kind: 'wiped', signedOut };
+    case SIGN_OUT.failed:
+      return refused(body, (refusal) => ({ kind: 'failed', signedOut, refusal }));
+    case SIGN_OUT.timedOut:
+      return refused(body, (refusal) => ({ kind: 'timed_out', refusal }));
+    default:
+      return MALFORMED;
+  }
 }
