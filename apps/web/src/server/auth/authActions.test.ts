@@ -149,7 +149,7 @@ test('an unreachable Neon Auth shows the retry message', async () => {
     state: { message: RETRY, canResendVerification: false },
   });
   expect(warn).toHaveBeenCalledTimes(1);
-  expect(warn).toHaveBeenCalledWith('auth:', 'NETWORK_DNS');
+  expect(warn).toHaveBeenCalledWith('auth:', 'password_sign_in', 'NETWORK_DNS');
   expect(JSON.stringify(warn.mock.calls)).not.toContain('will@example.com');
 });
 
@@ -188,7 +188,14 @@ test.each([
     kind: 'message',
     state: { message: RETRY, canResendVerification: false },
   });
-  expect(warn).toHaveBeenCalledWith('auth:', code);
+  expect(warn).toHaveBeenCalledWith('auth:', 'magic_link', code);
+});
+
+test('a refusal logs the action, the port code, and what Neon Auth answered', async () => {
+  const sendMagicLink = vi.fn(async () => ({ ok: false, code: AUTH_UNAVAILABLE, cause: 'status=500 code=none' }) as const);
+  await sendMagicLinkAction(port({ sendMagicLink }), form({ email: 'a@x.io' }), ORIGIN);
+  expect(warn).toHaveBeenCalledWith('auth:', 'magic_link', AUTH_UNAVAILABLE, 'status=500 code=none');
+  expect(JSON.stringify(warn.mock.calls)).not.toContain('a@x.io');
 });
 
 test('a reset that Neon Auth refuses for a reason other than no such user shows the retry message', async () => {

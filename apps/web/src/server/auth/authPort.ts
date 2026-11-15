@@ -5,9 +5,15 @@ export interface AuthUser {
   emailVerified: boolean;
 }
 
-export type AuthResult = { ok: true } | { ok: false; code: string };
+export interface AuthFailure {
+  ok: false;
+  code: string;
+  cause?: string;
+}
 
-export type RedirectResult = { ok: true; url: string } | { ok: false; code: string };
+export type AuthResult = { ok: true } | AuthFailure;
+
+export type RedirectResult = { ok: true; url: string } | AuthFailure;
 
 export const EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED';
 export const USER_ALREADY_EXISTS = 'USER_ALREADY_EXISTS';
