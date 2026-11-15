@@ -239,12 +239,6 @@ services:
     volumes:
       - ./grafana/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3100/ready"]
-      interval: 15s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
 
   tempo:
     profiles: [pois]
