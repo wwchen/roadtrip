@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '41 13 * * *'
   workflow_dispatch:
+  pull_request:
+    paths:
+      - companion/src/recgovSession.js
+      - companion/src/recgovLoginProbe.js
+      - companion/src/runRecgovLoginProbe.js
+      - .github/workflows/recgov-login-probe.yml
 
 permissions:
   contents: read
