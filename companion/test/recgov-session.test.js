@@ -457,6 +457,27 @@ test('runRecgovProfileLogin returns the existing session without touching the lo
   assert.equal(page.closed, true)
 })
 
+test('credential login fills the dialog email field when a hidden email input precedes it', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-newsletter' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    hiddenNewsletterEmail: true,
+  })
+
+  const outcome = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false },
+  })
+
+  assert.equal(outcome.state, 'ok')
+  assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
+  assert.ok(page.fills[0].selector.startsWith('[role="dialog"]'))
+  assert.equal(page.credentialSubmitClicks, 1)
+})
+
 function fakePage ({
   rawRecaccount,
   rawRecaccountAfterClear = null,
@@ -469,6 +490,7 @@ function fakePage ({
   submitSelectorVisible = true,
   loggedIn = false,
   logoutSelectorVisible = false,
+  hiddenNewsletterEmail = false,
 }) {
   let refreshResponseIndex = 0
   let currentRawRecaccount = rawRecaccount
@@ -582,11 +604,16 @@ function fakePage ({
     if (selector.includes('Sign Up / Log In')) return true
     if (isLogoutSelector(selector)) return logoutSelectorVisible
     if (isMfaInputSelector(selector)) return mfaPromptVisible
+    if (hiddenNewsletterEmail && isEmailSelector(selector) && !isDialogOnlySelector(selector)) return false
     if (isEmailSelector(selector) || isPasswordSelector(selector)) return loginOpened
     if (isSubmitSelector(selector)) return loginOpened && submitSelectorVisible
     return false
   }
   return page
+}
+
+function isDialogOnlySelector (selector) {
+  return selector.startsWith('[role="dialog"]') && !selector.includes(',')
 }
 
 function isEmailSelector (selector) {
