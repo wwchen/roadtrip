@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { browserRequest } from '@/server/testing/browserRequest';
 
 const runStayCheck = vi.fn();
 vi.mock('@/server/service/availability/stayCheckService', () => ({ runStayCheck, answerStay: vi.fn() }));
@@ -6,7 +7,7 @@ vi.mock('@/server/db', () => ({ serverDb: vi.fn().mockResolvedValue({}) }));
 const { POST, maxDuration } = await import('./route');
 
 const post = (body: unknown) =>
-  POST(new Request('http://localhost/api/pois/availability/stays', { method: 'POST', body: JSON.stringify(body) }));
+  POST(browserRequest('http://localhost/api/pois/availability/stays', { method: 'POST', body: JSON.stringify(body) }));
 
 test('the route allows the stream deadline to finish', () => {
   expect(maxDuration).toBe(150);

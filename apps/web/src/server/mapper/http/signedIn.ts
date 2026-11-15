@@ -1,6 +1,7 @@
 import { jsonBody } from '@/server/requestBody';
 import type { ActiveUser } from '@/server/service/auth/model';
 import { errorAnswer, STATUS_UNAUTHORIZED, UNAUTHENTICATED, type HttpAnswer } from './httpAnswer';
+import { crossOriginRefusal } from './sameOrigin';
 
 const CACHE_CONTROL = 'cache-control';
 const NO_STORE = 'private, no-store';
@@ -24,6 +25,8 @@ function respond(answer: HttpAnswer<unknown>): Response {
 
 export function signedInRoutes(currentUser: CurrentUser): (handler: SignedInHandler) => RouteHandler {
   return (handler) => async (request) => {
+    const refusal = crossOriginRefusal(request);
+    if (refusal !== null) return respond(refusal);
     const user = await currentUser();
     if (user === null) return respond(errorAnswer(STATUS_UNAUTHORIZED, UNAUTHENTICATED));
     const readJson = async (): Promise<unknown> => (request === undefined ? undefined : jsonBody(request));

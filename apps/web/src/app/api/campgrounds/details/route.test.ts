@@ -1,11 +1,12 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import { browserRequest } from '@/server/testing/browserRequest';
 
 const getCampgroundDetails = vi.fn();
 vi.mock('@/server/service/campgroundSearchService', () => ({ getCampgroundDetails }));
 
 const { POST } = await import('./route');
 
-const post = (body: string) => POST(new Request('http://localhost/api/campgrounds/details', { method: 'POST', body }));
+const post = (body: string) => POST(browserRequest('http://localhost/api/campgrounds/details', { method: 'POST', body }));
 
 beforeEach(() => {
   getCampgroundDetails.mockReset();

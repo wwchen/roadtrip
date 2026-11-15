@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import { browserRequest } from '@/server/testing/browserRequest';
 
 const currentAppUser = vi.fn();
 const notifications = vi.fn();
@@ -15,7 +16,7 @@ vi.mock('@/server/wiring/settingsPorts', () => ({
 }));
 const { PUT } = await import('./route');
 
-const put = (body: string) => PUT(new Request('http://localhost/api/settings/profile', { method: 'PUT', body }));
+const put = (body: string) => PUT(browserRequest('http://localhost/api/settings/profile', { method: 'PUT', body }));
 
 beforeEach(() => {
   currentAppUser.mockReset();
