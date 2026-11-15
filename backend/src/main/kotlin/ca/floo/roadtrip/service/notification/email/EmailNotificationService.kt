@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.notification.email
 
+import ca.floo.roadtrip.client.resend.EmailDelivery
 import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.client.resend.ResendEmailClient
@@ -11,6 +12,9 @@ import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
+
+private const val EMAIL_DISABLED = "email is not configured (resend-api-key or from unset)"
+private const val NO_RECIPIENTS = "no recipients"
 
 /**
  * The email transport. Every watch message carries the target's magic link,
@@ -31,7 +35,7 @@ class EmailNotificationService(
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
         val content = EmailContentWatchStatusRenderer.render(notice, emailTarget.magicLinkUrl)
-        return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} status")
+        return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} status") is EmailDelivery.Sent
     }
 
     override suspend fun sendWatchOpenings(
@@ -52,7 +56,7 @@ class EmailNotificationService(
                 appRootUrl = appRootUrl,
                 magicLinkUrl = emailTarget.magicLinkUrl,
             )
-        return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert")
+        return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert") is EmailDelivery.Sent
     }
 
     /**
@@ -69,14 +73,14 @@ class EmailNotificationService(
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
         val content = EmailContentAtcResultRenderer.render(notice, magicLinkUrl = emailTarget.magicLinkUrl)
-        return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} ATC result")
+        return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} ATC result") is EmailDelivery.Sent
     }
 
     suspend fun sendTestEmail(
         recipients: List<String>,
         appRootUrl: String? = null,
-    ): Boolean {
-        if (recipients.isEmpty()) return false
+    ): EmailDelivery {
+        if (recipients.isEmpty()) return EmailDelivery.Failed(NO_RECIPIENTS)
         return sendContent(EmailContentTestRenderer.render(appRootUrl), recipients, failureContext = "test email")
     }
 
@@ -84,16 +88,16 @@ class EmailNotificationService(
         content: EmailContent,
         recipients: List<String>,
         failureContext: String,
-    ): Boolean {
+    ): EmailDelivery {
         val emailConfig = config
         val emailClient = emailDeliveryClient
         if (emailConfig == null || emailClient == null) {
             log.warn("Email disabled (resend-api-key/from unset); {} not sent", failureContext)
-            return false
+            return EmailDelivery.Failed(EMAIL_DISABLED)
         }
         if (recipients.isEmpty()) {
             log.warn("Email target has no recipients; {} not sent", failureContext)
-            return false
+            return EmailDelivery.Failed(NO_RECIPIENTS)
         }
         return recipients
             .map { recipient ->
@@ -106,6 +110,6 @@ class EmailNotificationService(
                         html = content.html,
                     ),
                 )
-            }.all { it }
+            }.let { deliveries -> deliveries.firstOrNull { it is EmailDelivery.Failed } ?: deliveries.last() }
     }
 }

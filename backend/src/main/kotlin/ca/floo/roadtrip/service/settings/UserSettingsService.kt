@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.settings
 
+import ca.floo.roadtrip.client.resend.EmailDelivery
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.model.api.EmailTestResponseDto
 import ca.floo.roadtrip.model.api.NotificationsDto
@@ -259,8 +260,8 @@ class UserSettingsService(
         val recipient =
             settings?.notificationEmail
                 ?: requireNotNull(userRepo.findById(userId)) { "user not found: $userId" }.email
-        val sent = emailService.sendTestEmail(listOf(recipient), appRootUrl)
-        if (!sent) throw SettingsError.EmailSendFailed()
+        val delivery = emailService.sendTestEmail(listOf(recipient), appRootUrl)
+        if (delivery is EmailDelivery.Failed) throw SettingsError.EmailSendFailed("Email delivery failed: ${delivery.reason}")
         return EmailTestResponseDto(sent = true, recipient = recipient)
     }
 

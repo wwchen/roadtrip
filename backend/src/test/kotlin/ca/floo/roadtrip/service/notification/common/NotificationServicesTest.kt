@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.notification.common
 
+import ca.floo.roadtrip.client.resend.EmailDelivery
 import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.client.slack.SlackAttachmentDto
@@ -20,6 +21,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+
+private const val SENT_ID = "email-1"
+private const val FAILURE_REASON = "rejected"
 
 class NotificationServicesTest {
     /** Records what it was asked to post and returns a fixed result, so the impl's
@@ -67,9 +71,9 @@ class NotificationServicesTest {
     ) : EmailDeliveryClient {
         val messages = mutableListOf<EmailDeliveryMessage>()
 
-        override suspend fun send(message: EmailDeliveryMessage): Boolean {
+        override suspend fun send(message: EmailDeliveryMessage): EmailDelivery {
             messages += message
-            return result
+            return if (result) EmailDelivery.Sent(SENT_ID) else EmailDelivery.Failed(FAILURE_REASON)
         }
     }
 

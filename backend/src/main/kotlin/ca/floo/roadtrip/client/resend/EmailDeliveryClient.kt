@@ -8,6 +8,16 @@ data class EmailDeliveryMessage(
     val html: String,
 )
 
+sealed interface EmailDelivery {
+    data class Sent(
+        val id: String,
+    ) : EmailDelivery
+
+    data class Failed(
+        val reason: String,
+    ) : EmailDelivery
+}
+
 interface EmailDeliveryClient {
-    suspend fun send(message: EmailDeliveryMessage): Boolean
+    suspend fun send(message: EmailDeliveryMessage): EmailDelivery
 }
