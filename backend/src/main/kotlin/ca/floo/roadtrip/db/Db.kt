@@ -32,6 +32,8 @@ fun dataSourceFor(cfg: DbConfig): HikariDataSource {
     return HikariDataSource(hk)
 }
 
+private val migrationsANewerReleaseLeaves = arrayOf("*:future", "repeatable:missing")
+
 // Flyway's default lock is a transactional advisory lock, which leaves its own
 // connection idle-in-transaction for the whole run — and CREATE INDEX
 // CONCURRENTLY (V61) then waits on that virtualxid forever. Session-level instead.
@@ -45,6 +47,7 @@ internal fun flywayFor(ds: DataSource): Flyway =
         .locations("classpath:db/migration")
         .baselineOnMigrate(true)
         .baselineVersion("0")
+        .ignoreMigrationPatterns(*migrationsANewerReleaseLeaves)
         .apply { getConfigurationExtension(PostgreSQLConfigurationExtension::class.java).isTransactionalLock = false }
         .load()
 
