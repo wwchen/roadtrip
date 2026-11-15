@@ -45,6 +45,8 @@ const LOGIN_SELECTOR_LOG_LIMIT = 120
 const MILLISECONDS_PER_SECOND = 1_000
 const MIN_LOGIN_TIMEOUT_MS = 1
 const LOGIN_FIELD_TIMEOUT_MS = 5_000
+const LOGIN_FIELD_POLL_MS = 250
+const LOGIN_FIELD_POLL_ATTEMPTS = LOGIN_FIELD_TIMEOUT_MS / LOGIN_FIELD_POLL_MS
 const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
 const LOGIN_MFA_PROMPT_TIMEOUT_MS = 5_000
@@ -647,15 +649,18 @@ async function submitMfaCodeIfPrompted (page, credentials, timeout = LOGIN_MFA_P
 }
 
 async function fillFirstVisible (page, selectors, value) {
-  const selector = selectors.join(', ')
-  const locator = page.locator(selector).first()
-  try {
-    await locator.waitFor({ state: 'visible', timeout: LOGIN_FIELD_TIMEOUT_MS })
-    await locator.fill(value, { timeout: LOGIN_FIELD_TIMEOUT_MS })
-    return selector
-  } catch {
-    return null
+  for (let attempt = 0; attempt < LOGIN_FIELD_POLL_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await page.waitForTimeout(LOGIN_FIELD_POLL_MS)
+    for (const selector of selectors) {
+      const locator = page.locator(selector).first()
+      if (!await locator.isVisible().catch(() => false)) continue
+      try {
+        await locator.fill(value, { timeout: LOGIN_FIELD_TIMEOUT_MS })
+        return selector
+      } catch {}
+    }
   }
+  return null
 }
 
 async function clickFirstVisible (
