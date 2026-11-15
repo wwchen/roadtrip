@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ActiveUser } from '@/server/service/auth/model';
-import { errorAnswer, okAnswer, STATUS_OK, STATUS_UNAUTHORIZED, STATUS_UNPROCESSABLE } from './httpAnswer';
+import { errorAnswer, okAnswer, STATUS_FORBIDDEN, STATUS_OK, STATUS_UNAUTHORIZED, STATUS_UNPROCESSABLE } from './httpAnswer';
+import { browserRequest } from '@/server/testing/browserRequest';
+import { CROSS_ORIGIN } from './sameOrigin';
 import { signedInRoutes, type SignedInInput } from './signedIn';
 
 const currentAppUser = vi.fn<() => Promise<ActiveUser | null>>();
@@ -17,8 +19,14 @@ const JSON_BODY = { a: 1 };
 const UNPARSEABLE = '{not json';
 
 function post(text: string): Request {
-  return new Request(ENDPOINT, { method: 'POST', body: text });
+  return browserRequest(ENDPOINT, { method: 'POST', body: text });
 }
+
+const FORGED = new Request(ENDPOINT, {
+  method: 'POST',
+  body: '{}',
+  headers: { origin: 'https://evil.test', 'sec-fetch-site': 'cross-site', 'content-type': 'application/json' },
+});
 
 describe('signedIn', () => {
   beforeEach(() => {
@@ -33,6 +41,16 @@ describe('signedIn', () => {
     expect(response.status).toBe(STATUS_UNAUTHORIZED);
     expect(await response.json()).toEqual({ error: 'unauthenticated' });
     expect(response.headers.get('cache-control')).toBe(NO_STORE);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  test('a write from another origin gets 403 cross_origin, never cached, before the user is looked up', async () => {
+    const handler = vi.fn();
+    const response = await signedIn(handler)(FORGED);
+    expect(response.status).toBe(STATUS_FORBIDDEN);
+    expect(await response.json()).toEqual({ error: CROSS_ORIGIN });
+    expect(response.headers.get('cache-control')).toBe(NO_STORE);
+    expect(currentAppUser).not.toHaveBeenCalled();
     expect(handler).not.toHaveBeenCalled();
   });
 

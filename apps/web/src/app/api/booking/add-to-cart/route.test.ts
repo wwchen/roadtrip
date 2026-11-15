@@ -3,6 +3,7 @@ import { shippedTenantRegistry } from '@roadtrip/domain';
 import { unconfiguredBookingGateway } from '@/server/client/bookingRelay';
 import type { BookableCampsite } from '@/server/service/booking/model';
 import type { BookingPorts } from '@/server/service/booking/ports';
+import { browserRequest } from '@/server/testing/browserRequest';
 
 const NO_STORE = 'private, no-store';
 const CAMPSITE: BookableCampsite = {
@@ -28,7 +29,7 @@ vi.mock('@/server/auth/currentUser', () => ({ currentAppUser: () => currentAppUs
 vi.mock('@/server/wiring/bookingPorts', () => ({ bookingPorts: () => fakePorts }));
 const { POST, maxDuration } = await import('./route');
 
-const post = (body: string) => POST(new Request('http://localhost/api/booking/add-to-cart', { method: 'POST', body }));
+const post = (body: string) => POST(browserRequest('http://localhost/api/booking/add-to-cart', { method: 'POST', body }));
 
 beforeEach(() => {
   hold.mockReset();

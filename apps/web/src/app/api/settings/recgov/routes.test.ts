@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { sealMfaChallenge } from '@/server/auth/mfaChallengeCookie';
 import { challengeCodec } from '@/server/mapper/http/recgovHttp';
 import { memoryVault } from '@/server/testing/memoryVault';
+import { browserRequest } from '@/server/testing/browserRequest';
 
 const KEY = Buffer.alloc(32, 5);
 const NOW = Date.parse('2026-12-01T00:00:00Z');
@@ -37,7 +38,7 @@ const statusRoute = await import('./status/route');
 
 const USER = { id: 7n, email: 'a@b.test', emailVerified: true, displayName: null, theme: 'system', status: 'active' };
 const request = (method: string, body?: string, cookie?: string) =>
-  new Request('http://localhost/api/settings/recgov', {
+  browserRequest('http://localhost/api/settings/recgov', {
     method,
     ...(body === undefined ? {} : { body }),
     headers: cookie === undefined ? {} : { cookie },
