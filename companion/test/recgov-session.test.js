@@ -10,6 +10,7 @@ import {
   runRecgovProfileLogin,
   withRecgovProfileScope,
 } from '../src/recgovSession.js'
+import { describeProbeResult, probeRecgovLoginFields } from '../src/recgovLoginProbe.js'
 
 const JWT_HEADER = { alg: 'none' }
 const JWT_SIGNATURE = 'sig'
@@ -476,6 +477,37 @@ test('credential login fills the dialog email field when a hidden email input pr
   assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
   assert.ok(page.fills[0].selector.startsWith('[role="dialog"]'))
   assert.equal(page.credentialSubmitClicks, 1)
+})
+
+test('probeRecgovLoginFields reports the dialog selector for each field without filling or submitting', async () => {
+  const page = fakePage({ rawRecaccount: null, hiddenNewsletterEmail: true })
+
+  const result = await probeRecgovLoginFields(page)
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.missing, [])
+  assert.equal(result.fields.email, '[role="dialog"] input[type="email"]')
+  assert.equal(result.fields.password, '[role="dialog"] input[type="password"]')
+  assert.equal(result.fields.submit, '[role="dialog"] button[type="submit"]')
+  assert.equal(page.loginClicks, 1)
+  assert.deepEqual(page.fills, [])
+  assert.equal(page.credentialSubmitClicks, 0)
+  assert.equal(describeProbeResult(result).at(-1), 'RECGOV_LOGIN_PROBE_OK')
+})
+
+test('probeRecgovLoginFields names the missing field', async () => {
+  const page = fakePage({ rawRecaccount: null, submitSelectorVisible: false })
+
+  const result = await probeRecgovLoginFields(page)
+
+  assert.equal(result.ok, false)
+  assert.deepEqual(result.missing, ['submit'])
+  assert.equal(result.fields.submit, null)
+  assert.ok(result.fields.email)
+  assert.equal(page.credentialSubmitClicks, 0)
+  const lines = describeProbeResult(result)
+  assert.ok(lines.includes('field=submit NOT FOUND'))
+  assert.equal(lines.at(-1), 'RECGOV_LOGIN_PROBE_FAILED missing=submit')
 })
 
 function fakePage ({

@@ -12,7 +12,8 @@
     "recgov:login": "node src/checkRecgovAuth.js",
     "recgov:refresh": "node src/checkRecgovAuth.js --force-refresh",
     "recgov:atc": "node src/runAtcOnce.js",
-    "test": "node --test 'test/*.test.js'"
+    "test": "node --test 'test/*.test.js'",
+    "recgov:login-probe": "node src/runRecgovLoginProbe.js"
   },
   "dependencies": {
     "playwright": "1.65.0"

@@ -60,7 +60,7 @@ const RECGOV_LOGOUT_POLL_MS = 500
 const RECGOV_LOGOUT_SELECTOR_TIMEOUT_MS = 1_500
 const RECGOV_LOGOUT_CLICK_TIMEOUT_MS = 3_000
 
-const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
+export const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
 const LOGOUT_MENU_SELECTORS = [
   'button[aria-label*="account" i]',
   'button[aria-label*="profile" i]',
@@ -86,7 +86,7 @@ const LOGOUT_ACTION_SELECTORS = [
   'a:has-text("Sign out")',
   '[role="menuitem"]:has-text("Sign out")',
 ]
-const LOGIN_EMAIL_SELECTORS = [
+export const LOGIN_EMAIL_SELECTORS = [
   '[role="dialog"] input[type="email"]',
   '[role="dialog"] input[name*="email" i]',
   '[role="dialog"] input[autocomplete="username"]',
@@ -96,7 +96,7 @@ const LOGIN_EMAIL_SELECTORS = [
   'input[placeholder*="email" i]',
   'input[autocomplete="username"]',
 ]
-const LOGIN_PASSWORD_SELECTORS = [
+export const LOGIN_PASSWORD_SELECTORS = [
   '[role="dialog"] input[type="password"]',
   '[role="dialog"] input[name*="password" i]',
   '[role="dialog"] input[autocomplete="current-password"]',
@@ -106,7 +106,7 @@ const LOGIN_PASSWORD_SELECTORS = [
   'input[placeholder*="password" i]',
   'input[autocomplete="current-password"]',
 ]
-const LOGIN_SUBMIT_SELECTORS = [
+export const LOGIN_SUBMIT_SELECTORS = [
   '[role="dialog"] button[type="submit"]',
   '[role="dialog"] input[type="submit"]',
   '[role="dialog"] [role="button"]:has-text("Log In")',
@@ -594,7 +594,7 @@ function secondsLabel (millis) {
   return Math.ceil(millis / MILLISECONDS_PER_SECOND)
 }
 
-async function openLoginIfPossible (page) {
+export async function openLoginIfPossible (page) {
   try {
     await page.locator(LOGIN_LINK_SEL).first()
       .click({ timeout: RECGOV_LOGIN_BUTTON_TIMEOUT_MS })
@@ -648,14 +648,18 @@ async function submitMfaCodeIfPrompted (page, credentials, timeout = LOGIN_MFA_P
   }
 }
 
-async function fillFirstVisible (page, selectors, value) {
+function fillFirstVisible (page, selectors, value) {
+  return firstVisibleInOrder(page, selectors, (locator) => locator.fill(value, { timeout: LOGIN_FIELD_TIMEOUT_MS }))
+}
+
+export async function firstVisibleInOrder (page, selectors, act = async () => {}) {
   for (let attempt = 0; attempt < LOGIN_FIELD_POLL_ATTEMPTS; attempt += 1) {
     if (attempt > 0) await page.waitForTimeout(LOGIN_FIELD_POLL_MS)
     for (const selector of selectors) {
       const locator = page.locator(selector).first()
       if (!await locator.isVisible().catch(() => false)) continue
       try {
-        await locator.fill(value, { timeout: LOGIN_FIELD_TIMEOUT_MS })
+        await act(locator)
         return selector
       } catch {}
     }
