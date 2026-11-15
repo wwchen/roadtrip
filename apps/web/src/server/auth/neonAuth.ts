@@ -37,6 +37,7 @@ const SAME_SITE_LAX = 'lax';
 const NETWORK_CODE_PREFIX = 'NETWORK_';
 const MISSING_REDIRECT = 'MISSING_REDIRECT_URL';
 const FIRST_SERVER_ERROR_STATUS = 500;
+const ABSENT = 'none';
 const SDK_CODES: Readonly<Record<string, string>> = {
   email_not_confirmed: EMAIL_NOT_VERIFIED,
   user_already_exists: USER_ALREADY_EXISTS,
@@ -80,8 +81,12 @@ export function neonAuth(): NeonAuth | null {
   return cached;
 }
 
+export function causeOf(error: SdkError): string {
+  return `status=${error.status ?? ABSENT} code=${error.code ?? ABSENT}`;
+}
+
 function resultOf(outcome: ApiOutcome): AuthResult {
-  if (outcome.error) return { ok: false, code: portCodeOf(outcome.error) };
+  if (outcome.error) return { ok: false, code: portCodeOf(outcome.error), cause: causeOf(outcome.error) };
   return { ok: true };
 }
 
