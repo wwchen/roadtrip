@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.client.resend.EmailDelivery
 import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.config.EmailConfig
@@ -864,9 +865,9 @@ class TriggerActionHandlerTest {
     private class RecordingEmailClient : EmailDeliveryClient {
         val messages = mutableListOf<EmailDeliveryMessage>()
 
-        override suspend fun send(message: EmailDeliveryMessage): Boolean {
+        override suspend fun send(message: EmailDeliveryMessage): EmailDelivery {
             messages += message
-            return true
+            return EmailDelivery.Sent("email-1")
         }
     }
 
