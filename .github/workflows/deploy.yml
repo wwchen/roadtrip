@@ -313,3 +313,8 @@ jobs:
           echo "telemetry pipeline check failed"
           exit 1
           REMOTE
+
+      - name: Record the last good release
+        run: |
+          ssh -o BatchMode=yes mini@mini-ca \
+            "cd \"\$HOME/.roadtrip/current\" && scripts/deploy.sh record-good '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA' '$DEPLOY_BRANCH'"

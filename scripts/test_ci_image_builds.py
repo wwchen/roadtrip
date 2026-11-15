@@ -331,7 +331,7 @@ class DeploymentContractTest(unittest.TestCase):
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()
         backend_up = deploy.index("up -d --force-recreate backend")
         role_step = deploy.index("exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh")
-        everything_up = deploy.index('"${compose[@]}" up -d\n')
+        everything_up = deploy.index('"${compose[@]}" up -d --wait')
         self.assertLess(backend_up, role_step)
         self.assertLess(role_step, everything_up)
 

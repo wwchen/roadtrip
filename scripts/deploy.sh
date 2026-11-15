@@ -24,8 +24,9 @@ STALE_DEPLOY_PATTERN="${STALE_DEPLOY_PATTERN:-deploy\.sh (prod|sandbox-up|sandbo
 # deploy workflow flips only after a deploy returns.
 ROADTRIP_HOME="${ROADTRIP_HOME:-${HOME}/.roadtrip}"
 
-# The last prod deploy that passed its health gate, and therefore the rollback
-# target. Written only on success, so it can never name a broken release.
+# The last prod deploy that passed every check, and therefore the rollback
+# target. Written by `record-good`, which the deploy workflow runs as its last
+# step, so it can never name a release a later check rejected.
 LAST_GOOD_RELEASE_FILE="${LAST_GOOD_RELEASE_FILE:-${ROADTRIP_HOME}/last-good-release}"
 
 # How long a guard container holds a freshly created data volume open. Must
@@ -335,11 +336,9 @@ _deploy_prod() {
     "${secret_exec[@]}" "${compose[@]}" exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh
     # No `restart` of the observability services here: compose resolves their
     # ./grafana bind mounts against the release directory, which is keyed by
-    # SHA, so every release changes their config hash and the `up -d` above
-    # has already recreated them. Restarting again only resets the health
-    # start periods that `--wait` below, and the telemetry poll after it, then
-    # have to sit through.
-    "${secret_exec[@]}" "${compose[@]}" up -d
+    # SHA, so every release changes their config hash and the `up -d` below
+    # recreates them. Restarting again only resets the health start periods
+    # that `--wait`, and the telemetry poll after it, then have to sit through.
     # Compose reports only "container X is unhealthy" when a dependency never
     # comes up, which says nothing about why. The backend's own log holds the
     # reason (a Flyway checksum mismatch, a bad secret), so surface it here
@@ -376,9 +375,20 @@ _deploy_prod() {
         exit 1
     fi
     _release_data_volume
-    _record_last_good_release "${app_sha}" "${data_sha}" "${companion_sha}" "${branch}"
     "${RECLAIM}" prune --scope host --no-include-anonymous
     echo "==> production deployed: ${app_sha}"
+}
+
+_record_good() {
+    if [[ $# -lt 3 ]]; then
+        echo "usage: deploy.sh record-good <app-sha> <data-tree-sha> <companion-tree-sha> [branch]" >&2
+        exit 2
+    fi
+    _require_sha "app SHA" "$1"
+    _require_sha "data tree SHA" "$2"
+    _require_sha "companion tree SHA" "$3"
+    _record_last_good_release "$1" "$2" "$3" "${4:-master}"
+    echo "==> last good release: $1"
 }
 
 COMMAND="${1:-}"
@@ -387,12 +397,18 @@ if [[ "${COMMAND}" == "prod" ]]; then
     _deploy_prod "$@"
     exit 0
 fi
+if [[ "${COMMAND}" == "record-good" ]]; then
+    shift
+    _record_good "$@"
+    exit 0
+fi
 
 # ── Argument handling ─────────────────────────────────────────────────────────
 if [[ $# -lt 2 ]]; then
     echo "usage: deploy.sh sandbox-up <ref> [name]" >&2
     echo "       deploy.sh sandbox-down <name>" >&2
     echo "       deploy.sh prod <app-sha> <data-tree-sha> <companion-tree-sha> [branch]" >&2
+    echo "       deploy.sh record-good <app-sha> <data-tree-sha> <companion-tree-sha> [branch]" >&2
     exit 1
 fi
 
