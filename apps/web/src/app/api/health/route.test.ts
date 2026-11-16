@@ -28,7 +28,7 @@ afterEach(() => {
 test('an unauthenticated request is 200 and never reaches the database check', async () => {
   const response = await GET(new Request(HEALTH_URL));
   expect(response.status).toBe(STATUS_OK);
-  expect(await response.json()).toEqual({ status: 'ok' });
+  expect(await response.json()).toEqual({ status: 'ok', now: expect.any(Number) });
   expect(isDatabaseReachable).not.toHaveBeenCalled();
 });
 
@@ -43,7 +43,7 @@ test('the correct secret runs the probe: a reachable database is 200 ok', async 
   isDatabaseReachable.mockResolvedValue(true);
   const response = await GET(withAuthorization(`Bearer ${SECRET}`));
   expect(response.status).toBe(STATUS_OK);
-  expect(await response.json()).toEqual({ status: 'ok' });
+  expect(await response.json()).toEqual({ status: 'ok', now: expect.any(Number) });
   expect(isDatabaseReachable).toHaveBeenCalledTimes(1);
 });
 
@@ -51,7 +51,7 @@ test('the correct secret runs the probe: an unreachable database is 503', async 
   isDatabaseReachable.mockResolvedValue(false);
   const response = await GET(withAuthorization(`Bearer ${SECRET}`));
   expect(response.status).toBe(STATUS_UNAVAILABLE);
-  expect(await response.json()).toEqual({ status: 'unavailable' });
+  expect(await response.json()).toEqual({ status: 'unavailable', now: expect.any(Number) });
 });
 
 test('the scheme is case-insensitive', async () => {

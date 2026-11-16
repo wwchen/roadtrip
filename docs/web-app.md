@@ -384,9 +384,16 @@ queried on every hit would let any crawler or uptime checker hold the database a
 
 | Request | Result | Touches the database |
 |---|---|---|
-| no `Authorization` header | `200 {"status":"ok"}` | **no**: it proves only that the function is running |
-| `Authorization: Bearer <HEALTH_DATABASE_TOKEN>` | the probe: `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, with a 12 second race | yes |
+| no `Authorization` header | `200 {"status":"ok","now":…}` | **no**: it proves only that the function is running |
+| `Authorization: Bearer <HEALTH_DATABASE_TOKEN>` | the probe: `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, each with `"now"`, with a 12 second race | yes |
 | any other `Authorization` header (wrong secret, wrong scheme, empty) | `401 {"status":"unauthorized"}` with `WWW-Authenticate: Bearer` | no |
+
+A config group is every getter on `config` in `config.ts`. A group with none of its variables set is
+off; a group set in part, or with a value that does not parse, is a problem. The app serves anyway,
+with that group off. `instrumentation.ts` logs each problem once when a server starts, as
+`config: <group> <message>`; the message names variables, never their values. Health does not
+report it. A preview deployment logs one today: the Neon integration sets `NEON_AUTH_BASE_URL` on
+preview branches without the other two sign-in variables.
 
 **An uptime checker should use the plain request** to learn the site is up, and the bearer form,
 at a modest interval, only if it must learn the database is reachable. Each bearer hit wakes a

@@ -24,6 +24,8 @@ const COMPILED_SUFFIX_SOURCES = new Map([
   ['.cjs', ['.cts']],
 ]);
 const ENV_CONFIG_FILE = 'apps/web/src/server/config.ts';
+const INSTRUMENTATION_FILE = 'apps/web/src/instrumentation.ts';
+const RUNTIME_READ = /\bprocess\.env\.NEXT_RUNTIME\b/g;
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 const PROCESS_MODULE = String.raw`['"\`](?:node:)?process['"\`]`;
 const ENV_READ_FORMS = {
@@ -267,8 +269,10 @@ export async function findEnvReadViolations(repoRoot) {
   const violations = [];
   for (const file of files) {
     if (!SOURCE_EXTENSION.test(file) || TEST_FILE.test(file)) continue;
-    if (path.relative(repoRoot, file).split(path.sep).join('/') === ENV_CONFIG_FILE) continue;
-    const source = await readFile(file, 'utf8');
+    const relative = path.relative(repoRoot, file).split(path.sep).join('/');
+    if (relative === ENV_CONFIG_FILE) continue;
+    const read = await readFile(file, 'utf8');
+    const source = relative === INSTRUMENTATION_FILE ? read.replace(RUNTIME_READ, (match) => ' '.repeat(match.length)) : read;
     for (const match of source.matchAll(ENV_READ)) {
       violations.push(`${path.relative(repoRoot, file)}:${lineOf(source, match.index)}: ${ENV_READ_MESSAGE}`);
     }

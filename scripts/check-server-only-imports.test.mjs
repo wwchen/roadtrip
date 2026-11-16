@@ -465,6 +465,18 @@ test('process.env is reported outside server/config.ts, and not in config.ts or 
   ]);
 });
 
+test('instrumentation.ts may read NEXT_RUNTIME, which Next.js inlines, and nothing else; no other file may', async (context) => {
+  const root = await layerFixture(context, {
+    'src/instrumentation.ts': "if (process.env.NEXT_RUNTIME === 'nodejs') {}\nexport const x = process.env.OTHER;",
+    'src/server/runtime.ts': "export const node = process.env.NEXT_RUNTIME === 'nodejs';",
+  });
+
+  assert.deepEqual(await findEnvReadViolations(root), [
+    'apps/web/src/instrumentation.ts:2: reads process.env',
+    'apps/web/src/server/runtime.ts:1: reads process.env',
+  ]);
+});
+
 test('process.env is reported in each of its ordinary spellings', async (context) => {
   const spellings = {
     'src/server/a.ts': "const key = process['env'].A;",
