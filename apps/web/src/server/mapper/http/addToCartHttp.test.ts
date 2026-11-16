@@ -34,7 +34,7 @@ const ANSWERS: [string, AddToCartOutcome, number, object][] = [
     403,
     { error: 'c', detail: 'd', ...PROVIDER },
   ],
-  ['refused retry_later', { kind: 'refused', refusal: { category: 'retry_later', code: 'c' }, providerDisplay: DISPLAY, cartUrl: CART_URL }, 409, { error: 'c', ...PROVIDER }],
+  ['refused retry_later', { kind: 'refused', refusal: { category: 'retry_later', code: 'c' }, providerDisplay: DISPLAY, cartUrl: CART_URL }, 409, { error: 'c', cart_url: CART_URL, ...PROVIDER }],
   ['refused upstream', { kind: 'refused', refusal: { category: 'upstream', code: 'c' }, providerDisplay: DISPLAY }, 502, { error: 'c', ...PROVIDER }],
   ['unavailable', { kind: 'unavailable', providerDisplay: DISPLAY }, 503, { error: 'booking_unavailable', ...PROVIDER }],
 ];

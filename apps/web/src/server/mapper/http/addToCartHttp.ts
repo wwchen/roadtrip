@@ -43,10 +43,16 @@ export function parseAddToCart(body: unknown): Parsed<AddToCartCommand> {
   return { kind: 'ok', value: { campsiteId: BigInt(idText), window } };
 }
 
-function providerError(status: number, error: string, providerDisplay: string, detail?: string): HttpAnswer<never> {
+function providerError(status: number, error: string, providerDisplay: string, detail?: string, cartUrl?: string): HttpAnswer<never> {
   return {
     status,
-    body: { error, ...withDetail(detail), provider: RECGOV_PROVIDER, provider_display: providerDisplay },
+    body: {
+      error,
+      ...withDetail(detail),
+      provider: RECGOV_PROVIDER,
+      provider_display: providerDisplay,
+      ...(cartUrl === undefined ? {} : { cart_url: cartUrl }),
+    },
   };
 }
 
@@ -61,7 +67,13 @@ export function addToCartAnswer(outcome: AddToCartOutcome): HttpAnswer<AddToCart
     case 'not_available':
       return providerError(STATUS_CONFLICT, NOT_AVAILABLE, outcome.providerDisplay);
     case 'refused':
-      return providerError(STATUS_BY_CATEGORY[outcome.refusal.category], outcome.refusal.code, outcome.providerDisplay, outcome.refusal.detail);
+      return providerError(
+        STATUS_BY_CATEGORY[outcome.refusal.category],
+        outcome.refusal.code,
+        outcome.providerDisplay,
+        outcome.refusal.detail,
+        outcome.cartUrl,
+      );
     case 'unavailable':
       return providerError(STATUS_SERVICE_UNAVAILABLE, BOOKING_UNAVAILABLE, outcome.providerDisplay);
   }

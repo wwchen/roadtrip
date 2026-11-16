@@ -24,6 +24,7 @@ export class HttpError extends Error {
   provider?: string;
   /** That adapter's booking site as a person reads it. */
   providerDisplay?: string;
+  cartUrl?: string;
   /** Raw response text, attached by some clients (e.g. watches create/update). */
   body?: string;
 
@@ -56,6 +57,7 @@ async function attachErrorCode(err: HttpError, response: Response): Promise<Http
     if (body && typeof body.error === 'string') err.code = body.error;
     if (body && typeof body.provider === 'string') err.provider = body.provider;
     if (body && typeof body.provider_display === 'string') err.providerDisplay = body.provider_display;
+    if (body && typeof body.cart_url === 'string') err.cartUrl = body.cart_url;
   } catch {
     // Non-JSON or empty body — leave err.code undefined.
   }

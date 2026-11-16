@@ -1458,6 +1458,28 @@ describe('holding a site straight from the grid', () => {
     expect(screen.queryByText(/Holding site…/)).toBeNull();
   });
 
+  it('a hold that timed out links the cart, so the user checks it before retrying', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () =>
+      json(
+        {
+          error: 'relay_timeout',
+          provider: 'recgov',
+          provider_display: 'Recreation.gov',
+          cart_url: 'https://www.recreation.gov/cart',
+        },
+        409,
+      );
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText(/check your cart before trying again/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open Recreation\.gov cart/ })).toHaveAttribute('href', 'https://www.recreation.gov/cart');
+  });
+
   it('names the refusing site from the envelope', async () => {
     // Campflare serves this campground; Recreation.gov was asked to hold the
     // site and said no. Only the envelope knows which, so the copy follows it.

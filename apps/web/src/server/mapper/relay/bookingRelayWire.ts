@@ -34,6 +34,7 @@ const PROFILE_ID_PREFIX = 'n:';
 const FIRST_SUCCESS_STATUS = 200;
 const FIRST_REDIRECT_STATUS = 300;
 const STATUS_GATEWAY_TIMEOUT = 504;
+const HTTPS_PROTOCOL = 'https:';
 const OUTCOME_FIELD = 'outcome' satisfies keyof BookingRelayHoldDto;
 const SESSION_FIELD = 'session' satisfies keyof BookingRelayHealthDto;
 const REFUSAL_CATEGORIES: readonly (RefusalCategory & BookingRelayFailureCategory)[] = ['caller_action', 'retry_later', 'upstream'];
@@ -132,16 +133,26 @@ function refused<R>(body: Raw<{ failure: BookingRelayFailureDto }>, build: (refu
   return refusal === null ? MALFORMED : build(refusal);
 }
 
+function httpsUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    return new URL(value).protocol === HTTPS_PROTOCOL ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export function decodeHold(exchange: RelayExchange): HoldResult {
   const body = open<BookingRelayHoldDto>(exchange);
   if (typeof body === 'string') return unavailable(body);
+  const cartUrl = httpsUrl(body.cart_url);
   switch (body.outcome) {
     case HOLD.held:
-      return typeof body.cart_url === 'string' ? { kind: 'held', cartUrl: body.cart_url } : MALFORMED;
+      return cartUrl === null ? MALFORMED : { kind: 'held', cartUrl };
     case HOLD.blocked:
       return refused(body, (refusal) => ({ kind: 'blocked', refusal }));
     case HOLD.timedOut:
-      return refused(body, (refusal) => ({ kind: 'timed_out', refusal, ...(typeof body.cart_url === 'string' ? { cartUrl: body.cart_url } : {}) }));
+      return refused(body, (refusal) => ({ kind: 'timed_out', refusal, ...(cartUrl === null ? {} : { cartUrl }) }));
     default:
       return MALFORMED;
   }
