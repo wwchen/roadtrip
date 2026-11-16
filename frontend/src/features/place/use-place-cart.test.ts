@@ -183,6 +183,30 @@ describe('usePlaceCart, holding a site', () => {
     );
   });
 
+  test('a refusal that names a cart carries it, so the caller can go look', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(
+          {
+            error: 'cart_not_added',
+            provider: 'recgov',
+            provider_display: HOLDER,
+            cart_url: CART_URL,
+          },
+          BAD_GATEWAY,
+        ),
+      ),
+    );
+
+    const { hook, hold } = ready();
+    act(() => hold(CAMPSITE_ID, NIGHT));
+
+    await waitFor(() =>
+      expect(actionAt(hook)).toMatchObject({ kind: 'failed', cartUrl: CART_URL, holder: HOLDER }),
+    );
+  });
+
   test('a failure clears the lock, so the caller can try again', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ error: 'not_available' }, BAD_GATEWAY));
     vi.stubGlobal('fetch', fetchMock);

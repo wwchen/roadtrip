@@ -16,14 +16,14 @@ export type CartAction =
       afterLapse?: true;
     }
   | { kind: 'lapsed'; cell: CartActionCell; cartUrl: string; holder?: string }
-  | { kind: 'failed'; cell: CartActionCell; code: string; holder?: string };
+  | { kind: 'failed'; cell: CartActionCell; code: string; cartUrl?: string; holder?: string };
 
 export type CartActions = ReadonlyMap<string, CartAction>;
 
 export type CartActionEvent =
   | { type: 'requested'; cell: CartActionCell }
   | { type: 'held'; cell: CartActionCell; cartUrl: string; heldAt: number; holder?: string }
-  | { type: 'failed'; cell: CartActionCell; code: string; holder?: string }
+  | { type: 'failed'; cell: CartActionCell; code: string; cartUrl?: string; holder?: string }
   | { type: 'expired'; cell: CartActionCell };
 
 export const NO_CART_ACTIONS: CartActions = new Map();
@@ -88,6 +88,7 @@ export function nextCartActions(current: CartActions, event: CartActionEvent): C
         kind: 'failed',
         cell: event.cell,
         code: event.code,
+        ...(event.cartUrl ? { cartUrl: event.cartUrl } : null),
         ...(event.holder ? { holder: event.holder } : null),
       });
     case 'expired':

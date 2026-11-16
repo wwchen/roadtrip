@@ -58,9 +58,15 @@ export function usePlaceCart(capabilities: WatchCapabilities): PlaceCart {
           });
         })
         .catch((err: unknown) => {
-          const { error: code, provider_display: named } = addToCartFailure(err);
+          const { error: code, provider_display: named, cart_url: cartUrl } = addToCartFailure(err);
           const holder = named ?? provider;
-          dispatch({ type: 'failed', cell, code, ...(holder ? { holder } : null) });
+          dispatch({
+            type: 'failed',
+            cell,
+            code,
+            ...(cartUrl ? { cartUrl } : null),
+            ...(holder ? { holder } : null),
+          });
         })
         .finally(() => {
           running.current = false;

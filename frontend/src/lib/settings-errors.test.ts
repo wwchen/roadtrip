@@ -30,9 +30,28 @@ describe('settingsErrorMessage', () => {
     );
   });
 
+  test('a login page the booking service could not drive does not blame the credentials', () => {
+    const message = settingsErrorMessage('login_page_changed');
+
+    expect(message).toBe(
+      "Recreation.gov's sign-in page has changed, so the sign-in could not finish. Your credentials were not rejected — the booking service needs attention.",
+    );
+    expect(message).not.toBe(settingsErrorMessage('login_failed'));
+  });
+
+  test('the add-to-cart codes the web app answers have their own copy', () => {
+    expect(settingsErrorMessage('booking_unavailable')).toBe(
+      "Booking isn't available right now — try again shortly.",
+    );
+    expect(settingsErrorMessage('relay_timeout')).toBe(
+      'The booking service took too long to answer. If you were adding a site, check your cart before trying again.',
+    );
+    expect(settingsErrorMessage('invalid_window')).toBe('Check-out must be after check-in.');
+  });
+
   test('the transient companion codes read as "try again", not as failures', () => {
     expect(settingsErrorMessage('profile_busy')).toBe(
-      'Another operation is using your Recreation.gov session — try again shortly.',
+      'Your Recreation.gov session is busy, often with a sign-in still waiting for its verification code. Enter that code, or try again in a few minutes.',
     );
     expect(settingsErrorMessage('browser_cap_reached')).toBe(
       'The booking service is at capacity — try again shortly.',

@@ -91,3 +91,37 @@ test('the reader still cannot write app_user', async () => {
   const code = await sqlStateOf(asRole(READER_ROLE, 'INSERT INTO app_user (email) VALUES ($1)', ['reader@example.com']));
   expect([INSUFFICIENT_PRIVILEGE, READ_ONLY_TRANSACTION]).toContain(code);
 });
+
+test('the writer can keep a booking credentials row', async () => {
+  const [user] = await asRole<{ id: string }[]>(
+    WRITER_ROLE,
+    'INSERT INTO app_user (email) VALUES ($1) RETURNING id',
+    ['booker@example.com'],
+  );
+  await asRole(
+    WRITER_ROLE,
+    "INSERT INTO user_booking_credentials (user_id, provider, username, secret_cipher) VALUES ($1, 'recgov', 'a', '\\x00')",
+    [user?.id],
+  );
+  const updated = await asRole<unknown[]>(
+    WRITER_ROLE,
+    "UPDATE user_booking_credentials SET username = 'b' WHERE user_id = $1 AND provider = 'recgov' RETURNING username",
+    [user?.id],
+  );
+  expect(updated).toHaveLength(1);
+  const deleted = await asRole<unknown[]>(
+    WRITER_ROLE,
+    "DELETE FROM user_booking_credentials WHERE user_id = $1 AND provider = 'recgov' RETURNING user_id",
+    [user?.id],
+  );
+  expect(deleted).toHaveLength(1);
+});
+
+test('the writer can read notification settings', async () => {
+  await expect(asRole(WRITER_ROLE, 'SELECT user_id FROM user_settings LIMIT 1')).resolves.toBeDefined();
+});
+
+test('the reader cannot read booking credentials', async () => {
+  const code = await sqlStateOf(asRole(READER_ROLE, 'SELECT username FROM user_booking_credentials LIMIT 1'));
+  expect(code).toBe(INSUFFICIENT_PRIVILEGE);
+});

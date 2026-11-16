@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.settings
 
+import ca.floo.roadtrip.client.resend.EmailDelivery
 import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.client.slack.SlackClient
@@ -145,15 +146,17 @@ private class FakeSlackClient(
     }
 }
 
+private const val DELIVERY_FAILURE = "The app.floo.ca domain is not verified"
+
 /** Fake [EmailDeliveryClient]. [sendResult] controls whether send() succeeds. */
 private class FakeEmailDeliveryClient(
     private val sendResult: Boolean = true,
 ) : EmailDeliveryClient {
     val sentMessages = mutableListOf<EmailDeliveryMessage>()
 
-    override suspend fun send(message: EmailDeliveryMessage): Boolean {
+    override suspend fun send(message: EmailDeliveryMessage): EmailDelivery {
         sentMessages += message
-        return sendResult
+        return if (sendResult) EmailDelivery.Sent("email-1") else EmailDelivery.Failed(DELIVERY_FAILURE)
     }
 }
 
@@ -606,9 +609,11 @@ class UserSettingsServiceTest {
             val emailService = makeEmailService(deliveryClient)
             settingsService = makeService(userRepo, settingsRepo, emailService = emailService)
 
-            assertFailsWith<SettingsError.EmailSendFailed> {
-                settingsService.sendEmailTest(testUserId)
-            }
+            val error =
+                assertFailsWith<SettingsError.EmailSendFailed> {
+                    settingsService.sendEmailTest(testUserId)
+                }
+            assertEquals("Email delivery failed: $DELIVERY_FAILURE", error.message)
             Unit
         }
 }

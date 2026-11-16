@@ -9,6 +9,7 @@ package ca.floo.roadtrip.service.settings
  */
 object RecGovSessionCodes {
     const val LOGIN_FAILED = "login_failed"
+    const val LOGIN_PAGE_CHANGED = "login_page_changed"
     const val MFA_REQUIRED = "mfa_required"
     const val MFA_INVALID = "mfa_invalid"
 

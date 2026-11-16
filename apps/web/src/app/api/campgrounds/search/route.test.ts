@@ -1,5 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { CampgroundSearchDto } from '@/server/dto';
+import { browserRequest } from '@/server/testing/browserRequest';
 
 const searchCampgrounds = vi.fn();
 const searchCampgroundsByContract = vi.fn();
@@ -114,7 +115,7 @@ test('any other failure propagates rather than being reported as the caller faul
 });
 
 const SQUARE = { type: 'Polygon', coordinates: [[[-120, 39], [-119, 39], [-119, 40], [-120, 40], [-120, 39]]] };
-const postSearch = (body: unknown) => POST(new Request(SEARCH_URL, { method: 'POST', body: JSON.stringify(body) }));
+const postSearch = (body: unknown) => POST(browserRequest(SEARCH_URL, { method: 'POST', body: JSON.stringify(body) }));
 
 test('POST answers the contract shape from the service', async () => {
   const contract = { campground_ids: [1], total_in_boundary: 1, total_matching: 1, truncated: false };

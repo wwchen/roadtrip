@@ -23,6 +23,7 @@ data class BookingConfig(
      * would push that overflow onto it.
      */
     val maxKeepWarmProfiles: Int = DEFAULT_MAX_KEEP_WARM_PROFILES,
+    val relay: BookingRelayConfig = BookingRelayConfig(),
 ) {
     init {
         require(maxKeepWarmProfiles > 0) { "booking maxKeepWarmProfiles must be positive" }
@@ -39,6 +40,26 @@ data class BookingConfig(
                 freshnessMaxAge = config.duration("freshness-max-age", defaultFreshnessMaxAge),
                 maxKeepWarmProfiles =
                     config.value("max-keep-warm-profiles")?.toIntOrNull() ?: DEFAULT_MAX_KEEP_WARM_PROFILES,
+                relay = BookingRelayConfig.fromConfig(config.section("relay")),
+            )
+    }
+}
+
+data class BookingRelayConfig(
+    val token: String? = null,
+    val timeout: Duration = defaultRelayTimeout,
+) {
+    init {
+        require(timeout.isPositive()) { "booking relay timeout must be positive" }
+    }
+
+    companion object {
+        private val defaultRelayTimeout: Duration = Duration.ofSeconds(90)
+
+        fun fromConfig(config: ConfigSection): BookingRelayConfig =
+            BookingRelayConfig(
+                token = config.value("token"),
+                timeout = config.duration("timeout", defaultRelayTimeout),
             )
     }
 }

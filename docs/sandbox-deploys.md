@@ -326,9 +326,9 @@ running the failure. `deploy.yml` reads the transcript and says which of three
 states the host was left in: rolled back, could not roll back, or the rollback
 itself failed and prod needs hands.
 
-The rollback target comes from `~/.roadtrip/last-good-release`, written after
-every deploy that passes its gate, so it names an app/data/companion triple that
-provably came up healthy. A host that has never written one falls back to the
+The rollback target comes from `~/.roadtrip/last-good-release`. The deploy
+workflow writes it with `deploy.sh record-good` as its last step, so it names an
+app/data/companion triple that passed the health gate and every check after it. A host that has never written one falls back to the
 `current` symlink — the deploy workflow flips it only after `deploy.sh` returns,
 so mid-deploy it still names the release that is live — reusing the current data
 and companion SHAs, which are the only ones available in that case. With neither
@@ -339,7 +339,11 @@ unhealthy stops rather than walking further back.
 Note the limits: Compose has already recreated the backend by the time the gate
 runs, so a rollback is a redeploy, not an undo. It cannot revert a Flyway
 migration the new release applied, and the symlink fallback restores the old
-application image against the new data and companion images.
+application image against the new data and companion images. The older backend
+still starts on the newer schema: its Flyway check accepts a versioned migration
+newer than its own and a repeatable migration it does not ship. So a rollback
+works while migrations stay additive. A release built before that rule refuses a
+repeatable it lacks, which is how the rollback of 15 November 2026 failed.
 
 **Build cache is not pruned on a schedule.** The daemon enforces its own cap, so
 `daemon.json` on the deploy host needs:

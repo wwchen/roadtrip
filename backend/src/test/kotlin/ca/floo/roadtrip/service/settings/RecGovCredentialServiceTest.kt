@@ -665,6 +665,20 @@ class RecGovCredentialServiceTest {
         }
 
     @Test
+    fun `a login page the companion could not drive clears the challenge`() =
+        runBlocking {
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            companion.loginResult = CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_PAGE_CHANGED, null)
+            svc.login(testUserId)
+
+            assertEquals(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, svc.completeMfa(testUserId, "123456").error)
+            assertTrue(companion.mfaCalls.isEmpty())
+        }
+
+    @Test
     fun `a rejected code clears the challenge so the next attempt starts a fresh login`() =
         runBlocking {
             val companion =

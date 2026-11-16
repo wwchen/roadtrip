@@ -132,8 +132,9 @@ jobs:
           branch="$4"
           release="$HOME/.roadtrip/releases/$sha"
           cd "$release"
-          scripts/deploy.sh prod "$sha" "$data_sha" "$companion_sha" "$branch"
+          scripts/deploy.sh prod "$sha" "$data_sha" "$companion_sha" "$branch" </dev/null
           ln -sfn "$release" "$HOME/.roadtrip/current"
+          test "$(readlink "$HOME/.roadtrip/current")" = "$release"
           REMOTE
           ssh -o BatchMode=yes mini@mini-ca \
             "bash -s -- '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA' '$DEPLOY_BRANCH'" \
@@ -313,3 +314,8 @@ jobs:
           echo "telemetry pipeline check failed"
           exit 1
           REMOTE
+
+      - name: Record the last good release
+        run: |
+          ssh -o BatchMode=yes mini@mini-ca \
+            "cd \"\$HOME/.roadtrip/releases/$DEPLOY_SHA\" && scripts/deploy.sh record-good '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA' '$DEPLOY_BRANCH'"

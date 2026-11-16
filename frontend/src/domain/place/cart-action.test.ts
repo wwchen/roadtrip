@@ -116,6 +116,24 @@ describe('nextCartActions, answers', () => {
     expect(heldOn(pending, otherSite)).toBe(pending);
     expect(failedOn(pending, otherNight)).toBe(pending);
   });
+
+  test('a failure that names a cart keeps it, since the hold may have landed anyway', () => {
+    const failed = nextCartActions(requested(NO_CART_ACTIONS), {
+      type: 'failed',
+      cell,
+      code: 'hold_unanswered',
+      cartUrl: CART,
+      holder: 'BC Parks',
+    });
+
+    expect(cartActionFor(failed, '42', '2026-07-04')).toEqual({
+      kind: 'failed',
+      cell,
+      code: 'hold_unanswered',
+      cartUrl: CART,
+      holder: 'BC Parks',
+    });
+  });
 });
 
 describe('nextCartActions, the hold lapsing', () => {

@@ -5,6 +5,7 @@ on:
     types: [vercel.deployment.success]
 
 permissions:
+  contents: read
   statuses: write
 
 env:
@@ -36,19 +37,18 @@ jobs:
           SHA: ${{ steps.target.outputs.sha }}
         run: gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=pending -f context="$STATUS_CONTEXT" -f target_url="$RUN_URL" -f description="Searching the preview for $PROBE_NAME"
 
+      - name: Check out the probe script
+        if: steps.target.outputs.skip == 'false'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Search for the probe campground and open its page through the app
         if: steps.target.outputs.skip == 'false'
         env:
-          PREVIEW_URL: ${{ steps.target.outputs.url }}
-          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          BASE_URL: ${{ steps.target.outputs.url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          [ -n "$BYPASS" ] || { echo "VERCEL_AUTOMATION_BYPASS_SECRET is not set"; exit 1; }
-          fetch() { curl -fsS --retry 2 --retry-delay 5 --max-time 30 -H "x-vercel-protection-bypass: $BYPASS" "$PREVIEW_URL$1"; }
-          poi=$(fetch "/api/campgrounds/search?bbox=$PROBE_BBOX" | jq -er --arg name "$PROBE_NAME" 'first(.campgrounds[] | select(.name == $name) | .poiId)') \
-            || { echo "search over $PROBE_BBOX did not return $PROBE_NAME"; exit 1; }
-          fetch "/campgrounds/$poi" | grep -F "$PROBE_NAME" >/dev/null \
-            || { echo "/campgrounds/$poi does not show $PROBE_NAME"; exit 1; }
-          echo "preview serves $PROBE_NAME (poi $poi) through search and its page"
+          [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ] || { echo "VERCEL_AUTOMATION_BYPASS_SECRET is not set"; exit 1; }
+          node scripts/probe-deployment.mjs catalog
 
       - name: Report the result on the deployed commit
         if: always() && steps.target.outputs.skip == 'false'

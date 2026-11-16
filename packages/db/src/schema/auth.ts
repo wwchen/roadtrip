@@ -13,15 +13,14 @@ import {
   unique,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { USER_STATUSES, USER_THEMES, type UserStatus, type UserTheme } from '@roadtrip/domain';
 import { bytea } from '../types/bytea.js';
 import { equalsText, textIn } from './constraints.js';
 
-export const USER_STATUSES = ['active', 'disabled'] as const;
-export const USER_THEMES = ['light', 'dark', 'system'] as const;
+export { USER_STATUSES, USER_THEMES, type UserStatus, type UserTheme };
+
 export const USER_ROLES = ['admin'] as const;
 
-export type UserStatus = (typeof USER_STATUSES)[number];
-export type UserTheme = (typeof USER_THEMES)[number];
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const appUser = pgTable(

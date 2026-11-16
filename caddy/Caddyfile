@@ -49,6 +49,13 @@ http://roadtrip-egress.floo.ca {
 	handle @egress {
 		reverse_proxy backend:8765
 	}
+	@booking_relay {
+		method POST
+		path /api/internal/booking/*
+	}
+	handle @booking_relay {
+		reverse_proxy backend:8765
+	}
 	@kotlin_read {
 		method GET
 		path_regexp ^/api/(availability/(pollers(/summary|/[0-9]+/runs)?|runs|changes(/summary)?)|docs(/.*)?)$

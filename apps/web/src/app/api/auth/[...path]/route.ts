@@ -1,5 +1,6 @@
 import { neonAuth } from '@/server/auth/neonAuth';
 import { apiError } from '@/server/contractIds';
+import { crossOriginRefusal } from '@/server/mapper/http/sameOrigin';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,8 @@ type Handler = (request: Request, context?: unknown) => Promise<Response> | Resp
 
 function delegate(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'): Handler {
   return (request, context) => {
+    const refusal = crossOriginRefusal(request);
+    if (refusal !== null) return Response.json(refusal.body, { status: refusal.status });
     const auth = neonAuth();
     if (auth === null) return apiError(STATUS_NOT_FOUND, NOT_FOUND);
     const handlers = auth.handler() as unknown as Record<string, Handler>;

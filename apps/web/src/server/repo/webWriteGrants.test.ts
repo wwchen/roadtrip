@@ -8,7 +8,9 @@ import { startCatalogFixture, type CatalogFixture } from '../testing/catalogFixt
 const WRITER_ROLE = 'roadtrip_web_writer';
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const FLYWAY_MIGRATION = path.join(REPO_ROOT, 'backend/src/main/resources/db/migration/R__web_writer_grants.sql');
-const DRIZZLE_MIGRATION = path.join(REPO_ROOT, 'packages/db/migrations/0003_web_writer.sql');
+const DRIZZLE_MIGRATIONS = ['0003_web_writer.sql', '0004_booking_credentials_writer.sql'].map((file) =>
+  path.join(REPO_ROOT, 'packages/db/migrations', file),
+);
 const READER_INIT_SCRIPT = path.join(REPO_ROOT, 'postgres-init/20-web-reader.sh');
 const WRITER_INIT_SCRIPT = path.join(REPO_ROOT, 'postgres-init/30-web-writer.sh');
 const CONTAINER_INIT_DIR = '/docker-entrypoint-initdb.d';
@@ -32,8 +34,8 @@ afterAll(async () => {
   await fixture?.stop();
 });
 
-test('the Flyway migration runs the same writer grants as the Drizzle migration Neon gets', () => {
-  expect(statementsOf(FLYWAY_MIGRATION)).toBe(statementsOf(DRIZZLE_MIGRATION));
+test('the Flyway migration runs the same writer grants as the Drizzle migrations Neon gets', () => {
+  expect(statementsOf(FLYWAY_MIGRATION)).toBe(DRIZZLE_MIGRATIONS.map(statementsOf).join(' '));
 });
 
 test('the writer init script sets the password through the reader script without printing it', async () => {

@@ -178,6 +178,12 @@ The panel then says we stopped waiting and that the hold **may** still have land
 never claims the hold failed, because nothing on this side can know. It names the
 provider's cart, from the capability gate when the refusal itself carried no name.
 
+When the refusal itself carries a `cart_url`, the panel links it. A failure is the
+third road to the same harm the lapsed state guards: the server could not confirm the
+hold, but the vendor may be holding the site regardless, so the only safe reading is
+the cart itself. The link is conditional rather than always drawn, because a cart we
+were never handed is not a cart we can point at.
+
 There is no optimistic cell: a cell reads *held* only once the vendor said so, and a
 refusal says which refusal it was, by the server's own code through
 `lib/settings-errors.ts`, instead of quietly returning to the offer. A 200 **is** the

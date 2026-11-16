@@ -249,6 +249,36 @@ describe('SiteCartPopover', () => {
     expect(step()).toBeEnabled();
   });
 
+  test('a failure that came back with a cart links it, since the hold may have landed', () => {
+    show({
+      actions: cartActionsOf({
+        kind: 'failed',
+        cell: CELL,
+        code: HOLD_UNANSWERED,
+        cartUrl: CART_URL,
+        holder: HOLDER,
+      }),
+    });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(bookingCopy.holdUnanswered(HOLDER));
+    expect(screen.getByRole('link', { name: bookingCopy.openCart(HOLDER) })).toHaveAttribute(
+      'href',
+      CART_URL,
+    );
+  });
+
+  test('a failure with no cart to show offers no link', () => {
+    show({
+      actions: cartActionsOf({ kind: 'failed', cell: CELL, code: 'not_available', holder: HOLDER }),
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      settingsErrorMessage('not_available', HOLDER),
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
   test('an answer about another cell is not read as this one', () => {
     show({
       actions: cartActionsOf({

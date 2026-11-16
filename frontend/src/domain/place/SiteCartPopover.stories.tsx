@@ -148,6 +148,20 @@ export const Unanswered: Story = {
   },
 };
 
+export const UnansweredWithCart: Story = {
+  args: {
+    ...BASE,
+    gate: { state: 'ready', onAddToCart: noop },
+    actions: cartActionsOf({
+      kind: 'failed',
+      cell: CELL,
+      code: HOLD_UNANSWERED,
+      cartUrl: CART_URL,
+      holder: HOLDER,
+    }),
+  },
+};
+
 export const HeldAfterLapse: Story = {
   args: {
     ...BASE,

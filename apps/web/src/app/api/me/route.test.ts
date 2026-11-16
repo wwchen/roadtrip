@@ -26,7 +26,7 @@ test('answers the signed-in user', async () => {
   authPort.mockReturnValue({
     currentUser: async () => ({ id: 'neon-1', email: 'a@example.com', name: null, emailVerified: true }),
   });
-  linkedAppUser.mockResolvedValue({ id: 7n, email: 'a@example.com', emailVerified: true, displayName: null, theme: 'system' });
+  linkedAppUser.mockResolvedValue({ id: 7n, email: 'a@example.com', emailVerified: true, displayName: null, theme: 'system', status: 'active' });
   const response = await GET();
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ authenticated: true, user: { id: 7, email: 'a@example.com' } });

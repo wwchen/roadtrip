@@ -193,3 +193,12 @@ test('an unknown POI is not_found', async () => {
     new AvailabilityTargetError('not_found'),
   );
 });
+
+test('the matrix carries the capability the reader-aware lookup answers for its campsites', async () => {
+  const capabilities = vi.fn().mockResolvedValue({ trigger_kinds: [], add_to_cart: { state: 'ready', provider: 'recgov', provider_display: 'Recreation.gov' } });
+  const result = await availabilityWeek(fixture.readDb, NEAR_POI_ID, [], start, end, SETTINGS, storedAnswer('available'), capabilities);
+  expect(result.watch_capabilities.add_to_cart.state).toBe('ready');
+  const [target] = capabilities.mock.calls[0]!;
+  expect(target.campground.campgroundId).toBe(NEAR_CAMPGROUND_ID);
+  expect(target.campsites.length).toBeGreaterThan(0);
+});

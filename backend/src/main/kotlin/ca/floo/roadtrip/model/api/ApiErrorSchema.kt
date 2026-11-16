@@ -11,4 +11,5 @@ data class ApiErrorSchema(
     val provider: String? = null,
     /** That vendor's booking site as a person reads it. Absent with [provider]. */
     @SerialName("provider_display") val providerDisplay: String? = null,
+    @SerialName("cart_url") val cartUrl: String? = null,
 )

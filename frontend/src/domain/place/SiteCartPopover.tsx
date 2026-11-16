@@ -209,6 +209,16 @@ export function SiteCartPopover({
                   ? bookingCopy.holdUnanswered(failed.holder)
                   : settingsErrorMessage(failed.code, failed.holder)}
               </p>
+              {failed.cartUrl ? (
+                <a
+                  className="rt-site-cart__link"
+                  href={failed.cartUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {bookingCopy.openCart(failed.holder)}
+                </a>
+              ) : null}
             </div>
           ) : null}
         </>

@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { AUTH_UNAVAILABLE, EMAIL_NOT_VERIFIED, PASSWORD_TOO_SHORT, USER_ALREADY_EXISTS, USER_NOT_FOUND } from './authPort';
-import { portCodeOf } from './neonAuth';
+import { causeOf, portCodeOf } from './neonAuth';
 
 const STATUS_FORBIDDEN = 403;
 const STATUS_UNPROCESSABLE = 422;
@@ -35,4 +35,10 @@ test('a partial sign-in setup logs the error and leaves sign-in off', async () =
   expect(logged).toHaveBeenCalledTimes(1);
   vi.unstubAllEnvs();
   logged.mockRestore();
+});
+
+test('the cause names the status and code Neon Auth answered, and says when either is absent', () => {
+  expect(causeOf({ status: 500 })).toBe('status=500 code=none');
+  expect(causeOf({ code: 'weak_password', status: 422 })).toBe('status=422 code=weak_password');
+  expect(causeOf({})).toBe('status=none code=none');
 });

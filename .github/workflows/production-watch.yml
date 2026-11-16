@@ -1,0 +1,156 @@
+name: Production watch
+
+on:
+  workflow_run:
+    workflows: [CI, Deploy]
+    types: [completed]
+    branches: [master]
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL || 'https://roadtrip.floo.ca' }}
+  PROBE_NAME: Mahood Lake
+  PROBE_BBOX: -120.2,52.1,-120.0,52.3
+  AWAIT_TIMEOUT_SECONDS: 900
+  LAG_THRESHOLD_HOURS: 6
+  WATCHED_BRANCH: master
+  DEPLOY_WORKFLOW: deploy.yml
+  CI_WORKFLOW: ci.yml
+  CI_RUN_LOOKBACK: 50
+  SMOKE_ISSUE_TITLE: The smoke check of the public site is failing
+  LAG_ISSUE_TITLE: mini-ca is behind master
+  SMOKE_CONCLUSIONS: success failure
+  ISSUE_LIST_LIMIT: 200
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      stood_down: ${{ steps.head.outputs.stood_down }}
+    steps:
+      - name: Decide whether this run checks the public site
+        id: head
+        env:
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+          case " $SMOKE_CONCLUSIONS " in
+            *" $TRIGGER_CONCLUSION "*) ;;
+            *)
+              if [ -n "$TRIGGER_CONCLUSION" ]; then
+                echo "stood_down=true" >> "$GITHUB_OUTPUT"
+                echo "the triggering run concluded $TRIGGER_CONCLUSION; only $SMOKE_CONCLUSIONS are checked"
+                exit 0
+              fi
+              ;;
+          esac
+          sha=$(gh api "repos/$GH_REPO/commits/$WATCHED_BRANCH" --jq .sha)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ -n "$TRIGGER_SHA" ] && [ "$TRIGGER_SHA" != "$sha" ]; then
+            echo "stood_down=true" >> "$GITHUB_OUTPUT"
+            echo "$WATCHED_BRANCH has moved past $TRIGGER_SHA; the run for $sha checks it"
+          fi
+
+      - name: Check out the probe script
+        if: steps.head.outputs.stood_down != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Wait for the public site to serve that commit
+        if: steps.head.outputs.stood_down != 'true'
+        env:
+          BASE_URL: ${{ env.PUBLIC_BASE_URL }}
+          EXPECTED_SHA: ${{ steps.head.outputs.sha }}
+        run: node scripts/probe-deployment.mjs await-sha
+
+      - name: Search for the probe campground and open its page
+        if: steps.head.outputs.stood_down != 'true'
+        env:
+          BASE_URL: ${{ env.PUBLIC_BASE_URL }}
+        run: node scripts/probe-deployment.mjs catalog
+
+      - name: Check the public surface
+        if: steps.head.outputs.stood_down != 'true'
+        env:
+          BASE_URL: ${{ env.PUBLIC_BASE_URL }}
+        run: node scripts/probe-deployment.mjs surface
+
+  lag:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Find green commits that no deploy has followed
+        run: |
+          set -euo pipefail
+          deployed_at=$(gh run list --workflow "$DEPLOY_WORKFLOW" --branch "$WATCHED_BRANCH" --status success --limit 1 --json createdAt --jq '.[0].createdAt // empty')
+          if [ -z "$deployed_at" ]; then
+            echo "no successful $DEPLOY_WORKFLOW run exists on $WATCHED_BRANCH"
+            exit 1
+          fi
+          waiting=$(gh run list --workflow "$CI_WORKFLOW" --branch "$WATCHED_BRANCH" --event push --status success --limit "$CI_RUN_LOOKBACK" --json headSha,updatedAt \
+            | jq --arg deployed "$deployed_at" '[.[] | select(.updatedAt > $deployed)]')
+          count=$(jq length <<<"$waiting")
+          if [ "$count" -eq 0 ]; then
+            echo "a deploy has succeeded since the last green $CI_WORKFLOW run on $WATCHED_BRANCH"
+            exit 0
+          fi
+          oldest_sha=$(jq -r 'last | .headSha' <<<"$waiting")
+          oldest_at=$(jq -r 'last | .updatedAt' <<<"$waiting")
+          limit=$(date -u -d "$LAG_THRESHOLD_HOURS hours ago" +%s)
+          if [ "$(date -u -d "$oldest_at" +%s)" -lt "$limit" ]; then
+            echo "green commits on $WATCHED_BRANCH not deployed: $count; the oldest, $oldest_sha, passed CI at $oldest_at"
+            exit 1
+          fi
+          echo "green commits on $WATCHED_BRANCH waiting for a deploy: $count, all within $LAG_THRESHOLD_HOURS hours"
+
+  report:
+    needs: [smoke, lag]
+    if: ${{ !cancelled() && (needs.smoke.outputs.stood_down != 'true' || needs.lag.result != 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      SMOKE_RESULT: ${{ needs.smoke.outputs.stood_down == 'true' && 'skipped' || needs.smoke.result }}
+      LAG_RESULT: ${{ needs.lag.result }}
+    steps:
+      - name: Open, update, or close each check's issue
+        run: |
+          set -euo pipefail
+          open=$(gh issue list --state open --limit "$ISSUE_LIST_LIMIT" --json number,title)
+          checks=("$SMOKE_RESULT" "$SMOKE_ISSUE_TITLE" "$LAG_RESULT" "$LAG_ISSUE_TITLE")
+          for ((i = 0; i < ${#checks[@]}; i += 2)); do
+            result=${checks[i]}
+            title=${checks[i + 1]}
+            number=$(jq -r --arg title "$title" 'map(select(.title == $title)) | first | .number // empty' <<<"$open")
+            case "$result" in
+              failure)
+                if [ -n "$number" ]; then
+                  gh issue comment "$number" --body "Still failing. Run: $RUN_URL"
+                else
+                  gh issue create --title "$title" --body "Run: $RUN_URL"
+                fi
+                ;;
+              success)
+                if [ -n "$number" ]; then
+                  gh issue close "$number" --comment "The check passed. Run: $RUN_URL"
+                fi
+                ;;
+            esac
+          done

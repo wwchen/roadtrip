@@ -62,6 +62,7 @@ export interface ApiErrorSchema {
   detail?: string;
   provider?: string;
   provider_display?: string;
+  cart_url?: string;
 }
 
 export interface AvailabilityCacheBlock {
@@ -267,6 +268,78 @@ export interface BookingRefDto {
   provider: string;
   ref: string;
 }
+
+export interface BookingRelayActionDto {
+  outcome: BookingRelayActionOutcome;
+  failure?: BookingRelayFailureDto;
+}
+
+export type BookingRelayActionOutcome = 'ok' | 'failed' | 'timed_out';
+
+export interface BookingRelayAtcRequest {
+  profile_id: string;
+  vendor_site_id: string;
+  start_date: string;
+  end_date: string;
+}
+
+export type BookingRelayFailureCategory = 'caller_action' | 'retry_later' | 'upstream';
+
+export interface BookingRelayFailureDto {
+  code: string;
+  category: BookingRelayFailureCategory;
+  detail?: string;
+}
+
+export interface BookingRelayHealthDto {
+  session: BookingRelaySession;
+  code?: string;
+  detail?: string;
+}
+
+export interface BookingRelayHoldDto {
+  outcome: BookingRelayHoldOutcome;
+  cart_url?: string;
+  failure?: BookingRelayFailureDto;
+}
+
+export type BookingRelayHoldOutcome = 'held' | 'blocked' | 'timed_out';
+
+export interface BookingRelayLoginDto {
+  outcome: BookingRelayLoginOutcome;
+  challenge_id?: string;
+  expires_at?: string;
+  failure?: BookingRelayFailureDto;
+}
+
+export type BookingRelayLoginOutcome = 'signed_in' | 'mfa_required' | 'failed' | 'timed_out';
+
+export interface BookingRelayLoginRequest {
+  profile_id: string;
+  username: string;
+  password: string;
+}
+
+export interface BookingRelayMfaRequest {
+  profile_id: string;
+  challenge_id: string;
+  mfa_code: string;
+}
+
+export interface BookingRelayProfileRequest {
+  profile_id: string;
+}
+
+export type BookingRelaySession = 'active' | 'never_logged_in' | 'inactive' | 'check_failed' | 'unavailable';
+
+export interface BookingRelaySignOutDto {
+  outcome: BookingRelaySignOutOutcome;
+  signed_out: boolean;
+  profile_destroyed: boolean;
+  failure?: BookingRelayFailureDto;
+}
+
+export type BookingRelaySignOutOutcome = 'wiped' | 'failed' | 'timed_out';
 
 export interface BookingSettingsDto {
   recgov_configured: boolean;
@@ -884,6 +957,13 @@ export const API_ENDPOINTS = [
   { method: 'GET', path: '/api/health', request: null, requestRequired: true, success: { status: 200, type: 'HealthResponseDto' }, errors: [] },
   { method: 'GET', path: '/api/health/ready', request: null, requestRequired: true, success: { status: 200, type: 'ReadinessResponseDto' }, errors: [{ status: 503, type: 'ReadinessResponseDto' }] },
   { method: 'POST', path: '/api/internal/availability/fetch', request: 'AvailabilityEgressRequestDto', requestRequired: true, success: { status: 200, type: 'AvailabilityEgressResponseDto' }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 404, type: 'AvailabilityErrorDto' }, { status: 501, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
+  { method: 'POST', path: '/api/internal/booking/atc', request: 'BookingRelayAtcRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayHoldDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayHoldDto' }] },
+  { method: 'POST', path: '/api/internal/booking/health', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayHealthDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayHealthDto' }] },
+  { method: 'POST', path: '/api/internal/booking/login', request: 'BookingRelayLoginRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayLoginDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayLoginDto' }] },
+  { method: 'POST', path: '/api/internal/booking/login/mfa', request: 'BookingRelayMfaRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayLoginDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayLoginDto' }] },
+  { method: 'POST', path: '/api/internal/booking/refresh', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayActionDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayActionDto' }] },
+  { method: 'POST', path: '/api/internal/booking/signout', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelaySignOutDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelaySignOutDto' }] },
+  { method: 'POST', path: '/api/internal/booking/verify', request: 'BookingRelayProfileRequest', requestRequired: true, success: { status: 200, type: 'BookingRelayActionDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 401, type: 'ApiErrorSchema' }, { status: 504, type: 'BookingRelayActionDto' }] },
   { method: 'GET', path: '/api/me', request: null, requestRequired: true, success: { status: 200, type: 'MeResponseDto' }, errors: [] },
   { method: 'POST', path: '/api/pois', request: 'PoisRequestSchema', requestRequired: true, success: { status: 200, type: 'PoiFeatureCollectionSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }] },
   { method: 'POST', path: '/api/pois/availability/stays', request: 'StayCheckRequestDto', requestRequired: true, success: { status: 200, type: null, events: { answer: 'StayAnswerDto', done: 'StayCheckDoneDto' } }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },

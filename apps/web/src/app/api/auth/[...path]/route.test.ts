@@ -1,9 +1,10 @@
 import { expect, test, vi } from 'vitest';
+import { browserRequest } from '@/server/testing/browserRequest';
 
 vi.mock('@/server/auth/neonAuth', () => ({ neonAuth: vi.fn(() => null) }));
 const { GET, POST } = await import('./route');
 
-const request = (method: string) => new Request('http://localhost/api/auth/get-session', { method });
+const request = (method: string) => browserRequest('http://localhost/api/auth/get-session', { method });
 
 test.each([
   ['GET', GET],
@@ -12,4 +13,14 @@ test.each([
   const response = await handler(request(method));
   expect(response.status).toBe(404);
   expect(await response.json()).toEqual({ error: 'not_found' });
+});
+
+test('a write from another origin is refused before it reaches Neon Auth', async () => {
+  const forged = new Request('http://localhost/api/auth/sign-out', {
+    method: 'POST',
+    headers: { origin: 'https://evil.test', 'sec-fetch-site': 'cross-site' },
+  });
+  const response = await POST(forged);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: 'cross_origin' });
 });

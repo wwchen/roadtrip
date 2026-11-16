@@ -20,6 +20,13 @@ enforceable — the backend authenticates the user and only ever passes *their*
 
 Transport is plain HTTP on the internal Docker network; TLS is not added.
 
+Vercel reaches the companion only through the backend's booking relay,
+`POST /api/internal/booking/{health,refresh,verify,signout,login,login/mfa,atc}`, which requires
+`BOOKING_EGRESS_TOKEN` as a bearer, reads no table and passes the `profile_id` in the body through
+unchanged. Vercel's profiles are `n:<app_user.id>`. Each relayed call is bounded by
+`BOOKING_RELAY_TIMEOUT` (90 s). See `docs/web-app.md`, "Rec.gov settings and add to cart on
+Vercel".
+
 ## Authentication
 
 Every route that returns data or touches a profile requires the shared secret
