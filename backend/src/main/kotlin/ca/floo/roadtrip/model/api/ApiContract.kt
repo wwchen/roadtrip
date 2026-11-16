@@ -373,6 +373,7 @@ object ApiContract {
                         HTTP_BAD_REQUEST,
                         HTTP_NOT_FOUND,
                         HTTP_NOT_IMPLEMENTED,
+                        HTTP_SERVICE_UNAVAILABLE,
                     ).map { ApiBody(it, AvailabilityErrorDto::class) },
                 conditional = true,
             ),

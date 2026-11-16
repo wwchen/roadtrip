@@ -4,15 +4,19 @@ import {
   STAY_CHECK_PER_POI_TIMEOUT_MS,
   STAY_CHECK_STREAM_TIMEOUT_MS,
 } from '@/server/config';
+import { availabilityError } from '@/server/availabilityRequest';
 import { serverDb } from '@/server/db';
+import { CALLER_THROTTLED, callerAddress } from '@/server/mapper/http/callerAddress';
 import { jsonBody } from '@/server/requestBody';
 import { configuredEgress } from '@/server/service/availability/availabilityMatrixService';
 import { answerStay, runStayCheck, type StayEvent } from '@/server/service/availability/stayCheckService';
 import { parseStayCheckRequest } from '@/server/stayCheckRequest';
+import { callerLimits } from '@/server/wiring/callerLimits';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 150;
 
+const STATUS_THROTTLED = 503;
 const KEEP_ALIVE = ': keep-alive\n\n';
 const EVENT_STREAM_HEADERS = {
   'content-type': 'text/event-stream; charset=utf-8',
@@ -27,6 +31,9 @@ function frame(event: StayEvent): string {
 export async function POST(request: Request): Promise<Response> {
   const parsed = parseStayCheckRequest(await jsonBody(request));
   if (parsed instanceof Response) return parsed;
+  if (!callerLimits().stayCheckPois.allow(callerAddress(request), parsed.poiIds.length)) {
+    return availabilityError(STATUS_THROTTLED, CALLER_THROTTLED);
+  }
   const db = await serverDb();
   const egress = configuredEgress(STAY_CHECK_PER_POI_TIMEOUT_MS);
   const encoder = new TextEncoder();

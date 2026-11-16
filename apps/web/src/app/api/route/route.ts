@@ -1,6 +1,8 @@
 import type { RouteErrorDto } from '@/server/contract';
+import { CALLER_THROTTLED, callerAddress } from '@/server/mapper/http/callerAddress';
 import { parseRouteQuery } from '@/server/routeRequest';
 import { routePlanner } from '@/server/service/routePlanService';
+import { callerLimits } from '@/server/wiring/callerLimits';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +10,7 @@ const STATUS_BAD_REQUEST = 400;
 const STATUS_UNAVAILABLE = 503;
 const ROUTING_UNAVAILABLE = 'routing_unavailable';
 const TOKEN_NOT_SET = 'MAPBOX_TOKEN not set';
+const THROTTLED_DETAIL = 'too many routing requests from this address; try again shortly';
 
 const routeError = (error: string, detail: string, status: number) => {
   const body: RouteErrorDto = { error, detail };
@@ -19,6 +22,7 @@ export async function GET(request: Request): Promise<Response> {
   if (planner === null) return routeError(ROUTING_UNAVAILABLE, TOKEN_NOT_SET, STATUS_UNAVAILABLE);
   const query = parseRouteQuery(new URL(request.url).searchParams);
   if ('error' in query) return routeError(query.error, query.detail, STATUS_BAD_REQUEST);
+  if (!callerLimits().mapbox.allow(callerAddress(request))) return routeError(CALLER_THROTTLED, THROTTLED_DETAIL, STATUS_UNAVAILABLE);
   const result = await planner.plan(query.coords, query.radiusMiles);
   switch (result.status) {
     case 'planned':

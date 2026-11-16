@@ -1,9 +1,9 @@
 import { campsiteKinds, type CampsiteKind } from '@roadtrip/domain';
 import { BAD_DATE_WINDOW, BAD_REQUEST, STATUS_BAD_REQUEST, availabilityError, parseAvailabilityPoiId, unknownSiteTypeDetail } from './availabilityRequest';
+import { STAY_CHECK_MAX_POIS } from './config';
 import type { StayCheckRequestDto } from './contract';
 import type { StayCheckRequest } from './service/availability/stayCheckService';
 
-export const STAY_CHECK_MAX_POIS = 50;
 export const STAY_CHECK_MIN_MAX_AGE_SECONDS = 60;
 export const STAY_CHECK_DEFAULT_MAX_AGE_SECONDS = 7200;
 const TOO_MANY_POIS = 'too_many_pois';

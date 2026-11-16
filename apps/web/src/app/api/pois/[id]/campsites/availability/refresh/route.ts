@@ -10,13 +10,16 @@ import {
 } from '@/server/availabilityRequest';
 import { AVAILABILITY_EGRESS_TIMEOUT_MS, AVAILABILITY_STORED_TIMEOUT_MS } from '@/server/config';
 import { serverDb } from '@/server/db';
+import { CALLER_THROTTLED, callerAddress } from '@/server/mapper/http/callerAddress';
 import { AvailabilityTargetError, AvailabilityWindowRefusedError, configuredEgress } from '@/server/service/availability/availabilityMatrixService';
 import { planRefresh, runRefresh } from '@/server/service/availability/availabilityRefreshService';
+import { callerLimits } from '@/server/wiring/callerLimits';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const STATUS_ACCEPTED = 202;
+const STATUS_THROTTLED = 503;
 const REFRESH_DISABLED = 'refresh_disabled';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
@@ -24,6 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (poiId === null) return availabilityError(STATUS_BAD_REQUEST, BAD_POI_ID);
   const query = parseAvailabilityQuery(new URL(request.url));
   if (query instanceof Response) return query;
+  if (!callerLimits().refresh.allow(callerAddress(request))) return availabilityError(STATUS_THROTTLED, CALLER_THROTTLED);
   const egress = configuredEgress(AVAILABILITY_EGRESS_TIMEOUT_MS);
   try {
     const plan = await planRefresh(await serverDb(), poiId, query.startDate, query.endDate, configuredEgress(AVAILABILITY_STORED_TIMEOUT_MS));

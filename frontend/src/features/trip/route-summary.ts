@@ -108,6 +108,7 @@ const ROUTE_ERROR_MESSAGES = new Map<string, string>([
   ['too_few_points', 'Need at least 2 stops.'],
   ['too_many_points', 'Too many stops.'],
   ['routing_unavailable', 'Routing temporarily unavailable.'],
+  ['ip_throttled', 'Too many route requests — wait a moment and try again.'],
 ]);
 
 /**

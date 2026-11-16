@@ -6,6 +6,11 @@ const planRefresh = vi.fn();
 const runRefresh = vi.fn();
 vi.mock('@/server/service/availability/availabilityRefreshService', () => ({ planRefresh, runRefresh }));
 vi.mock('@/server/db', () => ({ serverDb: vi.fn().mockResolvedValue({}) }));
+const limits = vi.hoisted(() => {
+  const allow = vi.fn((_caller: string, _cost?: number) => true);
+  return { allow, all: { refresh: { allow }, stayCheckPois: { allow }, mapbox: { allow } } };
+});
+vi.mock('@/server/wiring/callerLimits', () => ({ callerLimits: () => limits.all }));
 const { AvailabilityTargetError, AvailabilityWindowRefusedError } = await import('@/server/service/availability/availabilityMatrixService');
 const { POST, maxDuration } = await import('./route');
 
@@ -72,4 +77,16 @@ test('malformed dates are 400', async () => {
 
 test('a bad id is 400', async () => {
   expect((await post('x')).status).toBe(400);
+});
+
+test('a caller over the refresh limit is 503 ip_throttled before any plan', async () => {
+  limits.allow.mockReturnValueOnce(false);
+  const response = await POST(
+    new Request('http://localhost/api/pois/7/campsites/availability/refresh', { method: 'POST', headers: { 'x-forwarded-for': '203.0.113.7' } }),
+    { params: Promise.resolve({ id: '7' }) },
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ error: 'ip_throttled' });
+  expect(limits.allow).toHaveBeenLastCalledWith('203.0.113.7');
+  expect(planRefresh).not.toHaveBeenCalled();
 });

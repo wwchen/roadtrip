@@ -146,8 +146,7 @@ Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores
   ported from Kotlin's `StaySummary.kt`) and classifies egress failures as Kotlin's
   `StayFailureClassifier` does. A POI gets 45 s and the stream 120 s; the rest answer
   `timed_out` and `done` says `deadline_reached`. A keep-alive comment goes out every 15 s.
-  Unconfigured egress answers every POI `failed`, `provider_misconfigured`. Per-IP limiting is a
-  Vercel Firewall rule on the path (Kotlin's ceiling is 150 POIs a minute).
+  Unconfigured egress answers every POI `failed`, `provider_misconfigured`.
 
 Both are on only where `AVAILABILITY_EGRESS_URL` and both `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/
 `_SECRET` are set; a partial set fails at configuration. Unset, the matrix GET answers `503` and
@@ -168,10 +167,23 @@ How the call reaches mini-ca:
    `docker-compose.yml` (production), off in sandboxes. It has no credential of its own. Cells are
    named by `(data_provider, data_provider_ref)` and carry the time mini-ca observed them.
 
-Production needs one Vercel Firewall rule, set by the owner: rate-limit
-`POST /api/pois/*/campsites/availability/refresh` to 30 requests per minute per IP, the same
-ceiling Kotlin puts on its matrix read (`ip-rate-limit-per-minute`), because each refresh can
-reach a vendor.
+### Per-caller limits
+
+Each route that can reach a vendor or Mapbox spends from a per-address token bucket
+(`rateLimit/tokenBucket.ts`, a port of Kotlin's `IpRateLimiter`), and a caller over its limit gets
+`503 ip_throttled` before any work starts. A malformed request is refused first and spends
+nothing. The caller is the first `x-forwarded-for` address, which Vercel overwrites with the
+client's own; a request without one shares a single bucket.
+
+| Route | Bucket | Cost | Default per minute | Variable |
+|---|---|---|---|---|
+| `POST /api/pois/{id}/campsites/availability/refresh` | refresh | 1 | 30, Kotlin's `ip-rate-limit-per-minute` | `RATE_LIMIT_REFRESH_PER_MINUTE` |
+| `POST /api/pois/availability/stays` | stay check | 1 per POI | 150, Kotlin's `ip-poi-limit-per-minute` | `RATE_LIMIT_STAY_POIS_PER_MINUTE` (at least 50) |
+| `GET /api/route` and `GET /api/geocode` | Mapbox, one shared | 1 | 60 | `RATE_LIMIT_MAPBOX_PER_MINUTE` |
+
+The buckets live in memory, so on Vercel each function instance keeps its own, and a cold start
+resets them. They bound one caller on one instance, not the deployment: the global limit is a
+Vercel Firewall rule on the same paths, set by the owner.
 
 To turn it on:
 
@@ -179,7 +191,7 @@ To turn it on:
    Trust, create a service token and an Access application for the hostname whose policy is
    **Service Auth** including that token.
 2. Deploy mini-ca; production's compose turns the egress route on.
-3. Set the three variables in Vercel Production and add the Firewall rule.
+3. Set the three variables in Vercel Production and add the Firewall rules.
 4. Open a stale campground's matrix on the deployment and watch it refresh.
 
 ## Kotlin routes Vercel forwards

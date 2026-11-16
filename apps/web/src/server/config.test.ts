@@ -388,3 +388,22 @@ test('a booking cipher key that is not 32 bytes is a ConfigError', () => {
   vi.stubEnv('BOOKING_CREDENTIAL_ENCRYPTION_KEY', Buffer.alloc(16).toString('base64'));
   expect(() => config.bookingCipherKey).toThrow(ConfigError);
 });
+
+test('the per-caller limits default to the backend rates and read their variables', () => {
+  expect(config.callerLimits).toEqual({ refreshPerMinute: 30, stayPoisPerMinute: 150, mapboxPerMinute: 60 });
+  vi.stubEnv('RATE_LIMIT_REFRESH_PER_MINUTE', '5');
+  vi.stubEnv('RATE_LIMIT_STAY_POIS_PER_MINUTE', '50');
+  vi.stubEnv('RATE_LIMIT_MAPBOX_PER_MINUTE', '7');
+  expect(config.callerLimits).toEqual({ refreshPerMinute: 5, stayPoisPerMinute: 50, mapboxPerMinute: 7 });
+});
+
+test('a stay-check limit below the largest stay check is a ConfigError, since that check could never pass', () => {
+  vi.stubEnv('RATE_LIMIT_STAY_POIS_PER_MINUTE', '49');
+  expect(() => config.callerLimits).toThrow(ConfigError);
+  expect(() => config.callerLimits).toThrow(/RATE_LIMIT_STAY_POIS_PER_MINUTE must be at least 50/);
+});
+
+test.each(['0', 'lots'])('an unparseable per-caller limit %j is a ConfigError', (raw) => {
+  vi.stubEnv('RATE_LIMIT_MAPBOX_PER_MINUTE', raw);
+  expect(() => config.callerLimits).toThrow(/RATE_LIMIT_MAPBOX_PER_MINUTE/);
+});

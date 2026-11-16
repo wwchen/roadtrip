@@ -92,6 +92,7 @@ describe('routeErrorMessage', () => {
     expect(routeErrorMessage('too_few_points')).toBe('Need at least 2 stops.');
     expect(routeErrorMessage('too_many_points')).toBe('Too many stops.');
     expect(routeErrorMessage('routing_unavailable')).toBe('Routing temporarily unavailable.');
+    expect(routeErrorMessage('ip_throttled')).toBe('Too many route requests — wait a moment and try again.');
   });
 
   test('falls back to the status for a code it does not know', () => {

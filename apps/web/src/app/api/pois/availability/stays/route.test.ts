@@ -1,5 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import { browserRequest } from '@/server/testing/browserRequest';
+const limits = vi.hoisted(() => {
+  const allow = vi.fn((_caller: string, _cost?: number) => true);
+  return { allow, all: { refresh: { allow }, stayCheckPois: { allow }, mapbox: { allow } } };
+});
+vi.mock('@/server/wiring/callerLimits', () => ({ callerLimits: () => limits.all }));
 
 const runStayCheck = vi.fn();
 vi.mock('@/server/service/availability/stayCheckService', () => ({ runStayCheck, answerStay: vi.fn() }));
@@ -32,4 +37,14 @@ test('answers stream as named SSE events, then done, and the stream closes', asy
     'event: answer\ndata: {"poi_id":7,"outcome":"answered"}\n\nevent: done\ndata: {"outcome":"complete"}\n\n',
   );
   expect(runStayCheck.mock.calls[0]![0]).toEqual([7n]);
+});
+
+test('a stay check costs one per campground, and a caller over the limit is 503 ip_throttled before any event', async () => {
+  runStayCheck.mockClear();
+  limits.allow.mockReturnValueOnce(false);
+  const response = await post({ poi_ids: [7, 8, 9], start_date: '2026-12-01', end_date: '2026-12-03' });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ error: 'ip_throttled' });
+  expect(limits.allow).toHaveBeenLastCalledWith(expect.any(String), 3);
+  expect(runStayCheck).not.toHaveBeenCalled();
 });

@@ -1,6 +1,8 @@
 import { apiError } from '@/server/contractIds';
+import { CALLER_THROTTLED, callerAddress } from '@/server/mapper/http/callerAddress';
 import { geocode, GeocodeUnavailableError } from '@/server/service/routePlanService';
 import { config } from '@/server/config';
+import { callerLimits } from '@/server/wiring/callerLimits';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +24,7 @@ export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const query = (params.get('q') ?? '').trim();
   if (query.length === 0 || query.length > MAX_QUERY_LENGTH) return apiError(STATUS_BAD_REQUEST, BAD_QUERY);
+  if (!callerLimits().mapbox.allow(callerAddress(request))) return apiError(STATUS_UNAVAILABLE, CALLER_THROTTLED);
   const rawLimit = params.get('limit');
   const limit = Math.min(Math.max(rawLimit !== null && INTEGER.test(rawLimit) ? Number(rawLimit) : DEFAULT_LIMIT, MIN_LIMIT), MAX_LIMIT);
   const proximity = params.get('proximity') ?? undefined;

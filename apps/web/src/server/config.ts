@@ -49,6 +49,13 @@ const DEFAULT_AVAILABILITY_TTL_SECONDS = 7200;
 const MAX_AVAILABILITY_TTL_SECONDS = 604_800;
 const DEFAULT_ENABLED_AVAILABILITY_PROVIDERS: readonly string[] = ['aspira', 'campflare', 'reserveamerica', 'reservecalifornia'];
 const LIST_JOINER = ', ';
+const RATE_LIMIT_REFRESH_PER_MINUTE_VARIABLE = 'RATE_LIMIT_REFRESH_PER_MINUTE';
+const RATE_LIMIT_STAY_POIS_PER_MINUTE_VARIABLE = 'RATE_LIMIT_STAY_POIS_PER_MINUTE';
+const RATE_LIMIT_MAPBOX_PER_MINUTE_VARIABLE = 'RATE_LIMIT_MAPBOX_PER_MINUTE';
+const DEFAULT_REFRESH_PER_MINUTE = 30;
+const DEFAULT_STAY_POIS_PER_MINUTE = 150;
+const DEFAULT_MAPBOX_PER_MINUTE = 60;
+const MAX_CALLS_PER_MINUTE = 10_000;
 
 export const AVAILABILITY_EGRESS_TIMEOUT_MS = 25_000;
 export const BOOKING_RELAY_CLIENT_TIMEOUT_MS = 95_000;
@@ -57,6 +64,7 @@ export const STAY_CHECK_FAN_OUT = 3;
 export const STAY_CHECK_PER_POI_TIMEOUT_MS = 45_000;
 export const STAY_CHECK_STREAM_TIMEOUT_MS = 120_000;
 export const STAY_CHECK_HEARTBEAT_MS = 15_000;
+export const STAY_CHECK_MAX_POIS = 50;
 
 export interface EgressAccessCredentials {
   clientId: string;
@@ -86,6 +94,12 @@ export interface SignInConfig {
   cookieSecret: string;
   appDatabaseUrl: string;
   adminEmails: ReadonlySet<string>;
+}
+
+export interface CallerLimitsConfig {
+  refreshPerMinute: number;
+  stayPoisPerMinute: number;
+  mapboxPerMinute: number;
 }
 
 export class ConfigError extends Error {
@@ -234,6 +248,18 @@ function bookingFrom(): BookingConfig | null {
   };
 }
 
+function callerLimitsFrom(): CallerLimitsConfig {
+  const stayPoisPerMinute = boundedIntegerFrom(RATE_LIMIT_STAY_POIS_PER_MINUTE_VARIABLE, DEFAULT_STAY_POIS_PER_MINUTE, MAX_CALLS_PER_MINUTE);
+  if (stayPoisPerMinute < STAY_CHECK_MAX_POIS) {
+    throw new ConfigError(RATE_LIMIT_STAY_POIS_PER_MINUTE_VARIABLE, `must be at least ${STAY_CHECK_MAX_POIS}, the most campgrounds one stay check may ask about`);
+  }
+  return {
+    refreshPerMinute: boundedIntegerFrom(RATE_LIMIT_REFRESH_PER_MINUTE_VARIABLE, DEFAULT_REFRESH_PER_MINUTE, MAX_CALLS_PER_MINUTE),
+    stayPoisPerMinute,
+    mapboxPerMinute: boundedIntegerFrom(RATE_LIMIT_MAPBOX_PER_MINUTE_VARIABLE, DEFAULT_MAPBOX_PER_MINUTE, MAX_CALLS_PER_MINUTE),
+  };
+}
+
 function bookingCipherKeyFrom(): Buffer | null {
   const raw = secretFrom(BOOKING_CREDENTIAL_ENCRYPTION_KEY_VARIABLE);
   if (raw === undefined) return null;
@@ -298,6 +324,9 @@ export const config = {
   },
   get bookingCipherKey(): Buffer | null {
     return bookingCipherKeyFrom();
+  },
+  get callerLimits(): CallerLimitsConfig {
+    return callerLimitsFrom();
   },
   get availabilityTtlSeconds(): number {
     return boundedIntegerFrom(AVAILABILITY_TTL_SECONDS_VARIABLE, DEFAULT_AVAILABILITY_TTL_SECONDS, MAX_AVAILABILITY_TTL_SECONDS);
