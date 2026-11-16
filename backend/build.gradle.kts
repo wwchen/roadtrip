@@ -19,8 +19,8 @@ buildscript {
     repositories { mavenCentral() }
     dependencies {
         classpath("org.testcontainers:postgresql:1.21.4")
-        classpath("org.flywaydb:flyway-core:13.12.1")
-        classpath("org.flywaydb:flyway-database-postgresql:13.12.1")
+        classpath("org.flywaydb:flyway-core:13.12.2")
+        classpath("org.flywaydb:flyway-database-postgresql:13.12.2")
         classpath("org.postgresql:postgresql:42.7.14")
     }
 }
@@ -30,7 +30,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("io.ktor.plugin") version "3.6.1"
-    id("org.flywaydb.flyway") version "13.12.1"
+    id("org.flywaydb.flyway") version "13.12.2"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("dev.detekt") version "2.0.0-alpha.6"
@@ -132,7 +132,7 @@ repositories {
 val ktorVersion = "3.6.1"
 val jooqVersion = "3.21.9"
 val postgresVersion = "42.7.14"
-val flywayVersion = "13.12.1"
+val flywayVersion = "13.12.2"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2026b.29"
@@ -140,7 +140,7 @@ val resendVersion = "4.30.0"
 val nimbusJoseVersion = "10.10"
 val junitVersion = "6.1.3"
 val koinVersion = "4.2.2"
-val playwrightVersion = "1.64.0"
+val playwrightVersion = "1.65.0"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
 
@@ -214,7 +214,7 @@ dependencies {
     // version the agent embeds: opentelemetry-instrumentation-bom 2.33.1
     // (OTEL_JAVAAGENT_VERSION in the Dockerfile) imports opentelemetry-bom
     // 1.67.0. Bump both together.
-    implementation("io.opentelemetry:opentelemetry-api:1.67.0")
+    implementation("io.opentelemetry:opentelemetry-api:1.68.0")
 
     // Self-documenting /api/docs at runtime from Ktor's routing tree.
     implementation("io.ktor:ktor-server-swagger:$ktorVersion")
@@ -238,7 +238,7 @@ dependencies {
     // no identity-provider SDK is on the classpath.
     implementation("com.nimbusds:nimbus-jose-jwt:$nimbusJoseVersion")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.11.0")
     // YAML reader for the POI registry resource.
@@ -260,8 +260,8 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     // In-memory metric reader, so OtelRoadtripMetricsTest can assert the exact
     // instrument names and attributes the dashboards and alert rules query.
-    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.67.0")
-    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.67.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.68.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.68.0")
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
     // MockEngine lets SlackNotifier / AvailabilityClient tests assert request
