@@ -133,15 +133,18 @@ const LOGIN_SUBMIT_SELECTORS = [
 ]
 const LOGIN_MFA_SELECTORS = [
   'input[autocomplete="one-time-code"]',
-  'input[name*="code" i]',
-  'input[id*="code" i]',
+  '[role="dialog"] input[name*="code" i]',
+  '[role="dialog"] input[id*="code" i]',
   'text=/verification code|multi-factor|two-factor|one-time code/i',
 ]
 const LOGIN_MFA_CODE_SELECTORS = [
+  '[role="dialog"] input[autocomplete="one-time-code"]',
+  '[role="dialog"] input[maxlength="1"]',
+  '[role="dialog"] input[inputmode="numeric"]',
+  '[role="dialog"] input[name*="code" i]',
+  '[role="dialog"] input[id*="code" i]',
+  '[role="dialog"] input[placeholder*="code" i]',
   'input[autocomplete="one-time-code"]',
-  'input[name*="code" i]',
-  'input[id*="code" i]',
-  'input[placeholder*="code" i]',
 ]
 const LOGIN_MFA_SUBMIT_SELECTORS = [
   '[role="dialog"] button[type="submit"]',
@@ -630,9 +633,8 @@ async function submitMfaCodeIfPrompted (page, credentials, timeout = LOGIN_MFA_P
   if (!mfaSelector) return { ok: true, submitted: false }
   if (!credentials.mfaCode) return { ok: false, reason: 'mfa_required' }
 
-  const mfaInput = page.locator(mfaSelector).first()
   try {
-    await mfaInput.fill(credentials.mfaCode, { timeout: LOGIN_FIELD_TIMEOUT_MS })
+    await fillMfaCode(page, mfaSelector, credentials.mfaCode)
   } catch {
     return { ok: false, reason: 'mfa_code_input_not_found' }
   }
@@ -781,15 +783,27 @@ async function pressEnterToSubmit (page) {
   }
 }
 
-async function firstVisibleSelector (page, selectors, timeout) {
-  const selector = selectors.join(', ')
-  const locator = page.locator(selector).first()
-  try {
-    await locator.waitFor({ state: 'visible', timeout })
-    return selector
-  } catch {
-    return null
+async function fillMfaCode (page, selector, code) {
+  const inputs = page.locator(selector)
+  const boxes = await inputs.count()
+  if (boxes > 1 && boxes === code.length) {
+    for (const [index, digit] of [...code].entries()) {
+      await inputs.nth(index).fill(digit, { timeout: LOGIN_FIELD_TIMEOUT_MS })
+    }
+    return
   }
+  await inputs.first().fill(code, { timeout: LOGIN_FIELD_TIMEOUT_MS })
+}
+
+async function firstVisibleSelector (page, selectors, timeout) {
+  const attempts = Math.max(1, Math.ceil(timeout / LOGIN_FIELD_POLL_MS))
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) await page.waitForTimeout(LOGIN_FIELD_POLL_MS)
+    for (const selector of selectors) {
+      if (await page.locator(selector).first().isVisible().catch(() => false)) return selector
+    }
+  }
+  return null
 }
 
 async function credentialLoginBlocker (page) {
