@@ -68,6 +68,7 @@ test('stored credentials are ready', async () => {
 test.each([
   ['no row', memoryVault(null).vault],
   ['a row with no key', memoryVault(STORED, false).vault],
+  ['a row sealed under another key', memoryVault(STORED, 'key_changed').vault],
 ])('no row, or a row with no key, is no_credentials (%s)', async (_name, vault) => {
   expect(await readerStanding(readerPorts({ vault }))).toBe('no_credentials');
 });

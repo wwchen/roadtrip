@@ -41,6 +41,11 @@ test('without the cipher key, stored credentials read as not configured', async 
   expect((answer.body as { booking: unknown }).booking).toEqual({ recgov_configured: false });
 });
 
+test('credentials sealed under another key read as not configured, so the user enters them again', async () => {
+  const answer = await settings(ports({ vault: memoryVault(STORED, 'key_changed').vault }));
+  expect((answer.body as { booking: unknown }).booking).toEqual({ recgov_configured: false });
+});
+
 test('an admin email carries the admin role', async () => {
   const answer = await settings(ports({ adminEmails: new Set(['camper@example.com']) }));
   expect((answer.body as { profile: { roles: string[] } }).profile.roles).toEqual(['admin']);

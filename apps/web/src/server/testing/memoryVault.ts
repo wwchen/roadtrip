@@ -5,23 +5,29 @@ export interface MemoryCredentials {
   password: string;
 }
 
+export const KEY_CHANGED = 'key_changed';
+
 export function memoryVault(
   initial: MemoryCredentials | null,
-  keyed = true,
+  keyed: boolean | typeof KEY_CHANGED = true,
 ): { vault: CredentialVault; row(): MemoryCredentials | null } {
   let current = initial;
+  let sealedUnderOtherKey = keyed === KEY_CHANGED;
   const vault: CredentialVault = {
     async status() {
       if (current === null) return { kind: 'none' };
-      return keyed ? { kind: 'stored', username: current.username } : { kind: 'locked', username: current.username };
+      if (keyed === false) return { kind: 'locked', username: current.username };
+      return sealedUnderOtherKey ? { kind: 'key_changed', username: current.username } : { kind: 'stored', username: current.username };
     },
     async open() {
-      if (!keyed) return { kind: 'unavailable' };
-      return current === null ? { kind: 'none' } : { kind: 'opened', username: current.username, password: current.password };
+      if (keyed === false) return { kind: 'unavailable' };
+      if (current === null) return { kind: 'none' };
+      return sealedUnderOtherKey ? { kind: 'key_changed' } : { kind: 'opened', username: current.username, password: current.password };
     },
     async store(_userId, username, password) {
-      if (!keyed) return 'unavailable';
+      if (keyed === false) return 'unavailable';
       current = { username, password };
+      sealedUnderOtherKey = false;
       return 'stored';
     },
     async rename(_userId, username) {
