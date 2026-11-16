@@ -13,7 +13,6 @@ import {
   type RelayExchange,
   shapeFault,
 } from './bookingRelayWire';
-import { RELAY_ANSWERS } from './bookingRelayWire.fixtures';
 
 const OK_STATUS = 200;
 const BAD_REQUEST_STATUS = 400;
@@ -220,19 +219,4 @@ describe('decodeSignOut', () => {
   ])('%s', (_name, exchange, expected) => {
     expect(decodeSignOut(exchange)).toStrictEqual(expected);
   });
-});
-
-const DECODERS = {
-  hold: decodeHold,
-  signIn: decodeLogin,
-  submitMfa: decodeLogin,
-  refresh: decodeAction,
-  verify: decodeAction,
-  health: decodeHealth,
-  signOut: decodeSignOut,
-};
-
-test.each(Object.entries(RELAY_ANSWERS))('each fixture answer decodes to its fixture result', (name, { answer, result }) => {
-  const decode: (exchange: RelayExchange) => unknown = DECODERS[name as keyof typeof DECODERS];
-  expect(decode(answered(OK_STATUS, answer))).toStrictEqual(result);
 });

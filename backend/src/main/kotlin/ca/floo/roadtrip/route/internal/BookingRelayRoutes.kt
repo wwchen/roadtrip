@@ -97,10 +97,7 @@ private suspend inline fun <reified T, V, reified D> ApplicationCall.withBody(
             is RouteBodyResult.Valid -> body.value
         }
     val result = answer(request) ?: return respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
-    when (result) {
-        is RelayAnswer.Answered -> respondEncodedJson(result.toDto())
-        RelayAnswer.TimedOut -> respondEncodedJson(result.toDto(), HttpStatusCode.GatewayTimeout)
-    }
+    respondEncodedJson(result.toDto(), result.relayStatus())
 }
 
 private fun ApplicationCall.bearerMatches(token: String): Boolean {
