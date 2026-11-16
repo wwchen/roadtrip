@@ -1,0 +1,229 @@
+{
+  "hold_held": {
+    "operation": "hold",
+    "status": 200,
+    "body": {
+      "outcome": "held",
+      "cart_url": "https://www.recreation.gov/cart/held"
+    }
+  },
+  "hold_blocked": {
+    "operation": "hold",
+    "status": 200,
+    "body": {
+      "outcome": "blocked",
+      "failure": {
+        "code": "profile_busy",
+        "category": "retry_later",
+        "detail": "what the companion said"
+      }
+    }
+  },
+  "hold_timed_out": {
+    "operation": "hold",
+    "status": 504,
+    "body": {
+      "outcome": "timed_out",
+      "cart_url": "https://www.recreation.gov/cart",
+      "failure": {
+        "code": "relay_timeout",
+        "category": "retry_later",
+        "detail": "the hold may still finish; check the cart"
+      }
+    }
+  },
+  "sign_in_signed_in": {
+    "operation": "sign_in",
+    "status": 200,
+    "body": {
+      "outcome": "signed_in"
+    }
+  },
+  "sign_in_mfa_required": {
+    "operation": "sign_in",
+    "status": 200,
+    "body": {
+      "outcome": "mfa_required",
+      "challenge_id": "challenge-1",
+      "expires_at": "2026-12-10T10:00:00Z"
+    }
+  },
+  "sign_in_rejected": {
+    "operation": "sign_in",
+    "status": 200,
+    "body": {
+      "outcome": "failed",
+      "failure": {
+        "code": "login_failed",
+        "category": "caller_action",
+        "detail": "what the companion said"
+      }
+    }
+  },
+  "sign_in_page_changed": {
+    "operation": "sign_in",
+    "status": 200,
+    "body": {
+      "outcome": "failed",
+      "failure": {
+        "code": "login_page_changed",
+        "category": "upstream"
+      }
+    }
+  },
+  "sign_in_timed_out": {
+    "operation": "sign_in",
+    "status": 504,
+    "body": {
+      "outcome": "timed_out",
+      "failure": {
+        "code": "relay_timeout",
+        "category": "retry_later",
+        "detail": "the hold may still finish; check the cart"
+      }
+    }
+  },
+  "submit_mfa_signed_in": {
+    "operation": "submit_mfa",
+    "status": 200,
+    "body": {
+      "outcome": "signed_in"
+    }
+  },
+  "submit_mfa_invalid": {
+    "operation": "submit_mfa",
+    "status": 200,
+    "body": {
+      "outcome": "failed",
+      "failure": {
+        "code": "mfa_invalid",
+        "category": "upstream"
+      }
+    }
+  },
+  "refresh_ok": {
+    "operation": "refresh",
+    "status": 200,
+    "body": {
+      "outcome": "ok"
+    }
+  },
+  "refresh_failed": {
+    "operation": "refresh",
+    "status": 200,
+    "body": {
+      "outcome": "failed",
+      "failure": {
+        "code": "recgov_refresh_failed",
+        "category": "caller_action",
+        "detail": "what the companion said"
+      }
+    }
+  },
+  "verify_not_authenticated": {
+    "operation": "verify",
+    "status": 200,
+    "body": {
+      "outcome": "failed",
+      "failure": {
+        "code": "recgov_not_authenticated",
+        "category": "caller_action"
+      }
+    }
+  },
+  "verify_timed_out": {
+    "operation": "verify",
+    "status": 504,
+    "body": {
+      "outcome": "timed_out",
+      "failure": {
+        "code": "relay_timeout",
+        "category": "retry_later",
+        "detail": "the hold may still finish; check the cart"
+      }
+    }
+  },
+  "health_active": {
+    "operation": "health",
+    "status": 200,
+    "body": {
+      "session": "active"
+    }
+  },
+  "health_never_logged_in": {
+    "operation": "health",
+    "status": 200,
+    "body": {
+      "session": "never_logged_in"
+    }
+  },
+  "health_inactive": {
+    "operation": "health",
+    "status": 200,
+    "body": {
+      "session": "inactive",
+      "code": "recgov_session_expired"
+    }
+  },
+  "health_check_failed": {
+    "operation": "health",
+    "status": 200,
+    "body": {
+      "session": "check_failed",
+      "code": "recgov_auth_check_exception"
+    }
+  },
+  "health_unavailable": {
+    "operation": "health",
+    "status": 200,
+    "body": {
+      "session": "unavailable",
+      "code": "companion_unavailable",
+      "detail": "what the companion said"
+    }
+  },
+  "health_timed_out": {
+    "operation": "health",
+    "status": 504,
+    "body": {
+      "session": "unavailable",
+      "code": "relay_timeout"
+    }
+  },
+  "sign_out_wiped": {
+    "operation": "sign_out",
+    "status": 200,
+    "body": {
+      "outcome": "wiped",
+      "signed_out": true,
+      "profile_destroyed": true
+    }
+  },
+  "sign_out_failed": {
+    "operation": "sign_out",
+    "status": 200,
+    "body": {
+      "outcome": "failed",
+      "signed_out": false,
+      "profile_destroyed": false,
+      "failure": {
+        "code": "profile_busy",
+        "category": "retry_later"
+      }
+    }
+  },
+  "sign_out_timed_out": {
+    "operation": "sign_out",
+    "status": 504,
+    "body": {
+      "outcome": "timed_out",
+      "signed_out": false,
+      "profile_destroyed": false,
+      "failure": {
+        "code": "relay_timeout",
+        "category": "retry_later",
+        "detail": "the hold may still finish; check the cart"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { BookingGateway } from '../service/booking/ports';
-import { RELAY_ANSWERS } from '../mapper/relay/bookingRelayWire.fixtures';
+import { RELAY_ANSWERS } from '../testing/bookingRelayAnswers';
 import { BOOKING_RELAY_PREFIX, bookingRelayGateway, postRelay, unconfiguredBookingGateway } from './bookingRelay';
 
 const CONFIG = {

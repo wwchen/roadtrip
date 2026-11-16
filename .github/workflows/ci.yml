@@ -146,6 +146,8 @@ jobs:
               - 'Dockerfile'
               - '.dockerignore'
               - 'backend/src/main/resources/db/migration/R__web_reader_grants.sql'
+              - 'backend/src/test/resources/booking-relay-answers.json'
+              - 'backend/src/test/resources/secret-cipher-vectors.json'
               - 'docs/web-app.md'
               - 'caddy/Caddyfile'
               - 'frontend/**'

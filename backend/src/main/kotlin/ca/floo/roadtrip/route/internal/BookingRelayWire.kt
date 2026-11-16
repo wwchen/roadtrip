@@ -22,12 +22,19 @@ import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionLoginResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
+import io.ktor.http.HttpStatusCode
 
 internal const val RELAY_TIMEOUT_CODE = "relay_timeout"
 private const val RELAY_TIMEOUT_DETAIL = "the hold may still finish; check the cart"
 
 private val timeoutFailure =
     BookingRelayFailureDto(RELAY_TIMEOUT_CODE, BookingRelayFailureCategory.RETRY_LATER, RELAY_TIMEOUT_DETAIL)
+
+internal fun RelayAnswer<*>.relayStatus(): HttpStatusCode =
+    when (this) {
+        is RelayAnswer.Answered -> HttpStatusCode.OK
+        RelayAnswer.TimedOut -> HttpStatusCode.GatewayTimeout
+    }
 
 private fun BookingFailureCategory.toWire(): BookingRelayFailureCategory =
     when (this) {
