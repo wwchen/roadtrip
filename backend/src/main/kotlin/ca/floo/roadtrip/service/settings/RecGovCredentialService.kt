@@ -36,6 +36,7 @@ private val challengeEndingCodes =
     setOf(
         RecGovSessionCodes.MFA_INVALID,
         RecGovSessionCodes.LOGIN_FAILED,
+        RecGovSessionCodes.LOGIN_PAGE_CHANGED,
         RecGovSessionCodes.CAPTCHA_REQUIRED,
         RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN,
         RecGovSessionCodes.MFA_CHALLENGE_EXPIRED,

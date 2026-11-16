@@ -261,8 +261,8 @@ test.each([
   expect(answered.cookie).toBeUndefined();
 });
 
-test('a rejected code ends the challenge and clears the cookie', async () => {
-  const g = gateway({ submitMfa: vi.fn().mockResolvedValue({ kind: 'failed', refusal: { category: 'caller_action', code: 'mfa_invalid' } }) });
+test.each([['mfa_invalid'], ['login_page_changed']])('a %s refusal ends the challenge and clears the cookie', async (code) => {
+  const g = gateway({ submitMfa: vi.fn().mockResolvedValue({ kind: 'failed', refusal: { category: 'caller_action', code } }) });
   expect((await submit({ code: '1' }, live(), g, memoryVault(STORED).vault)).cookie).toBe(mfaClearCookie());
 });
 

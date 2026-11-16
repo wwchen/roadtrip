@@ -421,7 +421,7 @@ describe('Recreation.gov MFA challenge', () => {
 
     expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
     expect(
-      screen.queryByText(/Another operation is using your Recreation.gov session/i),
+      screen.queryByText(/Your Recreation.gov session is busy/i),
     ).not.toBeInTheDocument();
   });
 });

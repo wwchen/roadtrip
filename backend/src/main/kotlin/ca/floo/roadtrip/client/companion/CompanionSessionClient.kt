@@ -70,6 +70,15 @@ private const val COMPANION_LOGIN_FAILED = "recgov_login_failed"
 private const val COMPANION_INVALID_RESPONSE = "companion_invalid_response"
 private const val COMPANION_REQUEST_FAILED = "companion_request_failed"
 private const val CART_NOT_ADDED = "cart_not_added"
+private val unrecognizedLoginPageReasons =
+    setOf(
+        "login_link_not_found",
+        "email_input_not_found",
+        "password_input_not_found",
+        "submit_button_not_found",
+        "mfa_code_input_not_found",
+        "mfa_submit_button_not_found",
+    )
 
 private const val CONTENT_TYPE_JSON = "application/json"
 private const val HEADER_ACCEPT = "Accept"
@@ -291,14 +300,15 @@ internal class CompanionSessionClient(
     /**
      * The companion keeps `error` a stable code and puts the actual blocker in
      * `recgov_auth.reason`, so a captcha arrives as `recgov_login_failed` +
-     * `reason: captcha_required`. The reason is checked first for exactly that;
+     * `reason: captcha_required`. The reason is checked first for exactly that,
+     * and for the blockers that mean the page no longer looks as expected;
      * anything else keeps the companion's own code so operators see the truth.
      */
     private fun loginFailureCode(body: JsonObject): String {
         val auth = body.objectValue(FIELD_RECGOV_AUTH)
-        if (auth?.stringValue(FIELD_REASON) == RecGovSessionCodes.CAPTCHA_REQUIRED) {
-            return RecGovSessionCodes.CAPTCHA_REQUIRED
-        }
+        val reason = auth?.stringValue(FIELD_REASON)
+        if (reason == RecGovSessionCodes.CAPTCHA_REQUIRED) return RecGovSessionCodes.CAPTCHA_REQUIRED
+        if (reason in unrecognizedLoginPageReasons) return RecGovSessionCodes.LOGIN_PAGE_CHANGED
         return when (val code = body.stringValue(FIELD_ERROR) ?: auth?.stringValue(FIELD_ERROR)) {
             null, COMPANION_LOGIN_FAILED -> RecGovSessionCodes.LOGIN_FAILED
             else -> code

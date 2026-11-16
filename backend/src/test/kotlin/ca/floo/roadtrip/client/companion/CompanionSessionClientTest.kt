@@ -314,6 +314,29 @@ class CompanionSessionClientTest {
         }
 
     @Test
+    fun `a login page the companion could not find its way around becomes login_page_changed`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/login" to
+                            TestResponse(
+                                status = 401,
+                                body =
+                                    """
+                                    {"ok":false,"recgov_auth":{"logged_in":false,"error":"recgov_login_failed",
+                                     "reason":"email_input_not_found"}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
+
+                    assertEquals<CompanionLoginResult>(CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_PAGE_CHANGED, null), result)
+                }
+        }
+
+    @Test
     fun `login backoff is passed through as its own code`() =
         runBlocking {
             CompanionTestServer

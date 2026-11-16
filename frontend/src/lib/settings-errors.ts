@@ -17,6 +17,10 @@ const MESSAGES = new Map<string, SettingsErrorMessage>([
   ['encryption_unavailable', "Secret storage isn't configured on the server."],
   ['email_send_failed', "Couldn't send the test email."],
   ['login_failed', accountCopy.credentialsRejected],
+  [
+    'login_page_changed',
+    `${VENDOR}'s sign-in page has changed, so the sign-in could not finish. Your credentials were not rejected — the booking service needs attention.`,
+  ],
   ['mfa_required', accountCopy.mfaSent],
   ['mfa_invalid', 'That code was rejected. Start the login again for a new one.'],
   ['mfa_challenge_unknown', 'That code request expired. Start the login again.'],
@@ -32,7 +36,10 @@ const MESSAGES = new Map<string, SettingsErrorMessage>([
   ],
   ['login_backoff', 'Too many attempts. Wait a minute before trying again.'],
   // Transient by nature: the work is queued behind something, not refused.
-  ['profile_busy', `Another operation is using your ${VENDOR} session — try again shortly.`],
+  [
+    'profile_busy',
+    `Your ${VENDOR} session is busy, often with a sign-in still waiting for its verification code. Enter that code, or try again in a few minutes.`,
+  ],
   ['browser_cap_reached', 'The booking service is at capacity — try again shortly.'],
   ['recgov_not_configured', `Save your ${VENDOR} credentials first.`],
   // Refusal, not a partial success: the save/removal was rolled back because the
@@ -76,6 +83,12 @@ const MESSAGES = new Map<string, SettingsErrorMessage>([
   ],
   ['recgov_confirmation_disabled', `${VENDOR} would not add it — someone else likely took it.`],
   ['unsupported_target', 'This campground cannot be held from Roadtrip.'],
+  ['booking_unavailable', "Booking isn't available right now — try again shortly."],
+  [
+    'relay_timeout',
+    'The booking service took too long to answer. If you were adding a site, check your cart before trying again.',
+  ],
+  ['invalid_window', 'Check-out must be after check-in.'],
   // Generic for the same reason as `cart_not_added` above.
   [
     'credentials_required',
