@@ -234,12 +234,22 @@ function AvailabilityWeekView({
           });
         })
         .catch((err: unknown) => {
-          const { error: code, provider_display: providerDisplay } = addToCartFailure(err);
+          const { error: code, provider_display: providerDisplay, cart_url: cartUrl } = addToCartFailure(err);
+          const holder = providerDisplay || undefined;
           actions.cartActionChanged({ type: 'failed', cell, code });
           toast({
             status: 'warning',
             title: 'Could not hold the site',
-            children: settingsErrorMessage(code, providerDisplay || undefined),
+            children: cartUrl ? (
+              <>
+                {settingsErrorMessage(code, holder)}{' '}
+                <a href={cartUrl} target="_blank" rel="noreferrer noopener">
+                  {bookingCopy.openCart(holder)}
+                </a>
+              </>
+            ) : (
+              settingsErrorMessage(code, holder)
+            ),
           });
         });
     },

@@ -62,6 +62,7 @@ export interface ApiErrorSchema {
   detail?: string;
   provider?: string;
   provider_display?: string;
+  cart_url?: string;
 }
 
 export interface AvailabilityCacheBlock {
