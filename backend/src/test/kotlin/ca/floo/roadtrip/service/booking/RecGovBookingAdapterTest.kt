@@ -172,6 +172,33 @@ class RecGovBookingAdapterTest {
         }
 
     @Test
+    fun `a re-login refused at the sign-in page says whether the credentials were the problem`() =
+        runBlocking {
+            val companionDetail = "Recreation.gov credential login did not produce a browser session."
+            val expected =
+                mapOf(
+                    RecGovSessionCodes.LOGIN_FAILED to Pair(BookingFailureCategory.CALLER_ACTION, "check them in Settings"),
+                    RecGovSessionCodes.LOGIN_PAGE_CHANGED to Pair(BookingFailureCategory.UPSTREAM, "were not rejected"),
+                )
+            for ((code, outcome) in expected) {
+                val (category, phrase) = outcome
+                val session =
+                    FakeProfileSession(
+                        health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED),
+                        reLogin = CompanionActionResult.Failed(code, companionDetail),
+                    )
+
+                val failed = provider(session = session).addToCart(request(recgovTarget())) as AddToCartResult.Failed
+
+                assertEquals(code, failed.error)
+                assertEquals(category, failed.category, code)
+                val detail = assertNotNull(failed.detail)
+                assertTrue(detail.contains(phrase), detail)
+                assertFalse(detail.contains("Recreation.gov"), "the notice names the booking system itself: $detail")
+            }
+        }
+
+    @Test
     fun `a refused re-login reports why it was refused, not a blanket expiry`() =
         runBlocking {
             // Every refusal used to be rewritten to recgov_session_expired with
