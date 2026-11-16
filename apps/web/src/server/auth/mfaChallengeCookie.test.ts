@@ -31,6 +31,8 @@ test.each([[undefined], [''], ['not-base64-!!'], ['AAAA']])('a missing or unread
 
 test('a tampered cookie is mfa_challenge_unknown', () => {
   const value = sealMfaChallenge(KEY, { challengeId: 'ch-1', userId: 7n, expiresAt: LATER });
-  const tampered = `${value.slice(0, -2)}${value.endsWith('A') ? 'B' : 'A'}${value.slice(-1)}`;
+  const at = value.length - 2;
+  const tampered = `${value.slice(0, at)}${value[at] === 'A' ? 'B' : 'A'}${value.slice(at + 1)}`;
+  expect(tampered).not.toBe(value);
   expect(openMfaChallenge(KEY, tampered, 7n, NOW)).toEqual({ code: MFA_CHALLENGE_UNKNOWN });
 });
