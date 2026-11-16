@@ -49,6 +49,9 @@ DOCKER_STUB = textwrap.dedent(
     if [[ "$args" == *" compose "* && "$args" == *" logs "* ]]; then
         echo "backend-1 | the reason the backend did not start"
     fi
+    if [[ "$args" == *" compose "* && "$args" == *" exec "* ]]; then
+        cat > /dev/null
+    fi
     exit 0
     """
 )
@@ -95,9 +98,13 @@ class DeployRollbackTest(unittest.TestCase):
         )
 
     def _deploy(self, *args: str, unhealthy: tuple = ()) -> subprocess.CompletedProcess:
+        return self._run(["bash", "scripts/deploy.sh", *args], "", unhealthy)
+
+    def _run(self, command: list, stdin: str, unhealthy: tuple = ()) -> subprocess.CompletedProcess:
         return subprocess.run(
-            ["bash", "scripts/deploy.sh", *args],
+            command,
             cwd=self.release,
+            input=stdin,
             env={
                 **os.environ,
                 "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
@@ -121,6 +128,14 @@ class DeployRollbackTest(unittest.TestCase):
         self.assertEqual(1, done.returncode, done.stderr)
         self.assertIn("the reason the backend did not start", done.stdout + done.stderr)
         self.assertIn(f"==> ROLLBACK OK: {NEW_SHA} was unhealthy; production is back on {LAST_GOOD_SHA}", done.stderr)
+
+    def test_a_deploy_fed_its_remote_script_on_stdin_runs_the_lines_after_it(self) -> None:
+        remote = f"scripts/deploy.sh prod {NEW_SHA} {DATA_SHA} {COMPANION_SHA} {BRANCH}\necho the line after the deploy\n"
+
+        done = self._run(["bash", "-s"], remote)
+
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertIn("the line after the deploy", done.stdout)
 
     def test_a_healthy_deploy_leaves_the_last_good_record_to_the_workflow(self) -> None:
         self._record(LAST_GOOD_SHA)
