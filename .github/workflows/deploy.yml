@@ -317,4 +317,4 @@ jobs:
       - name: Record the last good release
         run: |
           ssh -o BatchMode=yes mini@mini-ca \
-            "cd \"\$HOME/.roadtrip/current\" && scripts/deploy.sh record-good '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA' '$DEPLOY_BRANCH'"
+            "cd \"\$HOME/.roadtrip/releases/$DEPLOY_SHA\" && scripts/deploy.sh record-good '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA' '$DEPLOY_BRANCH'"
