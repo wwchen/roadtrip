@@ -21,8 +21,23 @@ test('sends the Access credentials and the JSON body to the egress path, with no
   expect(init.headers['cf-access-client-id']).toBe('id.access');
   expect(init.headers['cf-access-client-secret']).toBe('secret');
   expect(init.headers).not.toHaveProperty('authorization');
+  expect(init.headers['x-internal-api-version']).toBe('1');
   expect(JSON.parse(init.body)).toEqual(REQUEST);
 });
+
+test('a 400 refusing the window keeps its body, so the caller can say which date was wrong', async () => {
+  const refusal = { state: 'error', error: 'start_before_earliest', earliest_date: '2026-12-02', time_zone: 'America/Vancouver' };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(refusal, { status: 400 })));
+  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 400, code: 'start_before_earliest', body: refusal });
+});
+
+test.each([['bad_request'], ['internal_version_unsupported']])(
+  'a 400 %s means the two sides disagree: it keeps its code but not its body, so it never reaches the public as theirs',
+  async (code) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ state: 'error', error: code }, { status: 400 })));
+    expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 400, code, body: null });
+  },
+);
 
 test('redirects are not followed: an Access login redirect is an error, not a page', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 302, headers: { location: 'https://team.cloudflareaccess.com/cdn-cgi/access/login/x' } }));

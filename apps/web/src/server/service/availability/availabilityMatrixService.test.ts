@@ -164,6 +164,13 @@ test('a window mini-ca refuses passes its error through', async () => {
   await expect(week(failing(400, 'window_too_long', body))).rejects.toMatchObject(new AvailabilityWindowRefusedError(body));
 });
 
+test.each([['bad_request'], ['internal_version_unsupported']])(
+  'a 400 %s, which the egress client strips of its body, is unavailable rather than the caller’s window',
+  async (code) => {
+    await expect(week(failing(400, code))).rejects.toBeInstanceOf(AvailabilityUnavailableError);
+  },
+);
+
 test('a campground mini-ca will not serve is unknown_campground', async () => {
   await expect(week(failing(501, 'unknown_campground'))).rejects.toMatchObject(new AvailabilityTargetError('unknown_campground'));
 });
