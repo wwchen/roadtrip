@@ -19,6 +19,7 @@ const SESSION_LAPSED = 'recgov_session_lapsed';
 const CHALLENGE_ENDING_CODES: ReadonlySet<string> = new Set([
   'mfa_invalid',
   'login_failed',
+  'login_page_changed',
   'captcha_required',
   MFA_CHALLENGE_UNKNOWN,
   MFA_CHALLENGE_EXPIRED,
