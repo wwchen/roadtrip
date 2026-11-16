@@ -10,6 +10,7 @@ let userId: bigint;
 
 const KEY_BYTES = 32;
 const KEY = Buffer.alloc(KEY_BYTES, 7);
+const OTHER_KEY = Buffer.alloc(KEY_BYTES, 9);
 const PASSWORD = 'correct horse';
 
 beforeAll(async () => {
@@ -96,6 +97,21 @@ test('without a key a stored row is locked, opens as unavailable, and cannot sto
   expect(await locked.open(userId)).toEqual({ kind: 'unavailable' });
   expect(await locked.store(userId, 'other@example.com', 'other')).toBe('unavailable');
   expect(await credentialVault(fixture.writeDb, KEY).open(userId)).toEqual({ kind: 'opened', username: 'camper@example.com', password: PASSWORD });
+});
+
+test('a row sealed under another key reads as key_changed and does not open', async () => {
+  await credentialVault(fixture.writeDb, OTHER_KEY).store(userId, 'camper@example.com', PASSWORD);
+  const vault = credentialVault(fixture.writeDb, KEY);
+  expect(await vault.status(userId)).toEqual({ kind: 'key_changed', username: 'camper@example.com' });
+  expect(await vault.open(userId)).toEqual({ kind: 'key_changed' });
+});
+
+test('storing again under the current key clears key_changed', async () => {
+  await credentialVault(fixture.writeDb, OTHER_KEY).store(userId, 'camper@example.com', PASSWORD);
+  const vault = credentialVault(fixture.writeDb, KEY);
+  await vault.store(userId, 'camper@example.com', 'new password');
+  expect(await vault.status(userId)).toEqual({ kind: 'stored', username: 'camper@example.com' });
+  expect(await vault.open(userId)).toEqual({ kind: 'opened', username: 'camper@example.com', password: 'new password' });
 });
 
 test('rename keeps the sealed password, and remove says whether there was a row', async () => {

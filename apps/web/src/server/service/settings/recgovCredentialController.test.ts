@@ -266,6 +266,26 @@ test.each([['mfa_invalid'], ['login_page_changed']])('a %s refusal ends the chal
   expect((await submit({ code: '1' }, live(), g, memoryVault(STORED).vault)).cookie).toBe(mfaClearCookie());
 });
 
+test('with credentials sealed under another key, a save needs the password again, and then stores it', async () => {
+  const g = gateway();
+  const { vault, row } = memoryVault(STORED, 'key_changed');
+  expect(await save({ username: STORED.username }, g, vault)).toMatchObject({ status: 400, body: { error: 'invalid_field' } });
+  expect(await save({ username: STORED.username, password: 'new' }, g, vault)).toEqual({
+    status: 200,
+    body: { recgov_configured: true, recgov_username: STORED.username },
+  });
+  expect(row()).toEqual({ username: STORED.username, password: 'new' });
+});
+
+test('with credentials sealed under another key, status is not configured and login reaches no relay', async () => {
+  const g = gateway();
+  const vault = memoryVault(STORED, 'key_changed').vault;
+  expect(await status(undefined, g, vault)).toEqual({ status: 200, body: { configured: false, session: 'not_configured', mfa_pending: false } });
+  expect(await login(g, vault)).toMatchObject({ status: 409, body: { error: 'recgov_not_configured' } });
+  expect(g.health).not.toHaveBeenCalled();
+  expect(g.signIn).not.toHaveBeenCalled();
+});
+
 test('a save with a password against a locked vault is 503 and wipes nothing', async () => {
   const g = gateway({ signOut: vi.fn().mockResolvedValue(WIPED) });
   const { vault, row } = memoryVault(STORED, false);

@@ -39,7 +39,7 @@ async function wipeProfile(userId: bigint, ports: RecgovPorts): Promise<Wipe | n
 
 export async function saveCredentials(user: ActiveUser, command: CredentialsCommand, ports: RecgovPorts): Promise<SaveCredentialsOutcome> {
   const before = await ports.vault.status(user.id);
-  if (before.kind === 'none' && command.password === null) return { kind: 'password_required' };
+  if ((before.kind === 'none' || before.kind === 'key_changed') && command.password === null) return { kind: 'password_required' };
   if (before.kind === 'locked' && command.password !== null) return { kind: 'vault_unavailable' };
   if (before.kind !== 'none' && before.username !== command.username && (await wipeProfile(user.id, ports)) === null) return { kind: 'wipe_failed' };
   if (command.password !== null) {
@@ -61,7 +61,7 @@ export async function removeCredentials(user: ActiveUser, ports: RecgovPorts): P
 async function openedCredentials(userId: bigint, ports: RecgovPorts) {
   const opened = await ports.vault.open(userId);
   if (opened.kind === 'unavailable') return { kind: 'vault_unavailable' } as const;
-  if (opened.kind === 'none') return { kind: 'not_configured' } as const;
+  if (opened.kind === 'none' || opened.kind === 'key_changed') return { kind: 'not_configured' } as const;
   return opened;
 }
 
