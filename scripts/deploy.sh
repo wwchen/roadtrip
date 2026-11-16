@@ -333,7 +333,7 @@ _deploy_prod() {
     _ensure_data_volume "${data_sha}"
     "${secret_exec[@]}" "${compose[@]}" pull "${pulled[@]}"
     "${secret_exec[@]}" "${compose[@]}" up -d --force-recreate backend
-    "${secret_exec[@]}" "${compose[@]}" exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh
+    "${secret_exec[@]}" "${compose[@]}" exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh </dev/null
     # No `restart` of the observability services here: compose resolves their
     # ./grafana bind mounts against the release directory, which is keyed by
     # SHA, so every release changes their config hash and the `up -d` below
