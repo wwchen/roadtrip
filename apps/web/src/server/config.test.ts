@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CAMPGROUND_POI_TYPE, POI_TYPES } from '@roadtrip/db';
 import { afterEach, expect, test, vi } from 'vitest';
-import { ConfigError, config } from './config';
+import { ConfigError, config, configProblems } from './config';
 
 const DATABASE_URL = 'postgres://reader@db.test/roadtrip';
 const DEFAULT_PROVIDERS = ['campflare', 'bcparks-strapi', 'aspira', 'reserveamerica', 'reservecalifornia'];
@@ -387,4 +387,39 @@ test('the booking cipher key is null when unset and 32 bytes when set', () => {
 test('a booking cipher key that is not 32 bytes is a ConfigError', () => {
   vi.stubEnv('BOOKING_CREDENTIAL_ENCRYPTION_KEY', Buffer.alloc(16).toString('base64'));
   expect(() => config.bookingCipherKey).toThrow(ConfigError);
+});
+
+function clearConfigEnv(): void {
+  for (const name of Object.keys(process.env)) {
+    if (/^(NEON_AUTH_|APP_DATABASE_|AVAILABILITY_EGRESS_|BOOKING_|MAPBOX_TOKEN|DATABASE_|SEARCH_RESULT_LIMIT|CAMPGROUND_SEARCH_|ENABLED_|AVAILABILITY_TTL|MFA_CHALLENGE_)/.test(name)) {
+      vi.stubEnv(name, undefined);
+    }
+  }
+  vi.stubEnv('DATABASE_URL', DATABASE_URL);
+}
+
+test('with every group unset or whole, there are no config problems', () => {
+  clearConfigEnv();
+  expect(configProblems()).toEqual([]);
+});
+
+test('a group set in part is a problem named by its group, with the missing variables and none of the values', () => {
+  clearConfigEnv();
+  vi.stubEnv('NEON_AUTH_BASE_URL', 'https://auth.secret-host.test');
+
+  const problems = configProblems();
+
+  expect(problems.map((problem) => problem.group)).toEqual(['signIn']);
+  expect(problems[0]!.message).toMatch(/NEON_AUTH_COOKIE_SECRET/);
+  expect(problems[0]!.message).toMatch(/APP_DATABASE_URL/);
+  expect(JSON.stringify(problems)).not.toContain('secret-host');
+});
+
+test('every group with a problem is listed, in the order config declares them', () => {
+  clearConfigEnv();
+  vi.stubEnv('NEON_AUTH_BASE_URL', 'https://auth.example.test');
+  vi.stubEnv('BOOKING_CREDENTIAL_ENCRYPTION_KEY', Buffer.alloc(16).toString('base64'));
+  vi.stubEnv('DATABASE_PREPARE', 'maybe');
+
+  expect(configProblems().map((problem) => problem.group)).toEqual(['signIn', 'bookingCipherKey', 'databasePrepare']);
 });
