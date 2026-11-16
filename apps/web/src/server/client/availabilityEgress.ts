@@ -1,5 +1,6 @@
 import type { EgressAccessCredentials } from '../config';
 import type { AvailabilityEgressRequestDto, AvailabilityEgressResponseDto, AvailabilityErrorDto } from '../contract';
+import { INTERNAL_API_VERSION, INTERNAL_API_VERSION_HEADER, INTERNAL_VERSION_UNSUPPORTED, UNREADABLE_REQUEST } from './internalApi';
 
 export const EGRESS_PATH = '/api/internal/availability/fetch';
 export const EGRESS_TIMEOUT_CODE = 'timeout';
@@ -9,6 +10,8 @@ export const EGRESS_NOT_JSON_CODE = 'egress_not_json';
 const NO_STATUS = 0;
 const FIRST_REDIRECT_STATUS = 300;
 const FIRST_CLIENT_ERROR_STATUS = 400;
+const STATUS_BAD_REQUEST = 400;
+const DISAGREEMENT_CODES: ReadonlySet<string> = new Set([UNREADABLE_REQUEST, INTERNAL_VERSION_UNSUPPORTED]);
 const TIMEOUT_ERROR = 'TimeoutError';
 const ACCESS_CLIENT_ID_HEADER = 'cf-access-client-id';
 const ACCESS_CLIENT_SECRET_HEADER = 'cf-access-client-secret';
@@ -23,7 +26,12 @@ function headersFor(endpoint: EgressEndpoint): Record<string, string> {
     'content-type': 'application/json',
     [ACCESS_CLIENT_ID_HEADER]: endpoint.access.clientId,
     [ACCESS_CLIENT_SECRET_HEADER]: endpoint.access.clientSecret,
+    [INTERNAL_API_VERSION_HEADER]: INTERNAL_API_VERSION,
   };
+}
+
+function disagrees(status: number, code: string | null): boolean {
+  return status === STATUS_BAD_REQUEST && code !== null && DISAGREEMENT_CODES.has(code);
 }
 
 export type EgressResult =
@@ -56,5 +64,5 @@ export async function fetchEgress(endpoint: EgressEndpoint, request: Availabilit
   }
   const body = (await response.json().catch(() => null)) as AvailabilityErrorDto | null;
   const code = typeof body?.error === 'string' ? body.error : null;
-  return { kind: 'error', status: response.status, code, body: code === null ? null : body };
+  return { kind: 'error', status: response.status, code, body: code === null || disagrees(response.status, code) ? null : body };
 }

@@ -38,7 +38,15 @@ test('sends the bearer, the Access pair and the JSON body to the relay path', as
   expect(init.headers['cf-access-client-id']).toBe('id.access');
   expect(init.headers['cf-access-client-secret']).toBe('secret');
   expect(init.redirect).toBe('manual');
+  expect(init.headers['x-internal-api-version']).toBe('1');
   expect(JSON.parse(init.body)).toEqual(BODY);
+});
+
+test('a relay that does not serve our internal API version is a version_mismatch fault, and is logged', async () => {
+  const refusal = { error: 'internal_version_unsupported', detail: 'served versions: 2' };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(refusal, { status: 400 })));
+  expect(await postRelay(CONFIG, 'health', BODY, TIMEOUT_MS)).toEqual({ kind: 'fault', fault: 'version_mismatch' });
+  expect(warn).toHaveBeenCalledWith('booking gateway:', 'version_mismatch');
 });
 
 test('the relay timeout envelope is an answer, with its status', async () => {

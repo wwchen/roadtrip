@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.api.BookingRelayLoginOutcome
 import ca.floo.roadtrip.model.api.BookingRelaySession
 import ca.floo.roadtrip.model.api.BookingRelaySignOutDto
 import ca.floo.roadtrip.model.api.BookingRelaySignOutOutcome
+import ca.floo.roadtrip.route.internal.INTERNAL_API_VERSION_HEADER
 import ca.floo.roadtrip.route.internal.bookingRelayRoutes
 import ca.floo.roadtrip.service.booking.BookingRelayController
 import ca.floo.roadtrip.service.booking.RECGOV_CART_URL
@@ -168,11 +169,38 @@ class BookingRelayRoutesTest {
         path: String,
         body: String,
         bearer: String? = TOKEN,
+        version: String? = null,
     ): HttpResponse =
         client.post("$PREFIX/$path") {
             contentType(ContentType.Application.Json)
             bearer?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            version?.let { header(INTERNAL_API_VERSION_HEADER, it) }
             setBody(body)
+        }
+
+    private suspend fun errorOf(response: HttpResponse): String? {
+        val body = wire.parseToJsonElement(response.bodyAsText()) as JsonObject
+        return body["error"]?.jsonPrimitive?.content
+    }
+
+    @Test
+    fun `a caller speaking a version this server serves reaches the companion`() =
+        relay {
+            assertEquals(HttpStatusCode.OK, call("health", profileBody, version = "1").status)
+            assertEquals(listOf("health:$PROFILE_ID"), companion.calls)
+        }
+
+    @Test
+    fun `a caller speaking another version is 400 internal_version_unsupported and reaches no companion`() =
+        relay {
+            everyPath.forEach { (path, body) ->
+                listOf("2", "two").forEach { version ->
+                    val response = call(path, body, version = version)
+                    assertEquals(HttpStatusCode.BadRequest, response.status, "$path $version")
+                    assertEquals("internal_version_unsupported", errorOf(response))
+                }
+            }
+            assertTrue(companion.calls.isEmpty())
         }
 
     private suspend fun HttpResponse.hold(): BookingRelayHoldDto = wire.decodeFromString(bodyAsText())

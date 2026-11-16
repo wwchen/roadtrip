@@ -10,7 +10,15 @@ export interface Refusal {
   detail?: string;
 }
 
-export type GatewayFault = 'not_configured' | 'unanswered' | 'unreachable' | 'unauthorized' | 'redirected' | 'malformed' | 'rejected';
+export type GatewayFault =
+  | 'not_configured'
+  | 'unanswered'
+  | 'unreachable'
+  | 'unauthorized'
+  | 'redirected'
+  | 'malformed'
+  | 'rejected'
+  | 'version_mismatch';
 
 export interface StayWindow {
   startDate: string;

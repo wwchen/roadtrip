@@ -344,10 +344,16 @@ The egress host's Caddy block routes `POST /api/internal/booking/*` to the backe
 `roadtrip.floo.ca` answers 404 for `/api/internal/*`.
 
 Have the web app and the backend on the same relay format before these variables are set, and keep
-them so while they are. The format carries no version and neither side reads the other's shape.
-When the two differ, the web app reads every relay answer as malformed and reports a failure for
-an operation the backend completed: a hold that is in the cart, a sign-out that wiped the
-profile. The web app deploys on merge and the backend deploys afterwards, so check the backend's
+them so while they are. The web app names the internal API version it speaks in an
+`X-Internal-Api-Version` header on every relay and availability call, and the backend answers 400
+`internal_version_unsupported` to a version it does not serve, before doing any work. A call with
+no header counts as version 1. The web app logs that refusal as `version_mismatch` and treats the
+relay as unavailable; for availability, it answers "unavailable" instead of passing mini-ca's 400
+on as the caller's own.
+
+The version only catches a difference both sides know about. Today both serve version 1 alone, so
+a format change still needs the backend deployed first, serving the old and new versions, then the
+web app. The web app deploys on merge and the backend deploys afterwards, so check the backend's
 deployed commit first, and roll the two back together.
 
 ## Previews

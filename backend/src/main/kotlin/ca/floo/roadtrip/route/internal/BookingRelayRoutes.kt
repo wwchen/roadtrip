@@ -82,6 +82,10 @@ private fun Route.relay(
             call.respondApiError(UNAUTHORIZED_ERROR, HttpStatusCode.Unauthorized)
             return@post
         }
+        if (!call.speaksServedInternalApiVersion()) {
+            call.respondApiError(INTERNAL_VERSION_UNSUPPORTED, HttpStatusCode.BadRequest, detail = servedInternalApiVersionsDetail)
+            return@post
+        }
         serve(call)
     }.describeApi(TAG_BOOKING_RELAY, summary, RELAY_DESCRIPTION)
         .access(RouteAccess.Anonymous)

@@ -14,8 +14,10 @@ import {
 } from '../mapper/relay/bookingRelayWire';
 import type { ActionResult, GatewayFault, HoldResult, LoginResult, SessionHealth, SignOutResult } from '../service/booking/model';
 import type { BookingGateway } from '../service/booking/ports';
+import { INTERNAL_API_VERSION, INTERNAL_API_VERSION_HEADER, INTERNAL_VERSION_UNSUPPORTED } from './internalApi';
 
 export const BOOKING_RELAY_PREFIX = '/api/internal/booking';
+const STATUS_BAD_REQUEST = 400;
 const STATUS_UNAUTHORIZED = 401;
 const FIRST_REDIRECT_STATUS = 300;
 const FIRST_CLIENT_ERROR_STATUS = 400;
@@ -28,6 +30,10 @@ const LOGGED_DECODE_FAULTS: readonly GatewayFault[] = ['malformed', 'rejected'];
 const NOT_CONFIGURED: { kind: 'unavailable'; fault: GatewayFault } = { kind: 'unavailable', fault: 'not_configured' };
 
 export type BookingRelayPath = 'health' | 'login' | 'login/mfa' | 'refresh' | 'verify' | 'atc' | 'signout';
+
+function refusesOurVersion(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && (body as { error?: unknown }).error === INTERNAL_VERSION_UNSUPPORTED;
+}
 
 function fault(kind: GatewayFault): RelayExchange {
   console.warn(GATEWAY_LOG_PREFIX, kind);
@@ -49,6 +55,7 @@ export async function postRelay(
         authorization: `${BEARER_PREFIX}${config.relayToken}`,
         [ACCESS_CLIENT_ID_HEADER]: config.access.clientId,
         [ACCESS_CLIENT_SECRET_HEADER]: config.access.clientSecret,
+        [INTERNAL_API_VERSION_HEADER]: INTERNAL_API_VERSION,
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
@@ -63,6 +70,7 @@ export async function postRelay(
   if (response.status === STATUS_UNAUTHORIZED) return fault('unauthorized');
   const parsed: unknown = await response.json().catch(() => undefined);
   if (parsed === undefined) return fault('malformed');
+  if (response.status === STATUS_BAD_REQUEST && refusesOurVersion(parsed)) return fault('version_mismatch');
   return { kind: 'answered', status: response.status, body: parsed };
 }
 

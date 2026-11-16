@@ -26,6 +26,13 @@ internal fun Route.availabilityEgressRoutes(
 ) {
     if (!enabled) return
     post(AVAILABILITY_EGRESS_PATH) {
+        if (!call.speaksServedInternalApiVersion()) {
+            call.respondEncodedJson(
+                availabilityErrorDto(INTERNAL_VERSION_UNSUPPORTED, detail = servedInternalApiVersionsDetail),
+                HttpStatusCode.BadRequest,
+            )
+            return@post
+        }
         val request =
             when (val body = call.receiveJsonBody<AvailabilityEgressRequestDto>()) {
                 is RouteBodyResult.Invalid -> {
