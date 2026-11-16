@@ -478,6 +478,29 @@ test('credential login fills the dialog email field when a hidden email input pr
   assert.equal(page.credentialSubmitClicks, 1)
 })
 
+test('credential login types a 2FA code one digit per box', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-mfa-boxes' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+    mfaDigitBoxes: 6,
+  })
+
+  const resolved = await resolveRecaccount(page, {
+    credentials: { username: 'user@example.com', password: 'secret', mfa_code: '123456' },
+  })
+
+  assert.equal(resolved.access_token, recaccount.access_token)
+  assert.equal(page.mfaSubmitClicks, 1)
+  assert.deepEqual(
+    page.fills.filter(({ index }) => index !== undefined).map(({ value }) => value),
+    ['1', '2', '3', '4', '5', '6'],
+  )
+})
+
 function fakePage ({
   rawRecaccount,
   rawRecaccountAfterClear = null,
@@ -491,12 +514,14 @@ function fakePage ({
   loggedIn = false,
   logoutSelectorVisible = false,
   hiddenNewsletterEmail = false,
+  mfaDigitBoxes = 0,
 }) {
   let refreshResponseIndex = 0
   let currentRawRecaccount = rawRecaccount
   let loginOpened = false
   let mfaPromptVisible = false
   let submittedMfaCode = null
+  const mfaDigits = []
   const context = {
     cookies: [],
     pages: () => [page],
@@ -531,6 +556,18 @@ function fakePage ({
       page.viewportSize = size
     },
     locator: (selector) => ({
+      count: async () => {
+        if (mfaDigitBoxes && isDigitBoxSelector(selector)) return mfaPromptVisible ? mfaDigitBoxes : 0
+        return selectorVisible(selector) ? 1 : 0
+      },
+      nth: (index) => ({
+        fill: async (value) => {
+          if (!selectorVisible(selector)) throw new Error(`selector not visible: ${selector}`)
+          page.fills.push({ selector, value, index })
+          mfaDigits[index] = value
+          submittedMfaCode = mfaDigits.join('')
+        },
+      }),
       first: () => ({
         waitFor: async () => {
           if (!selectorVisible(selector)) throw new Error(`selector not visible: ${selector}`)
@@ -603,6 +640,7 @@ function fakePage ({
   function selectorVisible (selector) {
     if (selector.includes('Sign Up / Log In')) return true
     if (isLogoutSelector(selector)) return logoutSelectorVisible
+    if (mfaDigitBoxes && isMfaInputSelector(selector)) return mfaPromptVisible && isDigitBoxSelector(selector)
     if (isMfaInputSelector(selector)) return mfaPromptVisible
     if (hiddenNewsletterEmail && isEmailSelector(selector) && !isDialogOnlySelector(selector)) return false
     if (isEmailSelector(selector) || isPasswordSelector(selector)) return loginOpened
@@ -624,8 +662,12 @@ function isPasswordSelector (selector) {
   return /password/.test(selector)
 }
 
+function isDigitBoxSelector (selector) {
+  return selector === '[role="dialog"] input[maxlength="1"]'
+}
+
 function isMfaInputSelector (selector) {
-  return /one-time-code|code/.test(selector) && /input/.test(selector)
+  return (/one-time-code|code/.test(selector) || isDigitBoxSelector(selector)) && /input/.test(selector)
 }
 
 function isSubmitSelector (selector) {
