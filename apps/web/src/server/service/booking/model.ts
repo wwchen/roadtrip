@@ -75,9 +75,17 @@ export type SignOutResult =
   | { kind: 'timed_out'; refusal: Refusal }
   | Unavailable;
 
-export type VaultStatus = { kind: 'none' } | { kind: 'stored'; username: string } | { kind: 'locked'; username: string };
+export type VaultStatus =
+  | { kind: 'none' }
+  | { kind: 'stored'; username: string }
+  | { kind: 'locked'; username: string }
+  | { kind: 'key_changed'; username: string };
 
-export type OpenedVault = { kind: 'unavailable' } | { kind: 'none' } | { kind: 'opened'; username: string; password: string };
+export type OpenedVault =
+  | { kind: 'unavailable' }
+  | { kind: 'none' }
+  | { kind: 'key_changed' }
+  | { kind: 'opened'; username: string; password: string };
 
 export interface AddToCartCommand {
   campsiteId: bigint;

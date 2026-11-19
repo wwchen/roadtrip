@@ -1,4 +1,5 @@
 import { config } from '@/server/config';
+import type { HealthResponseDto } from '@/server/contract';
 import { isAuthorizedForDatabaseCheck } from '@/server/healthAuth';
 import { isDatabaseReachable } from '@/server/service/healthService';
 
@@ -11,9 +12,13 @@ const STATUS_OK = 200;
 const STATUS_UNAUTHORIZED = 401;
 const STATUS_UNAVAILABLE = 503;
 
+function healthBody(status: string): HealthResponseDto {
+  return { status, now: Date.now() };
+}
+
 export async function GET(request: Request): Promise<Response> {
   const presented = request.headers.get(AUTHORIZATION_HEADER);
-  if (presented === null) return Response.json({ status: 'ok' }, { status: STATUS_OK });
+  if (presented === null) return Response.json(healthBody('ok'), { status: STATUS_OK });
 
   if (!isAuthorizedForDatabaseCheck(presented, config.healthDatabaseToken)) {
     return Response.json(
@@ -24,7 +29,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const reachable = await isDatabaseReachable();
   return Response.json(
-    { status: reachable ? 'ok' : 'unavailable' },
+    healthBody(reachable ? 'ok' : 'unavailable'),
     { status: reachable ? STATUS_OK : STATUS_UNAVAILABLE },
   );
 }

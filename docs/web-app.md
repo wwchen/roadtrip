@@ -316,6 +316,10 @@ Spec: `docs/superpowers/specs/2026-11-10-add-to-cart-on-vercel-design.md`.
   `BOOKING_CREDENTIAL_ENCRYPTION_KEY` (the same layout as Kotlin's `SecretCipher`, held equal by
   `secret-cipher-vectors.json`). The key exists only on Vercel. mini-ca stores nothing about a
   Vercel user.
+- A stored password that does not open under the current key reads as `key_changed`: settings
+  and the grid ask for the credentials again, a sign-in answers `recgov_not_configured`, and the
+  vault logs `credential vault: key_changed`. The vault learns this by opening the row, so status
+  costs one local decrypt.
 - Every call that needs the companion goes to the booking relay on mini-ca,
   `POST https://roadtrip-egress.floo.ca/api/internal/booking/<call>`, with the same Cloudflare
   Access pair as the availability egress plus `Authorization: Bearer <BOOKING_EGRESS_TOKEN>`.
@@ -341,7 +345,7 @@ Vercel Production variables (the first three together, or none):
 |---|---|
 | `BOOKING_EGRESS_URL` | `https://roadtrip-egress.floo.ca` |
 | `BOOKING_EGRESS_TOKEN` | The same value as mini-ca's `BOOKING_EGRESS_TOKEN` (`openssl rand -base64 32`) |
-| `BOOKING_CREDENTIAL_ENCRYPTION_KEY` | Base64 of 32 random bytes (`openssl rand -base64 32`); losing it makes every stored password unreadable |
+| `BOOKING_CREDENTIAL_ENCRYPTION_KEY` | Base64 of 32 random bytes (`openssl rand -base64 32`); losing or changing it makes every stored password unreadable, and each user must enter theirs again |
 | `BOOKING_FRESHNESS_MAX_AGE_SECONDS` | Optional, default `300` |
 | `MFA_CHALLENGE_TTL_SECONDS` | Optional, default `300` |
 
@@ -392,9 +396,16 @@ queried on every hit would let any crawler or uptime checker hold the database a
 
 | Request | Result | Touches the database |
 |---|---|---|
-| no `Authorization` header | `200 {"status":"ok"}` | **no**: it proves only that the function is running |
-| `Authorization: Bearer <HEALTH_DATABASE_TOKEN>` | the probe: `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, with a 12 second race | yes |
+| no `Authorization` header | `200 {"status":"ok","now":…}` | **no**: it proves only that the function is running |
+| `Authorization: Bearer <HEALTH_DATABASE_TOKEN>` | the probe: `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, each with `"now"`, with a 12 second race | yes |
 | any other `Authorization` header (wrong secret, wrong scheme, empty) | `401 {"status":"unauthorized"}` with `WWW-Authenticate: Bearer` | no |
+
+A config group is every getter on `config` in `config.ts`. A group with none of its variables set is
+off; a group set in part, or with a value that does not parse, is a problem. The app serves anyway,
+with that group off. `instrumentation.ts` logs each problem once when a server starts, as
+`config: <group> <message>`; the message names variables, never their values. Health does not
+report it. A preview deployment logs one today: the Neon integration sets `NEON_AUTH_BASE_URL` on
+preview branches without the other two sign-in variables.
 
 **An uptime checker should use the plain request** to learn the site is up, and the bearer form,
 at a modest interval, only if it must learn the database is reachable. Each bearer hit wakes a
