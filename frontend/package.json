@@ -22,7 +22,7 @@
     "@lew-ds/lds-react": "2.0.0",
     "@lew-ds/open-icons": "1.1.0",
     "@roadtrip/domain": "*",
-    "@tanstack/react-query": "^5.107.1",
+    "@tanstack/react-query": "^5.108.0",
     "@turf/buffer": "^7.4.0",
     "@turf/simplify": "^7.4.0",
     "chart.js": "^4.6.1",
