@@ -5,5 +5,6 @@ import kotlinx.serialization.json.JsonObject
 data class ReserveCaliforniaUnit(
     val unitId: Long,
     val name: String?,
+    val unitTypeId: Long?,
     val raw: JsonObject,
 )

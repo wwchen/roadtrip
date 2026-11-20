@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.osmpf
 
+import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.RawCaptureStore
@@ -65,7 +67,6 @@ class PlanetFitnessEtlTest {
                 p.locationId.matches(Regex("^(node|way|relation)-\\d+$")),
                 "unexpected locationId=${p.locationId}",
             )
-            assertEquals("US", p.country)
             assertNotNull(p.latitude)
             assertNotNull(p.longitude)
         }
@@ -120,6 +121,59 @@ class PlanetFitnessEtlTest {
             "expected at least one fixture element without opening_hours (fixture is too clean)",
         )
     }
+
+    @Test
+    fun `a gym takes its listed country, else one its postcode, province or state names, else none and a warning`() {
+        val cases =
+            listOf(
+                mapOf("addr:country" to " CA ", "addr:state" to "NY") to "CA",
+                mapOf("addr:postcode" to "L7N 4X7") to "CA",
+                mapOf("addr:postcode" to "v3t2x3") to "CA",
+                mapOf("addr:province" to "Ontario") to "CA",
+                mapOf("addr:state" to "on") to "CA",
+                mapOf("addr:postcode" to "97071") to "US",
+                mapOf("addr:postcode" to "97071-1234") to "US",
+                mapOf("addr:state" to "Washington") to "US",
+                mapOf("name" to "Planet Fitness") to null,
+            )
+        val results = transformTags(cases.map { it.first })
+
+        assertEquals(cases.map { it.second }, results.map { it.record.country })
+        assertEquals(
+            cases.map { (_, country) -> if (country == null) listOf("no country in the OSM address tags") else emptyList() },
+            results.map { it.warnings },
+        )
+    }
+
+    @Test
+    fun `a province stands in for a missing state and the address carries the same country`() {
+        val record =
+            transformTags(
+                listOf(
+                    mapOf(
+                        "addr:housenumber" to "1025",
+                        "addr:street" to "Marine Drive",
+                        "addr:city" to "North Vancouver",
+                        "addr:province" to "BC",
+                    ),
+                ),
+            ).single().record
+        assertEquals("BC", record.region)
+        assertEquals(
+            """{"street":"1025 Marine Drive","city":"North Vancouver","state":"BC","country":"CA"}""",
+            record.address.toString(),
+        )
+    }
+
+    private fun transformTags(tags: List<Map<String, String>>): List<TransformResult.Ok<PlanetFitnessLocationUpsertCandidate>> =
+        PlanetFitnessEtl()
+            .transform(
+                PlanetFitnessRawDto(
+                    elements = tags.mapIndexed { index, tagMap -> OverpassElement("node", index.toLong(), 43.7, -79.4, null, tagMap) },
+                ),
+                transformCtx,
+            ).filterIsInstance<TransformResult.Ok<PlanetFitnessLocationUpsertCandidate>>()
+            .toList()
 
     private fun fixtureFile(): File = File(javaClass.classLoader.getResource("etl-fixtures/osm-pf/sample.json")!!.toURI())
 }

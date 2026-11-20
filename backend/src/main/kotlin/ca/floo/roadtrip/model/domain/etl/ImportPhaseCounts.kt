@@ -16,4 +16,5 @@ data class ImportPhaseCounts(
     @SerialName("terminal_etl") val terminalEtl: String,
     @SerialName("upserted_campsites") val upsertedCampsites: Int? = null,
     @SerialName("skipped_campsites") val skippedCampsites: Int? = null,
+    @SerialName("warned_records") val warnedRecords: Int? = null,
 )

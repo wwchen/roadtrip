@@ -33,9 +33,10 @@ class UsCampgroundsCsvSourceTest {
         lat: String,
         name: String,
         state: String,
-    ): String = listOf(lon, lat, "", "", name, "", "", "", "", "", "", "", state).joinToString(",")
+        type: String = "SP",
+    ): String = listOf(lon, lat, "", "", name, type, "", "", "", "", "", "", state).joinToString(",")
 
-    private fun envelope(): Envelope =
+    private fun envelope(text: String = csv): Envelope =
         Json.decodeFromString<Envelope>(
             """
             {
@@ -43,14 +44,18 @@ class UsCampgroundsCsvSourceTest {
               "fetched_at": "2026-07-05T00:00:00Z",
               "request": { "url": "test://uscampgrounds", "method": "GET" },
               "response": { "status": 200 },
-              "payload": ${Json.encodeToString(csv)}
+              "payload": ${Json.encodeToString(text)}
             }
             """.trimIndent(),
         )
 
-    private fun index(stateFilter: String?): Map<String, GeometryPoint> =
+    private fun index(
+        stateFilter: String?,
+        text: String = csv,
+        typeFilter: List<String>? = null,
+    ): Map<String, GeometryPoint> =
         GeometryIndex.build(
-            listOf("uscampgrounds" to UsCampgroundsCsvSource(listOf(envelope()), stateFilter)),
+            listOf("uscampgrounds" to UsCampgroundsCsvSource(listOf(envelope(text)), stateFilter, typeFilter)),
             LoggerFactory.getLogger(javaClass),
             "uscampgrounds-csv-source-test",
         )
@@ -71,12 +76,24 @@ class UsCampgroundsCsvSourceTest {
     }
 
     @Test
-    fun `no state filter indexes every state, first row winning`() {
-        // Tenants outside the US (Parks Canada, BC) declare no filter and must
-        // keep the previous nationwide behaviour.
+    fun `no state filter indexes every state, and a name two distant states share is pinned to neither`() {
         val byName = index(stateFilter = null)
-        assertEquals(GeometryPoint(43.177, -101.732, "uscampgrounds"), byName[normalize("Brooks Memorial")])
+        assertNull(byName[normalize("Brooks Memorial")])
         assertEquals(GeometryPoint(47.548, -122.545, "uscampgrounds"), byName[normalize("Manchester")])
+    }
+
+    @Test
+    fun `a type filter keeps only the listed agency types, compared trimmed and case-insensitively`() {
+        val text =
+            listOf(
+                row("-123.165", "47.737", "Dosewallips", "WA", "NP"),
+                row("-122.902", "47.689", "Dosewallips State Park", "WA", " sp "),
+                row("-120.0", "47.0", "Beebe Bridge", "WA", "CP"),
+            ).joinToString("\n")
+        val byName = index(stateFilter = "WA", text = text, typeFilter = listOf("SP", "cp"))
+        assertEquals(GeometryPoint(47.689, -122.902, "uscampgrounds"), byName[normalize("Dosewallips")])
+        assertEquals(GeometryPoint(47.0, -120.0, "uscampgrounds"), byName[normalize("Beebe Bridge")])
+        assertNull(index(stateFilter = "WA", text = text)[normalize("Dosewallips")])
     }
 
     /**
@@ -99,6 +116,7 @@ class UsCampgroundsCsvSourceTest {
                 .flatMap { it.etls }
                 .single { it.slug == "aspira-wa-campgrounds" }
         assertEquals("WA", checkNotNull(entry.geometry).sources.single().state)
+        assertEquals(listOf("SP", "CP", "SF"), checkNotNull(entry.geometry).sources.single().types)
 
         val inputs =
             InputBundle(

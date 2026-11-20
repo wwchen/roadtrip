@@ -211,6 +211,7 @@ class IngestController(
                         seen = stats.upsertResult.seenCount,
                         swept = stats.upsertResult.sweptCount,
                         terminalEtl = stats.terminalEtlSlug,
+                        warnedRecords = stats.warned,
                     )
                 }
                 Phase.Import.Section.CAMPSITE_DATA -> {
@@ -222,6 +223,7 @@ class IngestController(
                         terminalEtl = stats.terminalEtlSlug,
                         upsertedCampsites = stats.upserted,
                         skippedCampsites = stats.skipped,
+                        warnedRecords = stats.warned,
                     )
                 }
             }

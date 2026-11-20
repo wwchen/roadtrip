@@ -125,6 +125,8 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
         assertEquals(2, campsites.parsed)
         assertEquals(1, campsites.upserted)
         assertEquals(1, campsites.skipped)
+        assertEquals(0, campgrounds.warned)
+        assertEquals(2, campsites.warned, "neither site lists a kind, and each is counted before the repo skips one")
         assertEquals(1, tableCount("campgrounds"))
         assertEquals(1, tableCount("campsites"))
     }

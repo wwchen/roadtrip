@@ -2,10 +2,13 @@ package ca.floo.roadtrip.service.etl.vendors.recgov
 
 import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -104,6 +107,33 @@ class RecGovCampsitesEtlTest {
         assertEquals("232447", campsite.parentDataProviderRef!!.serialize())
         assertNull(campsite.kindListed)
         assertNull(campsite.loopName)
+    }
+
+    @Test
+    fun `a campsite type the table does not list is kept and named in a warning`() {
+        val results =
+            RecGovCampsitesEtl("recgov-campsites")
+                .transform(
+                    RecGovCampsitesEtl("recgov-campsites")
+                        .parse(
+                            bundle(
+                                """{"campsites":{"1":{"campsite_type":"BALL FIELD"},"2":{"campsite_type":"GROUP PICNIC AREA"},"3":{}}}""",
+                            ),
+                        ).filterIsInstance<ParseResult.Ok<List<Envelope>>>()
+                        .single()
+                        .dto,
+                    transformCtx(),
+                ).filterIsInstance<TransformResult.Ok<CampsiteUpsertCandidate>>()
+                .toList()
+
+        assertEquals(
+            listOf(
+                CampsiteKind.OTHER to listOf("unlisted rec.gov campsite_type 'BALL FIELD'"),
+                CampsiteKind.DAY_USE to emptyList(),
+                CampsiteKind.OTHER to listOf("no rec.gov campsite_type"),
+            ),
+            results.map { it.record.kind to it.warnings },
+        )
     }
 
     @Test

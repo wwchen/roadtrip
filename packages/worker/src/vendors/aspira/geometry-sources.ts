@@ -9,7 +9,7 @@ import { UsCampgroundsCsvSource } from './us-campgrounds-csv.js';
 type GeometrySourceFactory = (spec: GeometrySourceSpec, envelopes: readonly Envelope[]) => GeometrySource;
 
 const GEOMETRY_SOURCE_FACTORIES: Readonly<Record<GeometryFormat, GeometrySourceFactory>> = {
-  uscampgrounds_csv: (spec, envelopes) => new UsCampgroundsCsvSource(envelopes, spec.state ?? null),
+  uscampgrounds_csv: (spec, envelopes) => new UsCampgroundsCsvSource(envelopes, spec.state ?? null, spec.types ?? null),
   bcparks_strapi: (_spec, envelopes) => new BcParksStrapiSource(envelopes),
   arcgis_centroids: (_spec, envelopes) => new ArcGisCentroidSource(envelopes),
   geojson_points: (spec, envelopes) => new GeoJsonFeaturesSource(envelopes, spec.nameProperty ?? null),

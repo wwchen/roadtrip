@@ -262,17 +262,31 @@ describe('the BC Parks campgrounds adapter, transform', () => {
     });
   });
 
-  test('two Strapi rows sharing a normalized name resolve to the first', () => {
+  test('two nearby Strapi rows sharing a normalized name resolve to the first', () => {
     const [record] = recordsOf(
       inputsOf(
         maps(leafNode('11', 'Alice Lake')),
         strapi(
           area('Alice Lake Provincial Park', { description: '"First."' }, '50.0', '-123.0'),
-          area('Alice Lake', { description: '"Second."' }, '51.0', '-124.0'),
+          area('Alice Lake', { description: '"Second."' }, '50.1', '-123.1'),
         ),
       ),
     );
     expect([record?.latitude, record?.longitude, record?.mediumDescription]).toEqual([50, -123, 'First.']);
+  });
+
+  test('two distant Strapi rows sharing a normalized name leave its leaf unplaced', () => {
+    const records = recordsOf(
+      inputsOf(
+        maps(leafNode('11', 'Alice Lake'), leafNode('12', 'Brandywine Falls', { resourceLocationId: '101' })),
+        strapi(
+          area('Alice Lake Provincial Park', {}, '50.0', '-123.0'),
+          area('Alice Lake', {}, '51.0', '-124.0'),
+          area('Brandywine Falls', {}, '50.03', '-123.12'),
+        ),
+      ),
+    );
+    expect(records.map((record) => record.name)).toEqual(['Brandywine Falls']);
   });
 
   test('the first Strapi row for a name supplies the point even when that row is off the earth', () => {

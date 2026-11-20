@@ -98,8 +98,8 @@ function recordsOf(slug: string, inputs: Inputs): CampgroundUpsertCandidate[] {
   });
 }
 
-function csvRow(name: string, state: string, longitude = '-122.5', latitude = '47.5'): string {
-  return [longitude, latitude, '', '', name, '', '', '', '', '', '', '', state].join(',');
+function csvRow(name: string, state: string, longitude = '-122.5', latitude = '47.5', type = 'SP'): string {
+  return [longitude, latitude, '', '', name, type, '', '', '', '', '', '', state].join(',');
 }
 
 function csv(...rows: string[]): string {
@@ -337,13 +337,32 @@ describe('the Aspira campgrounds adapter, transform on the Washington row', () =
     expect(() => transformed(WA_SLUG, waInputs(maps(leafNode('11', 'Brooks Memorial')), elsewhere))).toThrow(/geometry index is empty/);
   });
 
-  test('a leaf naming a point that two feed rows share takes the first row', () => {
+  test('a leaf naming a point that two nearby feed rows share takes the first row', () => {
     const duplicated = csv(
-      csvRow('Manchester State Park', 'WA', '-122.0', '47.0'),
-      csvRow('Manchester', 'WA', '-123.0', '48.0'),
+      csvRow('Manchester State Park', 'WA', '-122.50', '47.50'),
+      csvRow('Manchester', 'WA', '-122.55', '47.55'),
     );
     const [record] = recordsOf(WA_SLUG, waInputs(maps(leafNode('11', 'Manchester')), duplicated));
-    expect([record?.latitude, record?.longitude]).toEqual([47, -122]);
+    expect([record?.latitude, record?.longitude]).toEqual([47.5, -122.5]);
+  });
+
+  test('a name two distant rows of one feed share is pinned to neither', () => {
+    const distant = csv(
+      csvRow('Manchester State Park', 'WA', '-122.0', '47.0'),
+      csvRow('Manchester', 'WA', '-123.0', '48.0'),
+      csvRow('Brooks Memorial', 'WA'),
+    );
+    const records = recordsOf(WA_SLUG, waInputs(maps(leafNode('11', 'Manchester'), leafNode('13', 'Brooks Memorial')), distant));
+    expect(records.map((record) => record.name)).toEqual(['Brooks Memorial']);
+  });
+
+  test('the Washington row reads only state park, county park and state forest rows, so a national park namesake is not a match', () => {
+    const dosewallips = csv(
+      csvRow('Dosewallips', 'WA', '-123.165', '47.737', 'NP'),
+      csvRow('Dosewallips State Park', 'WA', '-122.902', '47.689', 'SP'),
+    );
+    const [record] = recordsOf(WA_SLUG, waInputs(maps(leafNode('11', 'Dosewallips')), dosewallips));
+    expect([record?.latitude, record?.longitude]).toEqual([47.689, -122.902]);
   });
 });
 

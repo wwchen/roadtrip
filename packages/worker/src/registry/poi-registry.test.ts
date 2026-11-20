@@ -101,13 +101,14 @@ describe('poi registry', () => {
     expect(registry.poiDataByName('Campflare Campgrounds')!.agency).toBeUndefined();
   });
 
-  test('geometry sources carry their format, state and name property, and the match default', () => {
+  test('geometry sources carry their format, state, types and name property, and the match default', () => {
     const registry = loadPoiRegistry(PRODUCTION_REGISTRY_PATH);
     const wa = registry.poiDataByName('Washington State Parks')!.etls[0]!;
     expect(wa.geometry?.sources[0]).toEqual({
       input: 'uscampgrounds',
       format: 'uscampgrounds_csv',
       state: 'WA',
+      types: ['SP', 'CP', 'SF'],
     });
     expect(wa.geometry?.match.fuzzyThreshold).toBe(DEFAULT_FUZZY_THRESHOLD);
     const pc = registry.poiDataByName('Parks Canada')!.etls[0]!;

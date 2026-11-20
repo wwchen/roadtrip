@@ -583,6 +583,19 @@ describe('the Aspira campsites adapter, labels from the dictionaries', () => {
     expect(raw).not.toHaveProperty('resource_category_name');
   });
 
+  test('a category the kind table does not list, or a category id the dictionary does not list, is kept and warned about', () => {
+    const warningsOf = (resourceCategoryId: string) => {
+      const [result] = transformed(
+        WA_SLUG,
+        waInputs([inventoryOf({ '1': resourceJson({ ...BASIC_RESOURCE, resourceCategoryId }) })], LINKED_MAPS, DICTIONARY),
+      );
+      return result?.ok === true ? result.warnings : null;
+    };
+    expect(warningsOf(UNKNOWN_CATEGORY)).toEqual(["unlisted Aspira resource category 'Mystery'"]);
+    expect(warningsOf('777')).toEqual(['Aspira resource category id 777 not in the tenant dictionary']);
+    expect(warningsOf(CAMPSITE_CATEGORY)).toEqual([]);
+  });
+
   test('with no dictionaries a category is still recorded by id and the kind is other', () => {
     const record = waRecord({ resourceCategoryId: CABIN_CATEGORY });
     expect(record.kind).toBe('other');

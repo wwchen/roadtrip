@@ -6,12 +6,12 @@ import ca.floo.roadtrip.model.domain.CampsiteKind
 data class VendorKind(
     val kind: CampsiteKind,
     val electric: Boolean?,
+    val warning: String? = null,
 )
 
 /**
  * Vendor type string → [CampsiteKind]. One table per vendor, and the only
- * place a vendor's type vocabulary is spelled out; `V58__campsite_kind_wire.sql`
- * mirrors these rows in SQL for rows imported before the vocabulary existed.
+ * place a vendor's type vocabulary is spelled out.
  */
 object CampsiteKinds {
     fun recgov(campsiteType: String?): VendorKind {
@@ -22,34 +22,33 @@ object CampsiteKinds {
                 ?.split(" ")
                 ?.filter { it.isNotEmpty() }
                 .orEmpty()
-        if (tokens.isEmpty()) return VendorKind(CampsiteKind.OTHER, null)
-        val kind =
-            recGovLeadingPhrases
-                .firstOrNull { (phrase, _) -> tokens.take(phrase.size) == phrase }
-                ?.second
-                ?: CampsiteKind.OTHER
-        return VendorKind(kind, recGovElectric(tokens.last()))
+        if (tokens.isEmpty()) return unlisted(RECGOV_FIELD, campsiteType, null)
+        val electric = recGovElectric(tokens.last())
+        return recGovLeadingPhrases
+            .firstOrNull { (phrase, _) -> tokens.take(phrase.size) == phrase }
+            ?.let { (_, kind) -> VendorKind(kind, electric) }
+            ?: unlisted(RECGOV_FIELD, campsiteType, electric)
     }
 
-    fun campflare(kind: String?): CampsiteKind = campflareKinds[kind?.trim()] ?: CampsiteKind.OTHER
+    fun campflare(kind: String?): VendorKind =
+        campflareKinds[kind?.trim()]?.let { VendorKind(it, null) } ?: unlisted(CAMPFLARE_FIELD, kind, null)
 
-    fun aspira(category: String?): CampsiteKind {
+    fun aspira(category: String?): VendorKind {
         val name = category?.trim().orEmpty()
-        if (name.isEmpty()) return CampsiteKind.OTHER
-        aspiraExactNames[name]?.let { return it }
-        return aspiraPrefixes.firstOrNull { (prefix, _) -> name.startsWith(prefix) }?.second ?: CampsiteKind.OTHER
+        val kind =
+            aspiraExactNames[name]
+                ?: aspiraPrefixes.firstOrNull { (prefix, _) -> name.isNotEmpty() && name.startsWith(prefix) }?.second
+        return kind?.let { VendorKind(it, null) } ?: unlisted(ASPIRA_FIELD, category, null)
     }
 
     fun reserveCalifornia(unitType: String?): VendorKind {
         val name = unitType?.trim()?.lowercase().orEmpty()
-        if (name.isEmpty()) return VendorKind(CampsiteKind.OTHER, null)
-        val kind =
-            reserveCaliforniaSubstrings
-                .firstOrNull { (substrings, _) -> substrings.any { it in name } }
-                ?.second
-                ?: CampsiteKind.OTHER
-        val electric = RC_HOOKUP_SUBSTRING in name && RC_ELECTRIC_SUBSTRING in name
-        return VendorKind(kind, true.takeIf { electric })
+        if (name.isEmpty()) return unlisted(RC_FIELD, unitType, null)
+        val electric = true.takeIf { RC_HOOKUP_SUBSTRING in name && RC_ELECTRIC_SUBSTRING in name }
+        return reserveCaliforniaSubstrings
+            .firstOrNull { (substrings, _) -> substrings.any { it in name } }
+            ?.let { (_, kind) -> VendorKind(kind, electric) }
+            ?: unlisted(RC_FIELD, unitType, electric)
     }
 
     private fun recGovElectric(lastToken: String): Boolean? =
@@ -58,17 +57,28 @@ object CampsiteKinds {
             RECGOV_NONELECTRIC_TOKEN -> false
             else -> null
         }
+
+    private fun unlisted(
+        field: String,
+        value: String?,
+        electric: Boolean?,
+    ): VendorKind {
+        val listed = value?.trim().orEmpty()
+        val warning = if (listed.isEmpty()) "no $field" else "unlisted $field '$listed'"
+        return VendorKind(CampsiteKind.OTHER, electric, warning)
+    }
 }
 
+private const val RECGOV_FIELD = "rec.gov campsite_type"
+private const val CAMPFLARE_FIELD = "Campflare kind"
+private const val ASPIRA_FIELD = "Aspira resource category"
+private const val RC_FIELD = "ReserveCalifornia unit type"
 private const val RECGOV_ELECTRIC_TOKEN = "ELECTRIC"
 private const val RECGOV_NONELECTRIC_TOKEN = "NONELECTRIC"
 
-/**
- * rec.gov leading phrases, first match wins. No phrase is a token-prefix of
- * another, so the order below is the spec's order rather than a precedence.
- */
 private val recGovLeadingPhrases: List<Pair<List<String>, CampsiteKind>> =
     listOf(
+        "GROUP PICNIC" to CampsiteKind.DAY_USE,
         "GROUP" to CampsiteKind.GROUP,
         "TENT ONLY" to CampsiteKind.TENT,
         "RV" to CampsiteKind.RV,
@@ -89,6 +99,7 @@ private val recGovLeadingPhrases: List<Pair<List<String>, CampsiteKind>> =
         "PARKING" to CampsiteKind.DAY_USE,
         "DAY USE" to CampsiteKind.DAY_USE,
     ).map { (phrase, kind) -> phrase.split(" ") to kind }
+        .sortedByDescending { (phrase, _) -> phrase.size }
 
 private val campflareKinds: Map<String, CampsiteKind> =
     mapOf(
@@ -113,6 +124,10 @@ private val aspiraExactNames: Map<String, CampsiteKind> =
         "Rustic Cabin" to CampsiteKind.CABIN,
         "Deluxe Cabin" to CampsiteKind.CABIN,
         "Backcountry Cabin" to CampsiteKind.CABIN,
+        "Backcountry Yurt" to CampsiteKind.CABIN,
+        "Cama Beach Cabin" to CampsiteKind.CABIN,
+        "Cama Beach Cabin Category" to CampsiteKind.CABIN,
+        "Elfin Lakes Shelter" to CampsiteKind.CABIN,
         "Yurt" to CampsiteKind.CABIN,
         "oTENTik" to CampsiteKind.CABIN,
         "Ôasis" to CampsiteKind.CABIN,
@@ -124,6 +139,7 @@ private val aspiraExactNames: Map<String, CampsiteKind> =
         "Equipped Camping" to CampsiteKind.CABIN,
         "Vacation House" to CampsiteKind.CABIN,
         "Equestrian" to CampsiteKind.EQUESTRIAN,
+        "Boat In" to CampsiteKind.BOAT_IN,
         "Marina" to CampsiteKind.BOAT_IN,
         "Mooring Buoy" to CampsiteKind.BOAT_IN,
         "Marine Trail" to CampsiteKind.BOAT_IN,
@@ -132,6 +148,14 @@ private val aspiraExactNames: Map<String, CampsiteKind> =
         "Guided Event" to CampsiteKind.DAY_USE,
         "Hiking Trip" to CampsiteKind.DAY_USE,
         "Ferry" to CampsiteKind.DAY_USE,
+        "Group Picnic Area" to CampsiteKind.DAY_USE,
+        "Parking" to CampsiteKind.DAY_USE,
+        "Shuttle" to CampsiteKind.DAY_USE,
+        "Guided Hike" to CampsiteKind.DAY_USE,
+        "Learn-to Activity" to CampsiteKind.DAY_USE,
+        "Day Runner Hike" to CampsiteKind.DAY_USE,
+        "Backpacking Trip" to CampsiteKind.BACKCOUNTRY,
+        "Access Point" to CampsiteKind.BACKCOUNTRY,
     )
 
 /** Checked only after [aspiraExactNames], so "Backcountry Cabin" stays a cabin. */
@@ -153,14 +177,13 @@ private const val RC_ELECTRIC_SUBSTRING = "(e"
  * catalog), so they are matched by substring of the lowercased name, first rule
  * wins. Order is the precedence: `Equestrain Group Tent Primitive Campsite` is a
  * group site, `Tent Only - Walk-In` a walk-in, `Premium Campsite` a standard one.
- * `V58__campsite_kind_wire.sql` repeats this list in the same order.
  */
 private val reserveCaliforniaSubstrings: List<Pair<List<String>, CampsiteKind>> =
     listOf(
         listOf("day use", "dailyuse") to CampsiteKind.DAY_USE,
         listOf("group") to CampsiteKind.GROUP,
         listOf("equestrian", "equestrain") to CampsiteKind.EQUESTRIAN,
-        listOf("cabin", "cottage", "yurt") to CampsiteKind.CABIN,
+        listOf("cabin", "cottage", "yurt", "dorm") to CampsiteKind.CABIN,
         listOf("boat in", "floating camp") to CampsiteKind.BOAT_IN,
         listOf("hike", "bike", "walk-in") to CampsiteKind.WALK_IN,
         listOf(RC_HOOKUP_SUBSTRING) to CampsiteKind.RV,

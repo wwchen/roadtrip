@@ -104,9 +104,9 @@ describe('tesla-locations side-load', () => {
 
     const names = transformedNames(['empty', 'notes', 'never-fetched']);
 
-    expect(names.get('empty')).toBe('Supercharger empty');
-    expect(names.get('notes')).toBe('Supercharger notes');
-    expect(names.get('never-fetched')).toBe('Supercharger never-fetched');
+    expect(names.get('empty')).toBe('empty');
+    expect(names.get('notes')).toBe('notes');
+    expect(names.get('never-fetched')).toBe('never-fetched');
   });
 
   test('a directory named like a capture is not mistaken for the newest capture', () => {
@@ -120,8 +120,39 @@ describe('tesla-locations side-load', () => {
     writeCapture('broken', OLDEST_CAPTURE, envelopeWithName('Older But Readable'));
     writeCapture('broken', NEWEST_CAPTURE, '{ not json');
 
-    expect(transformedNames(['broken']).get('broken')).toBe('Supercharger broken');
+    expect(transformedNames(['broken']).get('broken')).toBe('broken');
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('slug=broken'));
+  });
+});
+
+describe('values Tesla does not list', () => {
+  function warningsBySlug(slugs: string[]): Map<string, readonly string[]> {
+    const dto = decodeTeslaIndex({ data: { data: indexRowsFor(slugs) } });
+    const ctx = TransformCtx.load(rawDir, EMPTY_REGISTRY);
+    const warnings = new Map<string, readonly string[]>();
+    for (const result of new TeslaIndexEtl().transform(dto, ctx)) {
+      if (!result.ok) throw new Error(result.errors.join(', '));
+      warnings.set(result.record.locationSlug, result.warnings ?? []);
+    }
+    return warnings;
+  }
+
+  test('a site with no name is named by its slug as written, and one with no openToPublic is counted as assumed open', () => {
+    writeCapture('woodburn', NEWEST_CAPTURE, envelopeWithRawDetail('{"name":"Woodburn, OR","openToPublic":false}'));
+    writeCapture('salem', NEWEST_CAPTURE, envelopeWithName('Salem, OR'));
+
+    const records = transformedRecords(['woodburn', 'salem', 'Never/Fetched']);
+    const warnings = warningsBySlug(['woodburn', 'salem', 'Never/Fetched']);
+
+    expect(records.get('never-fetched')?.commonSiteName).toBe('Never/Fetched');
+    expect(records.get('never-fetched')?.openToPublic).toBe(true);
+    expect(warnings.get('never-fetched')).toEqual([
+      'Tesla site has no name; named by its location slug',
+      'Tesla openToPublic not listed; stored as open to the public',
+    ]);
+    expect(warnings.get('salem')).toEqual(['Tesla openToPublic not listed; stored as open to the public']);
+    expect(records.get('woodburn')?.openToPublic).toBe(false);
+    expect(warnings.get('woodburn')).toEqual([]);
   });
 });
 

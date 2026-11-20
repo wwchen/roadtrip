@@ -186,6 +186,13 @@ class AspiraCampsitesEtl(
                     val parentLeaf = leaf ?: inv.resourceLocationId?.let { leavesByResourceLocationId[it] }
                     if (leafMapId != null && leaf == null) unmatchedLeaf++
                     val resourceCategory = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] }
+                    val siteKind = CampsiteKinds.aspira(resourceCategory)
+                    val kindWarning =
+                        if (inv.resourceCategoryId != null && resourceCategory == null) {
+                            "Aspira resource category id ${inv.resourceCategoryId} not in the tenant dictionary"
+                        } else {
+                            siteKind.warning
+                        }
                     yield(
                         TransformResult.Ok(
                             CampsiteUpsertCandidate(
@@ -203,7 +210,7 @@ class AspiraCampsitesEtl(
                                 // Loop is the parent leaf's name from /api/maps
                                 // (PC's "AREA WHITE RIVER" analogue).
                                 loopName = leaf?.name ?: parentLeaf?.name,
-                                kind = CampsiteKinds.aspira(resourceCategory),
+                                kind = siteKind.kind,
                                 kindListed = resourceCategory,
                                 equipment = allowedEquipmentNames(inv.allowedEquipment, dto.dictionaries),
                                 maxPeople = inv.maxCapacity,
@@ -219,6 +226,7 @@ class AspiraCampsitesEtl(
                                         dictionaries = dto.dictionaries,
                                     ),
                             ),
+                            listOfNotNull(kindWarning),
                         ),
                     )
                     emitted++
