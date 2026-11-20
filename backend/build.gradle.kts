@@ -392,7 +392,7 @@ tasks.named<JooqGenerate>("generateJooq") {
 
         // postgis/postgis is a postgres derivative; Testcontainers won't auto-detect
         // wait-for-readiness without the explicit compatibility hint.
-        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
+        val image = DockerImageName.parse("postgis/postgis:18-3.6").asCompatibleSubstituteFor("postgres")
         val container =
             PostgreSQLContainer<Nothing>(image).apply {
                 withDatabaseName("roadtrip_codegen")

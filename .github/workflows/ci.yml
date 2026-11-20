@@ -717,7 +717,7 @@ jobs:
     timeout-minutes: 30
     services:
       postgres:
-        image: postgis/postgis:16-3.4
+        image: postgis/postgis:18-3.6
         env:
           POSTGRES_DB: roadtrip
           POSTGRES_USER: roadtrip

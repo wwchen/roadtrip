@@ -97,6 +97,27 @@ test('normalization sorts table columns but leaves constraints after them', () =
   );
 });
 
+test('normalization ignores the name of a column NOT NULL constraint but keeps the constraint', () => {
+  const renamedInFlyway =
+    "CREATE TABLE public.t (\n    campsite_id bigint CONSTRAINT t_reservable_id_not_null NOT NULL,\n    status text DEFAULT 'started'::text CONSTRAINT t_old_status_not_null NOT NULL,\n    note text\n);";
+  const createdByDrizzle =
+    "CREATE TABLE public.t (\n    campsite_id bigint NOT NULL,\n    status text DEFAULT 'started'::text NOT NULL,\n    note text\n);";
+  assert.equal(normalize(renamedInFlyway), normalize(createdByDrizzle));
+  assert.notEqual(
+    normalize(renamedInFlyway),
+    normalize(createdByDrizzle.replace('campsite_id bigint NOT NULL', 'campsite_id bigint')),
+  );
+  assert.notEqual(
+    normalize(renamedInFlyway),
+    normalize(createdByDrizzle.replace('note text', 'note text NOT NULL')),
+  );
+});
+
+test('normalization keeps the names of table constraints', () => {
+  const base = 'CREATE TABLE public.t (\n    id bigint NOT NULL,\n    CONSTRAINT t_id_check CHECK ((id > 0))\n);';
+  assert.notEqual(normalize(base), normalize(base.replace('t_id_check', 't_other_check')));
+});
+
 test('normalization still distinguishes column types, nullability and defaults', () => {
   const base = 'CREATE TABLE public.t (\n    id bigint NOT NULL,\n    name text\n);';
   assert.notEqual(normalize(base), normalize(base.replace('name text', 'name text NOT NULL')));

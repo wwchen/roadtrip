@@ -14,7 +14,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const MIGRATION_DIR = path.join(REPO_ROOT, 'backend/src/main/resources/db/migration');
 const MIGRATION_MOUNT = '/flyway/sql';
 
-const POSTGIS_IMAGE = 'postgis/postgis:16-3.4';
+const POSTGIS_IMAGE = 'postgis/postgis:18-3.6';
 const FLYWAY_IMAGE = 'flyway/flyway:13.2.0';
 
 const MAINTENANCE_DB = 'postgres';
@@ -42,6 +42,7 @@ const DOLLAR_TAG = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/;
 const QUALIFIED_IDENTIFIER = /\b[a-z_][a-z0-9_]*\.(?:[a-z_][a-z0-9_]*|"[^"]+")/;
 const CREATE_TABLE = /^(CREATE (?:UNLOGGED )?TABLE [^\n]*\(\n)([\s\S]*)(\n\)[^\n]*;)$/;
 const TABLE_CONSTRAINT = /^\s*CONSTRAINT /;
+const NAMED_COLUMN_NOT_NULL = / CONSTRAINT (?:[a-z_][a-z0-9_$]*|"[^"]+") NOT NULL$/;
 const ESCAPE_STRING_PREFIX = /(?:^|[^A-Za-z0-9_])[eE]$/;
 
 function splitStatements(sql) {
@@ -112,7 +113,10 @@ function sortTableColumns(statement) {
   if (!match) return statement;
   const [, head, body, tail] = match;
   const lines = body.split('\n').map((line) => line.replace(/,$/, ''));
-  const columns = lines.filter((line) => !TABLE_CONSTRAINT.test(line)).sort(compare);
+  const columns = lines
+    .filter((line) => !TABLE_CONSTRAINT.test(line))
+    .map((line) => line.replace(NAMED_COLUMN_NOT_NULL, ' NOT NULL'))
+    .sort(compare);
   const constraints = lines.filter((line) => TABLE_CONSTRAINT.test(line));
   return `${head}${[...columns, ...constraints].join(',\n')}${tail}`;
 }
