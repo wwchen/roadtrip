@@ -103,7 +103,7 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `DATABASE_REQUIRE_READ_ONLY` | plain, optional | default `true`; set `false` for **Preview only**, whose branch-scoped `DATABASE_URL` from the Neon integration logs in as the branch owner, which is not read-only |
 | `ENABLED_DATA_PROVIDERS` | plain, optional | default `campflare,bcparks-strapi,aspira,reserveamerica,reservecalifornia`, the same campground providers as Kotlin's `read-path.enabled-data-providers` (rec.gov is off: Campflare carries the same facilities and their availability); set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
-| `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
+| `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, geocode answers 503 `geocoding_unavailable`, the two routing routes answer 503 `routing_not_configured`, and the rest of the map works. Routing failures keep Mapbox's cause (see below) |
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
 | `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list, which a test in `config.test.ts` keeps equal to `application.yaml`; decides `availability_supported` and picks the provider whose booking links the campsite list shows (the matrix takes its window from mini-ca). Change it only together with mini-ca's list |
 | `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this counts as stale |
@@ -116,6 +116,19 @@ login; the per-deployment, branch and team-slug URLs redirect to Vercel login.
 
 The first deployment of a project with no production deployment is assigned the production
 target, whatever its branch. The first build here was of `claude/nextjs-parallel-read-app-19ceab`.
+
+`/api/route` and `/api/pois/on-route` answer the same codes as Kotlin, each with Mapbox's own
+code or message, or the exception, as `detail`:
+
+| Code | Status | Cause |
+|---|---|---|
+| `route_not_found`, `route_no_segment`, `route_invalid_input` | 422 | Mapbox answered `NoRoute`, `NoSegment`, or `InvalidInput`/`ProfileNotFound`; retrying will not help |
+| `routing_auth_failed` | 502 | Mapbox rejected the token (401/403) |
+| `routing_unreachable` | 502 | Mapbox could not be reached |
+| `routing_unavailable` | 502 | any other Mapbox error |
+| `routing_rate_limited` | 503 | Mapbox answered 429 |
+| `routing_not_configured` | 503 | no `MAPBOX_TOKEN` |
+| `corridor_unavailable` | 503 | the on-route corridor query failed |
 
 ## Availability on Vercel
 
@@ -218,6 +231,12 @@ Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it thr
   `/auth/forgot`, `/auth/reset`. Their forms post to server actions. `/auth/login?return_to=…`
   redirects to the sign-in page and `/auth/logout` signs out, so the frontend's `auth-api.ts`
   is unchanged. `return_to` is kept only when it is a same-site path.
+- A failed sign-in says "Email or password is wrong" only for a credential rejection
+  (`INVALID_CREDENTIALS`). Every other failure, such as a rate limit, a disabled account or an
+  SDK code the port does not list, shows the retry message followed by its code and the SDK's
+  status and message. A missing configuration shows `sign_in_not_configured`. Reset and sign-up
+  failures carry their code in the same way. The unknown-user and existing-account answers are
+  unchanged, so they still reveal nothing about which accounts exist.
 - Google, magic-link and email-verification sign-ins finish on Neon Auth's host and come back with
   `?neon_auth_session_verifier=…`. `apps/web/src/proxy.ts` runs Neon Auth's middleware on exactly
   those requests; it exchanges the verifier for the session cookie and redirects to the same URL
