@@ -428,8 +428,9 @@ docker exec roadtrip-postgres-1 psql -U roadtrip -d roadtrip -c \
 
 `counts.seen` should be the number of rows the terminal ETL considered:
 successful transform records plus parse/transform bad rows.
-`counts.warned_records` is how many of the kept rows carried a value the ETL
-does not list; the import log names each such value with its tally. If it is lower
+`counts.warned_records` is how many transformed rows carried a value the ETL
+does not list, counted before the repo upsert, so a row the repo later skips
+still counts. The import log names each such value with its tally. If it is lower
 than expected, add a unit test against captured raw envelopes under
 `backend/src/test/resources/etl-fixtures/<slug>/` to pin down where parsing or
 transforming dropped rows.

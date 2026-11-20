@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.records
@@ -232,6 +233,34 @@ class AspiraCampsitesEtlTest {
     }
 
     @Test
+    fun `a category the kind table or the tenant dictionary does not list is kept and warned about`() {
+        val etl =
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-wa-campsites",
+                mapsInputSlug = "aspira-maps-wa",
+                inventoryInputSlug = "aspira-inventory-wa",
+                aspiraTenant = "wa",
+            )
+
+        fun warningsWith(categories: Map<Int, String>): List<String> {
+            val dto =
+                AspiraCampsitesEtl.Parsed(
+                    inventory = listOf(envelopeOf(inventoryPayload)),
+                    maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                    dictionaries = dictionaries.copy(resourceCategories = categories),
+                )
+            return (etl.transform(dto, ctx).single() as TransformResult.Ok).warnings
+        }
+
+        assertEquals(listOf("unlisted Aspira resource category 'Mystery'"), warningsWith(mapOf(CAMPSITE_CATEGORY_ID to "Mystery")))
+        assertEquals(
+            listOf("Aspira resource category id $CAMPSITE_CATEGORY_ID not in the tenant dictionary"),
+            warningsWith(emptyMap()),
+        )
+        assertEquals(emptyList(), warningsWith(mapOf(CAMPSITE_CATEGORY_ID to "Campsite")))
+    }
+
+    @Test
     fun `falls back to the raw scalar when no value label matches and drops nameless attributes`() {
         val etl =
             AspiraCampsitesEtl(
@@ -314,4 +343,8 @@ class AspiraCampsitesEtlTest {
               "payload": $payloadJson }
             """.trimIndent(),
         )
+
+    private companion object {
+        const val CAMPSITE_CATEGORY_ID = -2147483648
+    }
 }
