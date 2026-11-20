@@ -26,5 +26,11 @@ object AspiraStatus {
         }
 
     /** `/api/occupancy` answers 2 for booked and closed alike. */
-    fun classifyOccupancy(code: Int): AvailabilityStatus? = if (code == CLOSED) AvailabilityStatus.RESERVED else classify(code)
+    fun classifyOccupancy(code: Int): AvailabilityStatus? =
+        when (code) {
+            AVAILABLE -> AvailabilityStatus.AVAILABLE
+            UNAVAILABLE, CLOSED -> AvailabilityStatus.RESERVED
+            UNKNOWN -> AvailabilityStatus.UNKNOWN
+            else -> null
+        }
 }

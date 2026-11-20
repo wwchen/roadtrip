@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CellTransition
+import ca.floo.roadtrip.model.availability.KnownStatus
 import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -50,7 +51,7 @@ class WatchAlertDispatcherFiringTest : SharedDbTest() {
             campsiteId,
             night,
             AvailabilityStatus.AVAILABLE,
-            lastKnownStatus = AvailabilityStatus.RESERVED,
+            lastKnown = KnownStatus(AvailabilityStatus.RESERVED, Instant.EPOCH),
         )
 
     private val countingHandler =
@@ -185,7 +186,14 @@ class WatchAlertDispatcherFiringTest : SharedDbTest() {
         watch(stopWhenTriggered = false)
         runBlocking {
             dispatcher().dispatchCovering(
-                listOf(CellTransition(campsiteId, night, AvailabilityStatus.RESERVED, lastKnownStatus = AvailabilityStatus.AVAILABLE)),
+                listOf(
+                    CellTransition(
+                        campsiteId,
+                        night,
+                        AvailabilityStatus.RESERVED,
+                        lastKnown = KnownStatus(AvailabilityStatus.AVAILABLE, Instant.EPOCH),
+                    ),
+                ),
                 Instant.now(),
             )
         }
@@ -193,20 +201,48 @@ class WatchAlertDispatcherFiringTest : SharedDbTest() {
     }
 
     @Test
-    fun `a cell back from unknown that was already bookable before it is not an opening`() {
+    fun `a cell back from unknown that the watch already saw bookable is not an opening`() {
         val watch = watch(stopWhenTriggered = false)
-        val returned = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE, lastKnownStatus = AvailabilityStatus.AVAILABLE)
+        val seenAfterCreate = watch.updatedAt.toInstant().plusSeconds(60)
+        val returned =
+            CellTransition(
+                campsiteId,
+                night,
+                AvailabilityStatus.AVAILABLE,
+                lastKnown = KnownStatus(AvailabilityStatus.AVAILABLE, seenAfterCreate),
+            )
         runBlocking {
-            dispatcher().dispatchCovering(listOf(returned), Instant.now())
+            dispatcher().dispatchCovering(listOf(returned), Instant.now().plusSeconds(120))
             dispatcher().dispatch(listOf(watch), listOf(returned))
         }
         assertEquals(emptyList(), fired.toList())
     }
 
     @Test
+    fun `a cell back from unknown is an opening for a watch made after it was last seen bookable`() {
+        val watch = watch(stopWhenTriggered = false)
+        val seenBeforeCreate = watch.updatedAt.toInstant().minusSeconds(3600)
+        val returned =
+            CellTransition(
+                campsiteId,
+                night,
+                AvailabilityStatus.AVAILABLE,
+                lastKnown = KnownStatus(AvailabilityStatus.AVAILABLE, seenBeforeCreate),
+            )
+        runBlocking { dispatcher().dispatch(listOf(watch), listOf(returned)) }
+        assertEquals(listOf(watch.id), fired.toList())
+    }
+
+    @Test
     fun `a cell back from unknown that was taken before it is an opening`() {
         val watch = watch(stopWhenTriggered = false)
-        val opening = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE, lastKnownStatus = AvailabilityStatus.RESERVED)
+        val opening =
+            CellTransition(
+                campsiteId,
+                night,
+                AvailabilityStatus.AVAILABLE,
+                lastKnown = KnownStatus(AvailabilityStatus.RESERVED, Instant.now()),
+            )
         runBlocking { dispatcher().dispatch(listOf(watch), listOf(opening)) }
         assertEquals(listOf(watch.id), fired.toList())
     }
@@ -214,7 +250,7 @@ class WatchAlertDispatcherFiringTest : SharedDbTest() {
     @Test
     fun `a cell first seen bookable is an opening`() {
         val watch = watch(stopWhenTriggered = false)
-        val firstSeen = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE, lastKnownStatus = null)
+        val firstSeen = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE, lastKnown = null)
         runBlocking { dispatcher().dispatch(listOf(watch), listOf(firstSeen)) }
         assertEquals(listOf(watch.id), fired.toList())
     }

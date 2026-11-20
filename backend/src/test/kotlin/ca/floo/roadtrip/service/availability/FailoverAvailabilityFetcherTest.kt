@@ -199,8 +199,11 @@ class FailoverAvailabilityFetcherTest {
                     scriptReturns(emptyBatch().copy(unrecognizedStatuses = mapOf("Lottery" to 3, "Walk-Up Only" to 1)))
                 }
 
-            FailoverAvailabilityFetcher(cooldowns = trackerWith(clock), clock = { clock.now }, metrics = metrics)
-                .fetch(providers = listOf(provider), campground = testCampground, campsites = listOf(campsite(1L)), window = window)
+            FailoverAvailabilityFetcher(
+                cooldowns = trackerWith(clock),
+                clock = { clock.now },
+                unrecognized = UnrecognizedStatusReporter(metrics),
+            ).fetch(providers = listOf(provider), campground = testCampground, campsites = listOf(campsite(1L)), window = window)
 
             assertEquals(listOf(BookingProvider.RECGOV to 4), counted)
         }
@@ -221,8 +224,11 @@ class FailoverAvailabilityFetcherTest {
                 }
             val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
 
-            FailoverAvailabilityFetcher(cooldowns = trackerWith(clock), clock = { clock.now }, metrics = metrics)
-                .fetch(providers = listOf(provider), campground = testCampground, campsites = listOf(campsite(1L)), window = window)
+            FailoverAvailabilityFetcher(
+                cooldowns = trackerWith(clock),
+                clock = { clock.now },
+                unrecognized = UnrecognizedStatusReporter(metrics),
+            ).fetch(providers = listOf(provider), campground = testCampground, campsites = listOf(campsite(1L)), window = window)
 
             assertEquals(emptyList(), counted)
         }

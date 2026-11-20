@@ -4,6 +4,7 @@ import ca.floo.roadtrip.db.generated.tables.Availability.Companion.AVAILABILITY
 import ca.floo.roadtrip.db.generated.tables.Campsites.Companion.CAMPSITES
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CellTransition
+import ca.floo.roadtrip.model.availability.KnownStatus
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import java.time.Duration
@@ -77,7 +78,7 @@ class AvailabilityRepo(
     private data class CurrentStatusRun(
         val id: Long,
         val status: AvailabilityStatus,
-        val lastKnownStatus: AvailabilityStatus?,
+        val lastKnown: KnownStatus?,
     )
 
     private fun Observation.cell(): Pair<Long, LocalDate> = campsiteId to targetDate
@@ -114,36 +115,48 @@ class AvailabilityRepo(
         txn
             .resultQuery(
                 """
-                SELECT cur.id, cur.campsite_id, cur.target_date, cur.status,
-                    (
-                        SELECT k.status
-                        FROM availability k
-                        WHERE k.campsite_id = cur.campsite_id
-                          AND k.target_date = cur.target_date
-                          AND k.status <> ?::availability_status
-                        ORDER BY k.last_observed_at DESC, k.id DESC
-                        LIMIT 1
-                    ) AS last_known_status
+                SELECT cur.id, cur.campsite_id, cur.target_date, cur.status, cur.last_observed_at,
+                       known.status AS known_status, known.last_observed_at AS known_observed_at
                 FROM (
                     SELECT DISTINCT ON (a.campsite_id, a.target_date)
-                        a.id, a.campsite_id, a.target_date, a.status
+                        a.id, a.campsite_id, a.target_date, a.status, a.last_observed_at
                     FROM availability a
                     JOIN unnest(?::bigint[], ?::date[]) AS cell(campsite_id, target_date)
                       ON a.campsite_id = cell.campsite_id AND a.target_date = cell.target_date
                     ORDER BY a.campsite_id, a.target_date, a.last_observed_at DESC, a.id DESC
                 ) cur
+                LEFT JOIN LATERAL (
+                    SELECT k.status, k.last_observed_at
+                    FROM availability k
+                    WHERE cur.status = ?::availability_status
+                      AND k.campsite_id = cur.campsite_id
+                      AND k.target_date = cur.target_date
+                      AND k.status <> ?::availability_status
+                    ORDER BY k.last_observed_at DESC, k.id DESC
+                    LIMIT 1
+                ) known ON true
                 """.trimIndent(),
-                AvailabilityStatus.UNKNOWN.toDb().literal,
                 observations.map { it.campsiteId }.toTypedArray(),
                 observations.map { it.targetDate }.toTypedArray(),
+                AvailabilityStatus.UNKNOWN.toDb().literal,
+                AvailabilityStatus.UNKNOWN.toDb().literal,
             ).fetch { r ->
                 (r.get("campsite_id", Long::class.java) to r.get("target_date", LocalDate::class.java)) to
                     CurrentStatusRun(
                         id = r.get("id", Long::class.java),
                         status = AvailabilityStatus.parse(r.get("status", String::class.java)),
-                        lastKnownStatus = r.get("last_known_status", String::class.java)?.let(AvailabilityStatus::parse),
+                        lastKnown = knownStatusOf(r),
                     )
             }.toMap()
+
+    private fun knownStatusOf(r: org.jooq.Record): KnownStatus? {
+        val status = AvailabilityStatus.parse(r.get("status", String::class.java))
+        if (status != AvailabilityStatus.UNKNOWN) {
+            return KnownStatus(status, r.get("last_observed_at", OffsetDateTime::class.java).toInstant())
+        }
+        val knownStatus = r.get("known_status", String::class.java) ?: return null
+        return KnownStatus(AvailabilityStatus.parse(knownStatus), r.get("known_observed_at", OffsetDateTime::class.java).toInstant())
+    }
 
     private fun bumpObservedAt(
         txn: DSLContext,
@@ -193,7 +206,7 @@ class AvailabilityRepo(
                     campsiteId = cell.first,
                     targetDate = cell.second,
                     status = AvailabilityStatus.parse(r.get("status", String::class.java)),
-                    lastKnownStatus = current[cell]?.lastKnownStatus,
+                    lastKnown = current[cell]?.lastKnown,
                 )
             }
     }

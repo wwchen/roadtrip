@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.KnownStatus
+import ca.floo.roadtrip.model.availability.opensSiteFor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -204,8 +206,8 @@ class AvailabilityRepoTest : SharedDbTest() {
         val first = repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, t1)))
         val second = repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t2)))
 
-        assertNull(first.single().lastKnownStatus)
-        assertEquals(AvailabilityStatus.RESERVED, second.single().lastKnownStatus)
+        assertNull(first.single().lastKnown)
+        assertEquals(KnownStatus(AvailabilityStatus.RESERVED, t1), second.single().lastKnown)
     }
 
     @Test
@@ -222,8 +224,9 @@ class AvailabilityRepoTest : SharedDbTest() {
                 listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t0.plusSeconds(120))),
             )
 
-        assertEquals(AvailabilityStatus.AVAILABLE, back.single().lastKnownStatus)
-        assertFalse(back.single().opensSite)
+        assertEquals(KnownStatus(AvailabilityStatus.AVAILABLE, t0), back.single().lastKnown)
+        assertFalse(back.single().opensSiteFor(watchSince = t0.minusSeconds(60)))
+        assertTrue(back.single().opensSiteFor(watchSince = t0.plusSeconds(90)))
     }
 
     @Test
@@ -238,8 +241,8 @@ class AvailabilityRepoTest : SharedDbTest() {
                 listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t0.plusSeconds(60))),
             )
 
-        assertNull(known.single().lastKnownStatus)
-        assertTrue(known.single().opensSite)
+        assertNull(known.single().lastKnown)
+        assertTrue(known.single().opensSiteFor(watchSince = t0.minusSeconds(60)))
     }
 
     @Test

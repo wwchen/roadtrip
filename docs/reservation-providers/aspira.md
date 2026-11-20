@@ -328,9 +328,11 @@ GET https://{host}/api/occupancy
 `availability` uses the same zero-is-bookable family as the map endpoint, but
 carries less information: it answers `2` for a booked site and a closed one
 alike (Alice Lake returned `2` on all 109 rows for a sold-out summer date and
-for a winter date), so `AspiraStatus.classifyOccupancy` maps `2` to
-`reserved` rather than guessing `closed`; every other code reads as in the
-map table above.
+for a winter date), so `AspiraStatus.classifyOccupancy` maps `1` and `2` to
+`reserved` rather than guessing `closed`. The map endpoint's meanings for `3`,
+`4` and `5` were established from map captures only, so on this endpoint they
+are unrecognized (`unknown`, and counted) until a capture shows what occupancy
+sends there.
 
 Used for: opt-in stay-level checks only. Normal catalog availability uses
 `/api/availability/map` so callers get independent per-day observations.

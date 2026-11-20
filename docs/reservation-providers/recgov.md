@@ -71,7 +71,7 @@ Status mapping (`classifyRecgovStatus`):
 | `Not Available` | `RESERVED` | |
 | `Not Reservable` | `FIRST_COME` | rec.gov's label for walk-up sites |
 | `Closed` | `CLOSED` | |
-| `Not Available Cutoff` | `CLOSED` | inside the booking cutoff: no longer bookable online, and never will be again |
+| `Not Available Cutoff` | `RESERVED` | inside the booking cutoff: not bookable online, like `Not Available`. Not `CLOSED`, which would make a near-term stay or window read as closed for the season |
 | `Not Reservable Management` | `CLOSED` | held back by the operator, not walk-up |
 | `NYR` | `UNKNOWN` | not yet released: nothing is known about it yet |
 | `null`, empty | `UNKNOWN` | |

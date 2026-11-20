@@ -11,6 +11,7 @@ object ReserveAmericaAvailabilityParser {
         Regex("""<div class='td status\s+([^']*)'[^>]*>(.*?)</div>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val resultTotalRegex = Regex("""id='resulttotal_dr_(?:top|bottom)'\s*>\s*(\d+)\s*</span>""")
     private val tagRegex = Regex("""<[^>]+>""")
+    private val whitespaceRegex = Regex("""\s+""")
 
     fun parse(
         html: String,
@@ -31,9 +32,9 @@ object ReserveAmericaAvailabilityParser {
                 .findAll(row)
                 .take(dates.size)
                 .forEachIndexed { i, match ->
-                    val classTail = match.groupValues[1].trim()
+                    val code = cellCode(match.groupValues[1])
                     val label = stripTags(match.groupValues[2])
-                    byDate[dates[i]] = unrecognized.orUnknown("$classTail/$label", classify(classTail, label))
+                    byDate[dates[i]] = unrecognized.orUnknown("$code/$label", classify(code.lowercase(), label.lowercase()))
                 }
             if (byDate.isNotEmpty()) {
                 statuses[siteId] = byDate
@@ -58,19 +59,18 @@ object ReserveAmericaAvailabilityParser {
         }
     }
 
+    private fun cellCode(classTail: String): String =
+        classTail
+            .trim()
+            .split(whitespaceRegex)
+            .firstOrNull()
+            .orEmpty()
+
     private fun classify(
-        classTail: String,
-        text: String,
-    ): AvailabilityStatus? {
-        val code =
-            classTail
-                .trim()
-                .split(Regex("""\s+"""))
-                .firstOrNull()
-                .orEmpty()
-                .lowercase()
-        val label = text.trim().lowercase()
-        return when {
+        code: String,
+        label: String,
+    ): AvailabilityStatus? =
+        when {
             code == "a" || label == "a" -> AvailabilityStatus.AVAILABLE
             code == "r" || label == "r" -> AvailabilityStatus.RESERVED
             code == "w" || label == "w" -> AvailabilityStatus.FIRST_COME
@@ -78,7 +78,6 @@ object ReserveAmericaAvailabilityParser {
             code == "p" || label == "p" -> AvailabilityStatus.UNKNOWN
             else -> null
         }
-    }
 
     private fun totalSites(html: String): Int? =
         resultTotalRegex

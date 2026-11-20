@@ -53,7 +53,7 @@ class ReserveAmericaAvailabilityParserTest {
                       <a href="/campsiteDetails.do?contractCode=ABPP&amp;siteId=35162&amp;parkId=330174">G1</a>
                     </div>
                     <div class='td status p sun'>P</div>
-                    <div class='td status q'>Q</div>
+                    <div class='td status q sun'>Q</div>
                     <div class='td status q'>Q</div>
                     <div class='td status a'>A</div>
                     """.trimIndent(),

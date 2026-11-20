@@ -21,6 +21,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RecGovObservationsTest {
@@ -192,7 +193,7 @@ class RecGovObservationsTest {
                 "Not Available" to AvailabilityStatus.RESERVED,
                 "Not Reservable" to AvailabilityStatus.FIRST_COME,
                 "Closed" to AvailabilityStatus.CLOSED,
-                "Not Available Cutoff" to AvailabilityStatus.CLOSED,
+                "Not Available Cutoff" to AvailabilityStatus.RESERVED,
                 "Not Reservable Management" to AvailabilityStatus.CLOSED,
                 "NYR" to AvailabilityStatus.UNKNOWN,
             )
@@ -202,6 +203,14 @@ class RecGovObservationsTest {
 
         assertEquals(siteIds.zip(sent.values).associate { (siteId, status) -> siteId.toLong() to status }, batch.statusesOn(0))
         assertEquals(emptyMap(), batch.unrecognizedStatuses)
+    }
+
+    @Test
+    fun `a window inside the booking cutoff is full, not closed for the season`() {
+        val cutoff = (0..2L).associate { futureKey(it) to "Not Available Cutoff" }
+        val batch = classify(clientReturning(mapOf("100" to campsiteWith(cutoff))), days = 3)
+
+        assertFalse(isClosedForSeason(campsiteWindowStatuses(batch.startDate, batch.endDate, batch.observations)))
     }
 
     @Test

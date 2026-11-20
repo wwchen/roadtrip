@@ -263,13 +263,17 @@ Two guards keep one opening from alerting twice:
   mutex) and re-reads the watch first, so a `stopWhenTriggered` watch that
   one path just marked `DONE` is not fired again by another.
 
-An opening is a transition to a bookable status from a cell that was not
-already bookable. Each `CellTransition` carries `lastKnownStatus`, the cell's
-most recent status other than `unknown` before the change (null when it was
-never known), and the dispatcher alerts, and fires holds, only on transitions
-whose `opensSite` is true. So `available → unknown → available` (a fetch that
-lost the cell, then found it again) is not an opening, while
-`reserved → unknown → available` is.
+An opening is a transition to a bookable status that a watch has not already
+seen bookable. Each `CellTransition` carries `lastKnown`: the cell's most
+recent status other than `unknown` before the change and when it was last
+observed (null when it was never known). The dispatcher alerts, and fires
+holds, only where `opensSiteFor(watch.updatedAt)` is true: the new status is
+bookable and either the last known status was not, or the watch was created or
+last changed after the cell was last seen bookable (its initial dispatch then
+read `unknown` and fired nothing). So `available → unknown → available` (a
+fetch that lost the cell, then found it again) is not an opening for a watch
+that saw it open, is one for a watch made during the gap, and
+`reserved → unknown → available` is one for every watch.
 
 **Adding a new alert provider is one file** under
 `service/availability/alert/providers/<vendor>/` plus one registry entry.
@@ -940,10 +944,12 @@ Each adapter classifies the vendor values it has seen with an explicit table
 never folded into a plausible status: the cell is `unknown`, and the batch
 carries the verbatim value and its cell count in
 `AvailabilityObservationBatch.unrecognizedStatuses`. `FailoverAvailabilityFetcher`
-logs those values at WARN and counts the cells on
+hands them to `UnrecognizedStatusReporter`, which counts every cell on
 `roadtrip.availability.status.unrecognized` (by provider; the raw value stays
-out of the metric's labels because the vendor controls it). A new vendor value
-therefore shows up as a log line and a counter, not as a silently wrong cell. Provider-specific richness (equipment-type
+out of the metric's labels because the vendor controls it) and logs each
+(provider, value) at WARN at most once an hour, so a value the vendor keeps
+sending does not log on every poll. A new vendor value therefore shows up as a
+log line and a counter, not as a silently wrong cell. Provider-specific richness (equipment-type
 breakdowns, upstream map structure) is *not* captured; that
 fidelity lives in the live availability call. The interval rows are the
 long-tail summary, not a replay log.

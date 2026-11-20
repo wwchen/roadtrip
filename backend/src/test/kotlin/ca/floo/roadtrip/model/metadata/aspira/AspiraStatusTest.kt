@@ -72,9 +72,9 @@ class AspiraStatusTest {
     }
 
     @Test
-    fun `occupancy rows share the rest of the code family`() {
-        assertEquals(AvailabilityStatus.FIRST_COME, AspiraStatus.classifyOccupancy(AspiraStatus.NON_RESERVABLE))
-        assertEquals(AvailabilityStatus.CLOSED, AspiraStatus.classifyOccupancy(AspiraStatus.SITE_CLOSED))
-        assertEquals(AvailabilityStatus.UNKNOWN, AspiraStatus.classifyOccupancy(AspiraStatus.OTHER_BOOKING_CATEGORY))
+    fun `occupancy codes beyond the documented ones are unrecognized, not borrowed from the map family`() {
+        assertNull(AspiraStatus.classifyOccupancy(AspiraStatus.NON_RESERVABLE))
+        assertNull(AspiraStatus.classifyOccupancy(AspiraStatus.SITE_CLOSED))
+        assertNull(AspiraStatus.classifyOccupancy(AspiraStatus.OTHER_BOOKING_CATEGORY))
     }
 }

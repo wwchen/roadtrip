@@ -393,6 +393,31 @@ class AspiraObservationsTest {
         }
 
     @Test
+    fun `an occupancy code with no classification is unknown and counted`() =
+        runBlocking {
+            val client =
+                fakeAspiraClient(
+                    onFetchOccupancy = { _, _, _, _ ->
+                        AspiraOccupancy(
+                            resourceLocationId = -123,
+                            resourceOccupancy = listOf(AspiraResourceOccupancy(resourceId = 100, availability = 4)),
+                        )
+                    },
+                )
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true, occupancyEnabled = true)
+            val batch =
+                provider.availability(
+                    campground = aspiraCampground("pc", -999, resourceLocationId = -123),
+                    campsites = listOf(aspiraCampsite(100, "100", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 100))),
+                    startDate = LocalDate.parse("2026-06-17"),
+                    endDate = LocalDate.parse("2026-06-19"),
+                )
+
+            assertEquals(listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN), batch.observations.map { it.status })
+            assertEquals(mapOf("4" to 2), batch.unrecognizedStatuses)
+        }
+
+    @Test
     fun `aspira catalog availability uses occupancy search availability`() =
         runBlocking {
             val client =

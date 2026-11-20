@@ -181,7 +181,7 @@ private val recgovStatuses: Map<String, AvailabilityStatus> =
         "not available" to AvailabilityStatus.RESERVED,
         "not reservable" to AvailabilityStatus.FIRST_COME,
         "closed" to AvailabilityStatus.CLOSED,
-        "not available cutoff" to AvailabilityStatus.CLOSED,
+        "not available cutoff" to AvailabilityStatus.RESERVED,
         "not reservable management" to AvailabilityStatus.CLOSED,
         "nyr" to AvailabilityStatus.UNKNOWN,
     )
