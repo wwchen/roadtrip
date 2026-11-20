@@ -55,6 +55,12 @@ object RecGovSessionCodes {
     const val SPA_LOGGED_OUT = "recgov_spa_logged_out"
     const val REFRESH_FAILED = "recgov_refresh_failed"
     const val COMPANION_LOGIN_FAILED = "recgov_login_failed"
+
+    const val COMPANION_INVALID_RESPONSE = "companion_invalid_response"
+    const val RECGOV_LOGIN_ERROR = "login_error"
+    const val LOGIN_NO_SESSION_OBSERVED = "recaccount_not_observed"
+    const val LOGIN_FORM_STILL_VISIBLE = "login_form_still_visible"
+    const val MFA_PROMPT_NOT_FOUND = "mfa_prompt_not_found"
 }
 
 /** Result of a credential login or of completing an MFA challenge. */
@@ -103,6 +109,7 @@ sealed interface CompanionSessionHealth {
     /** The companion answered but its health check itself failed. */
     data class CheckFailed(
         val code: String?,
+        val detail: String? = null,
     ) : CompanionSessionHealth
 
     /** The companion is unreachable or not configured — never an error to the user. */

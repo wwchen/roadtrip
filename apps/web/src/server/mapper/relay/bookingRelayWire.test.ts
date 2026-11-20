@@ -168,13 +168,13 @@ describe('decodeAction', () => {
 
 describe('decodeHealth', () => {
   test.each([
-    ['a fault', unreachable, { kind: 'unavailable' }],
-    ['a body that is not an object, 200', answered(OK_STATUS, 'text'), { kind: 'unavailable' }],
-    ['null, 200', answered(OK_STATUS, null), { kind: 'unavailable' }],
-    ['an empty object, 200', answered(OK_STATUS, {}), { kind: 'unavailable' }],
-    ['an empty object, 500', answered(SERVER_ERROR_STATUS, {}), { kind: 'unavailable' }],
-    ['an active body, 500', answered(SERVER_ERROR_STATUS, { session: 'active' }), { kind: 'unavailable' }],
-    ['a bad request without a tag, 400', answered(BAD_REQUEST_STATUS, { error: 'bad_request' }), { kind: 'unavailable' }],
+    ['a fault', unreachable, { kind: 'unavailable', fault: 'unreachable' }],
+    ['a body that is not an object, 200', answered(OK_STATUS, 'text'), MALFORMED],
+    ['null, 200', answered(OK_STATUS, null), MALFORMED],
+    ['an empty object, 200', answered(OK_STATUS, {}), MALFORMED],
+    ['an empty object, 500', answered(SERVER_ERROR_STATUS, {}), { kind: 'unavailable', fault: 'rejected' }],
+    ['an active body, 500', answered(SERVER_ERROR_STATUS, { session: 'active' }), { kind: 'unavailable', fault: 'rejected' }],
+    ['a bad request without a tag, 400', answered(BAD_REQUEST_STATUS, { error: 'bad_request' }), { kind: 'unavailable', fault: 'rejected' }],
     ['active', answered(OK_STATUS, { session: 'active' }), { kind: 'active' }],
     ['never logged in', answered(OK_STATUS, { session: 'never_logged_in' }), { kind: 'never_logged_in' }],
     ['inactive with a code', answered(OK_STATUS, { session: 'inactive', code: 'session_expired' }), { kind: 'inactive', code: 'session_expired' }],
@@ -185,10 +185,10 @@ describe('decodeHealth', () => {
     ['check failed with non-string fields', answered(OK_STATUS, { session: 'check_failed', code: 5, detail: 5 }), { kind: 'check_failed' }],
     ['unavailable', answered(OK_STATUS, { session: 'unavailable', code: 'c', detail: DETAIL }), { kind: 'unavailable', code: 'c', detail: DETAIL }],
     ['unavailable bare', answered(OK_STATUS, { session: 'unavailable' }), { kind: 'unavailable' }],
-    ['an unknown session', answered(OK_STATUS, { session: 'weird', code: 'c', detail: DETAIL }), { kind: 'unavailable', code: 'c', detail: DETAIL }],
-    ['a hold body', answered(OK_STATUS, { outcome: 'held', cart_url: CART_URL }), { kind: 'unavailable' }],
-    ['an array, 200', answered(OK_STATUS, []), { kind: 'unavailable' }],
-    ['a non-string tag, 200', answered(OK_STATUS, { outcome: 5 }), { kind: 'unavailable' }],
+    ['an unknown session', answered(OK_STATUS, { session: 'weird', code: 'c', detail: DETAIL }), MALFORMED],
+    ['a hold body', answered(OK_STATUS, { outcome: 'held', cart_url: CART_URL }), MALFORMED],
+    ['an array, 200', answered(OK_STATUS, []), MALFORMED],
+    ['a non-string tag, 200', answered(OK_STATUS, { outcome: 5 }), MALFORMED],
     ['the health timeout body, 504', answered(TIMEOUT_STATUS, { session: 'unavailable', code: 'relay_timeout' }), { kind: 'unavailable', code: 'relay_timeout' }],
   ])('%s', (_name, exchange, expected) => {
     expect(decodeHealth(exchange)).toStrictEqual(expected);

@@ -99,6 +99,74 @@ class RecGovProfileHoldTest {
         }
 
     @Test
+    fun `a refresh that says the session is gone reads as expired and keeps the companion's words`() =
+        runBlocking {
+            val session =
+                FakeSession(
+                    CompanionSessionHealth.Inactive(RecGovSessionCodes.SESSION_LAPSED),
+                    CompanionActionResult.Failed(RecGovSessionCodes.REFRESH_FAILED, "stored session rejected"),
+                )
+
+            val blocked = assertIs<ProfileHoldOutcome.Blocked>(RecGovProfileHold(FakeExecutor()).hold(session, request))
+
+            assertEquals(RECGOV_SESSION_EXPIRED_ERROR, blocked.code)
+            assertTrue(blocked.detail.contains(RECGOV_SESSION_EXPIRED_DETAIL), blocked.detail)
+            assertTrue(blocked.detail.contains(RecGovSessionCodes.REFRESH_FAILED), blocked.detail)
+            assertTrue(blocked.detail.contains("stored session rejected"), blocked.detail)
+        }
+
+    @Test
+    fun `a refresh that failed for its own reason is not reported as an expired session`() =
+        runBlocking {
+            val refusals =
+                mapOf(
+                    RecGovSessionCodes.PROFILE_BUSY to BookingFailureCategory.RETRY_LATER,
+                    RecGovSessionCodes.BROWSER_CAP_REACHED to BookingFailureCategory.RETRY_LATER,
+                    RecGovSessionCodes.AUTH_CHECK_EXCEPTION to BookingFailureCategory.UPSTREAM,
+                )
+            for ((code, category) in refusals) {
+                val executor = FakeExecutor()
+                val session = FakeSession(CompanionSessionHealth.NeverLoggedIn, CompanionActionResult.Failed(code, "companion said so"))
+
+                val blocked = assertIs<ProfileHoldOutcome.Blocked>(RecGovProfileHold(executor).hold(session, request))
+
+                assertEquals(code, blocked.code)
+                assertEquals("companion said so", blocked.detail)
+                assertEquals(category, blocked.category, code)
+                assertTrue(executor.payloads.isEmpty())
+            }
+        }
+
+    @Test
+    fun `a health check that failed carries the companion's own detail`() =
+        runBlocking {
+            val session = FakeSession(CompanionSessionHealth.CheckFailed("store_corrupt", "store.json is not JSON"))
+
+            val blocked = assertIs<ProfileHoldOutcome.Blocked>(RecGovProfileHold(FakeExecutor()).hold(session, request))
+
+            assertEquals("store_corrupt", blocked.code)
+            assertEquals("store.json is not JSON", blocked.detail)
+        }
+
+    @Test
+    fun `an executor that threw keeps the exception's class and message`() =
+        runBlocking {
+            val executor =
+                object : RecGovAtcExecutor {
+                    override suspend fun addToCart(payload: JsonObject): RecGovAtcOutcome = throw IllegalStateException("selector exploded")
+                }
+
+            val blocked =
+                assertIs<ProfileHoldOutcome.Blocked>(
+                    RecGovProfileHold(executor).hold(FakeSession(CompanionSessionHealth.Active), request),
+                )
+
+            assertEquals("companion_exception", blocked.code)
+            assertTrue(blocked.detail.contains("IllegalStateException"), blocked.detail)
+            assertTrue(blocked.detail.contains("selector exploded"), blocked.detail)
+        }
+
+    @Test
     fun `refresh failure hands the relogin its health code`() =
         runBlocking {
             val session =

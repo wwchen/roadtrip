@@ -194,7 +194,7 @@ class RecGovBookingAdapterTest {
                 assertEquals(category, failed.category, code)
                 val detail = assertNotNull(failed.detail)
                 assertTrue(detail.contains(phrase), detail)
-                assertFalse(detail.contains("Recreation.gov"), "the notice names the booking system itself: $detail")
+                assertTrue(detail.contains(companionDetail), "the companion's own words still travel: $detail")
             }
         }
 
@@ -373,6 +373,16 @@ class RecGovBookingAdapterTest {
                     RecGovBookingCodes.CONFIRMATION_DISABLED to BookingFailureCategory.RETRY_LATER,
                     RecGovBookingCodes.DATES_NOT_OFFERED to BookingFailureCategory.RETRY_LATER,
                     RecGovBookingCodes.NO_RESERVE_BUTTON to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.CART_EMPTY to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.CART_MISSING_EXPECTED_ITEM to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.CART_HTTP_ERROR to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.CART_FETCH_FAILED to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.CART_NOT_VERIFIED to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.AUTOMATION_EXCEPTION to BookingFailureCategory.UPSTREAM,
+                    RecGovBookingCodes.ATC_RESULT_UNEXPLAINED to BookingFailureCategory.UPSTREAM,
+                    RecGovSessionCodes.COMPANION_INVALID_RESPONSE to BookingFailureCategory.UPSTREAM,
+                    RecGovSessionCodes.LOGIN_NO_SESSION_OBSERVED to BookingFailureCategory.RETRY_LATER,
+                    RecGovSessionCodes.LOGIN_FORM_STILL_VISIBLE to BookingFailureCategory.RETRY_LATER,
                     "a_code_nobody_classified" to BookingFailureCategory.UPSTREAM,
                 )
             for ((code, category) in refusals) {

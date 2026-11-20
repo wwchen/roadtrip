@@ -32,8 +32,14 @@ import java.util.concurrent.ConcurrentHashMap
  * again: the challenge holds the profile's lock. Forgetting the id there would
  * strand the user until the companion's minutes-scale TTL expired.
  */
+private const val CHECK_FAILED_DETAIL_SEPARATOR = ": "
+
 private val challengeEndingCodes =
     setOf(
+        RecGovSessionCodes.COMPANION_LOGIN_FAILED,
+        RecGovSessionCodes.LOGIN_NO_SESSION_OBSERVED,
+        RecGovSessionCodes.LOGIN_FORM_STILL_VISIBLE,
+        RecGovSessionCodes.MFA_PROMPT_NOT_FOUND,
         RecGovSessionCodes.MFA_INVALID,
         RecGovSessionCodes.LOGIN_FAILED,
         RecGovSessionCodes.LOGIN_PAGE_CHANGED,
@@ -362,7 +368,9 @@ class RecGovCredentialService(
                 // `recgov_login_failed` a doomed automated attempt would report.
                 is CompanionSessionHealth.Inactive ->
                     RecgovSessionState.EXPIRED to (health.code ?: RecGovSessionCodes.SESSION_LAPSED)
-                is CompanionSessionHealth.CheckFailed -> RecgovSessionState.CHECK_FAILED to health.code
+                is CompanionSessionHealth.CheckFailed ->
+                    RecgovSessionState.CHECK_FAILED to
+                        listOfNotNull(health.code, health.detail).joinToString(CHECK_FAILED_DETAIL_SEPARATOR).ifEmpty { null }
                 is CompanionSessionHealth.Unavailable -> RecgovSessionState.COMPANION_UNAVAILABLE to health.detail
             }
         return RecgovStatusDto(
