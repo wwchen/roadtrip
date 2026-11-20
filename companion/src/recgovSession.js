@@ -54,6 +54,7 @@ const DIAGNOSTIC_REASON_MAX_CHARS = 60
 export const MFA_REQUIRED_REASON = 'mfa_required'
 export const MFA_INVALID_REASON = 'mfa_invalid'
 const MFA_PROMPT_LOST_REASON = 'mfa_prompt_not_found'
+export const LOGIN_ERROR_REASON = 'login_error'
 const RECGOV_LOGOUT_MENU_SETTLE_MS = 500
 const RECGOV_LOGOUT_VERIFY_TIMEOUT_MS = 5_000
 const RECGOV_LOGOUT_POLL_MS = 500
@@ -564,7 +565,7 @@ async function handleCredentialLoginChallenge (page, credentials, { mfaSubmitted
   if (await anyVisible(page, LOGIN_CAPTCHA_SELECTORS)) return { failure: { reason: 'captcha_required' } }
 
   const detail = await firstVisibleText(page, LOGIN_ERROR_SELECTORS)
-  if (detail) return { failure: { reason: 'login_error', detail } }
+  if (detail) return { failure: { reason: LOGIN_ERROR_REASON, detail } }
 
   if (!mfaSubmitted) {
     const mfaResult = await submitMfaCodeIfPrompted(page, credentials, LOGIN_BLOCKER_TIMEOUT_MS)
@@ -811,7 +812,7 @@ async function credentialLoginBlocker (page) {
   if (await anyVisible(page, LOGIN_CAPTCHA_SELECTORS)) return { reason: 'captcha_required' }
 
   const detail = await firstVisibleText(page, LOGIN_ERROR_SELECTORS)
-  if (detail) return { reason: 'login_error', detail }
+  if (detail) return { reason: LOGIN_ERROR_REASON, detail }
   if (await anyVisible(page, LOGIN_EMAIL_SELECTORS) || await anyVisible(page, LOGIN_PASSWORD_SELECTORS)) {
     return {
       reason: 'login_form_still_visible',

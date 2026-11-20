@@ -333,6 +333,12 @@ Spec: `docs/superpowers/specs/2026-11-10-add-to-cart-on-vercel-design.md`.
 - The relay bounds each companion call at 90 seconds, under Cloudflare's 100-second proxy limit.
   A hold that runs out answers 409 `relay_timeout`; the companion may still finish it, so the
   detail tells the user to check the cart.
+- A hold the relay could not carry answers 503 `relay_<fault>`, naming the fault:
+  `relay_not_configured`, `relay_unanswered`, `relay_unreachable`, `relay_unauthorized`,
+  `relay_redirected` (an Access policy sent the call to a login page), `relay_malformed`,
+  `relay_rejected` or `relay_version_mismatch`. A hold the companion refused answers the
+  companion's own code and detail (see [companion.md](companion.md#post-atc-failure-codes)),
+  never a stock one.
 
 Vercel Production variables (the first three together, or none):
 
@@ -346,7 +352,7 @@ Vercel Production variables (the first three together, or none):
 
 The relay also needs `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`. Without the relay variables
 the rec.gov routes answer `companion_unavailable` and add to cart answers 503
-`booking_unavailable`; without the key, saving answers 503 `encryption_unavailable` and the grid
+`relay_not_configured`; without the key, saving answers 503 `encryption_unavailable` and the grid
 shows `no_credentials`.
 
 On mini-ca, `BOOKING_EGRESS_TOKEN` (`./secrets/manage.py set BOOKING_EGRESS_TOKEN prod`) turns the

@@ -16,6 +16,8 @@ private const val FIELD_PROFILE_ID = "profile_id"
 private const val FIELD_START_DATE = "start_date"
 private const val FIELD_END_DATE = "end_date"
 private const val FIELD_CAMPSITE_ID = "campsite_id"
+private const val RAW_DETAIL_SEPARATOR = " — "
+private const val RAW_CODE_SEPARATOR = ": "
 
 internal interface RecGovHoldSession {
     suspend fun health(): CompanionSessionHealth
@@ -87,8 +89,27 @@ private val failureCategories: Map<String, BookingFailureCategory> =
             RecGovBookingCodes.CONFIRMATION_DISABLED,
             RecGovBookingCodes.DATES_NOT_OFFERED,
             RecGovBookingCodes.NO_RESERVE_BUTTON,
+            RecGovBookingCodes.CART_EMPTY,
+            RecGovBookingCodes.CART_MISSING_EXPECTED_ITEM,
+            RecGovBookingCodes.CART_HTTP_ERROR,
+            RecGovBookingCodes.CART_FETCH_FAILED,
+            RecGovBookingCodes.CART_NOT_VERIFIED,
+            RecGovSessionCodes.LOGIN_NO_SESSION_OBSERVED,
+            RecGovSessionCodes.LOGIN_FORM_STILL_VISIBLE,
         ).forEach { put(it, BookingFailureCategory.RETRY_LATER) }
+
+        listOf(
+            RecGovBookingCodes.AUTOMATION_EXCEPTION,
+            RecGovBookingCodes.ATC_RESULT_UNEXPLAINED,
+            RecGovSessionCodes.COMPANION_INVALID_RESPONSE,
+            RecGovSessionCodes.AUTH_CHECK_EXCEPTION,
+            RecGovSessionCodes.COMPANION_UNAVAILABLE,
+            RecGovSessionCodes.LOGIN_PAGE_CHANGED,
+            ERROR_COMPANION_EXCEPTION,
+        ).forEach { put(it, BookingFailureCategory.UPSTREAM) }
     }
+
+private val sessionGoneCodes = setOf(RecGovSessionCodes.REFRESH_FAILED, RecGovSessionCodes.NOT_AUTHENTICATED)
 
 internal fun recGovFailureCategory(code: String): BookingFailureCategory = failureCategories[code] ?: BookingFailureCategory.UPSTREAM
 
@@ -111,7 +132,7 @@ internal class RecGovProfileHold(
         return when (
             val outcome =
                 runCatchingCancellable { executor.addToCart(request.toAtcPayload()) }
-                    .getOrElse { RecGovAtcOutcome.Failed(error = ERROR_COMPANION_EXCEPTION, detail = it.message) }
+                    .getOrElse { RecGovAtcOutcome.Failed(error = ERROR_COMPANION_EXCEPTION, detail = it.toString()) }
         ) {
             is RecGovAtcOutcome.Completed -> ProfileHoldOutcome.Held(RECGOV_CART_URL, outcome.response)
             is RecGovAtcOutcome.Failed -> blocked(outcome.error, outcome.detail, outcome.response)
@@ -127,7 +148,7 @@ internal class RecGovProfileHold(
             is CompanionSessionHealth.Active -> null
             is CompanionSessionHealth.Unavailable -> ProfileHoldBlocker(RecGovSessionCodes.COMPANION_UNAVAILABLE, health.detail)
             is CompanionSessionHealth.CheckFailed ->
-                ProfileHoldBlocker(health.code ?: RecGovSessionCodes.AUTH_CHECK_EXCEPTION, COMPANION_ERROR_DETAIL)
+                ProfileHoldBlocker(health.code ?: RecGovSessionCodes.AUTH_CHECK_EXCEPTION, health.detail ?: COMPANION_ERROR_DETAIL)
             is CompanionSessionHealth.NeverLoggedIn -> recover(client, null, relogin)
             is CompanionSessionHealth.Inactive -> recover(client, health.code, relogin)
         }
@@ -138,12 +159,16 @@ internal class RecGovProfileHold(
         healthCode: String?,
         relogin: (suspend (String?) -> ProfileHoldBlocker?)?,
     ): ProfileHoldBlocker? {
-        if (client.refresh() == CompanionActionResult.Ok) return null
-        val credentialLogin = relogin ?: return sessionExpired()
+        val refreshed = client.refresh() as? CompanionActionResult.Failed ?: return null
+        val credentialLogin = relogin ?: return refreshBlocker(refreshed)
         return credentialLogin(healthCode)
     }
 
-    private fun sessionExpired() = ProfileHoldBlocker(RECGOV_SESSION_EXPIRED_ERROR, RECGOV_SESSION_EXPIRED_DETAIL)
+    private fun refreshBlocker(refreshed: CompanionActionResult.Failed): ProfileHoldBlocker {
+        if (refreshed.code !in sessionGoneCodes) return ProfileHoldBlocker(refreshed.code, refreshed.detail)
+        val raw = listOfNotNull(refreshed.code, refreshed.detail).joinToString(RAW_CODE_SEPARATOR)
+        return ProfileHoldBlocker(RECGOV_SESSION_EXPIRED_ERROR, RECGOV_SESSION_EXPIRED_DETAIL + RAW_DETAIL_SEPARATOR + raw)
+    }
 
     private fun blocked(
         code: String,

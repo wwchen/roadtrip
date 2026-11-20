@@ -66,10 +66,11 @@ private const val FIELD_TRACE = "trace"
 private const val DIAGNOSTICS_CAPTURED_NOTE = "diagnostics captured"
 
 // ── Companion-internal codes this adapter translates ─────────────────────────
-private const val COMPANION_LOGIN_FAILED = "recgov_login_failed"
-private const val COMPANION_INVALID_RESPONSE = "companion_invalid_response"
 private const val COMPANION_REQUEST_FAILED = "companion_request_failed"
-private const val CART_NOT_ADDED = "cart_not_added"
+private const val TRANSLATED_DETAIL_SEPARATOR = ": "
+private val translatedLoginCodes: Map<String, String> =
+    mapOf(RecGovSessionCodes.RECGOV_LOGIN_ERROR to RecGovSessionCodes.LOGIN_FAILED)
+
 private val unrecognizedLoginPageReasons =
     setOf(
         "login_link_not_found",
@@ -131,11 +132,8 @@ internal class CompanionSessionClient(
                 if (exchange.succeeded && exchange.body.booleanValue(FIELD_CART_ADDED) == true) {
                     RecGovAtcOutcome.Completed(exchange.body)
                 } else {
-                    RecGovAtcOutcome.Failed(
-                        error = exchange.body.stringValue(FIELD_ERROR) ?: "${CART_NOT_ADDED}_http_${exchange.status}",
-                        detail = exchange.body.stringValue(FIELD_DETAIL),
-                        response = exchange.body,
-                    )
+                    val failure = exchange.failure(exchange.body.stringValue(FIELD_ERROR), exchange.body.stringValue(FIELD_DETAIL))
+                    RecGovAtcOutcome.Failed(error = failure.code, detail = failure.detail, response = exchange.body)
                 }
         }
     }
@@ -215,10 +213,8 @@ internal class CompanionSessionClient(
                 if (exchange.succeeded && verify?.booleanValue(FIELD_OK) != false) {
                     CompanionActionResult.Ok
                 } else {
-                    CompanionActionResult.Failed(
-                        verify?.stringValue(FIELD_ERROR)
-                            ?: exchange.body.stringValue(FIELD_ERROR)
-                            ?: RecGovSessionCodes.NOT_AUTHENTICATED,
+                    exchange.failure(
+                        verify?.stringValue(FIELD_ERROR) ?: exchange.body.stringValue(FIELD_ERROR),
                         verify?.stringValue(FIELD_DETAIL) ?: exchange.body.stringValue(FIELD_DETAIL),
                     )
                 }
@@ -233,7 +229,10 @@ internal class CompanionSessionClient(
         return when (val exchange = get(HEALTH_PATH, query, timeout = fireTimeout)) {
             is Exchange.Unreachable -> CompanionSessionHealth.Unavailable(exchange.detail)
             is Exchange.Answered -> {
-                if (!exchange.succeeded) return CompanionSessionHealth.Unavailable(exchange.body.stringValue(FIELD_ERROR))
+                if (!exchange.succeeded) {
+                    val failure = exchange.failure(exchange.body.stringValue(FIELD_ERROR), exchange.body.stringValue(FIELD_DETAIL))
+                    return CompanionSessionHealth.CheckFailed(failure.code, failure.detail)
+                }
                 sessionHealth(exchange.body.objectValue(FIELD_RECGOV_AUTH))
             }
         }
@@ -292,28 +291,25 @@ internal class CompanionSessionClient(
                     exchange.body.stringValue(FIELD_ERROR) == RecGovSessionCodes.MFA_REQUIRED && challengeId != null ->
                         CompanionLoginResult.MfaRequired(challengeId, exchange.body.stringValue(FIELD_EXPIRES_AT))
                     exchange.loggedIn -> CompanionLoginResult.Ok
-                    else -> CompanionLoginResult.Failed(loginFailureCode(exchange.body), failureDetail(exchange.body))
+                    else -> loginFailure(exchange)
                 }
             }
         }
 
-    /**
-     * The companion keeps `error` a stable code and puts the actual blocker in
-     * `recgov_auth.reason`, so a captcha arrives as `recgov_login_failed` +
-     * `reason: captcha_required`. The reason is checked first for exactly that,
-     * and for the blockers that mean the page no longer looks as expected;
-     * anything else keeps the companion's own code so operators see the truth.
-     */
-    private fun loginFailureCode(body: JsonObject): String {
+    private fun loginFailure(exchange: Exchange.Answered): CompanionLoginResult.Failed {
+        val body = exchange.body
         val auth = body.objectValue(FIELD_RECGOV_AUTH)
-        val reason = auth?.stringValue(FIELD_REASON)
-        if (reason == RecGovSessionCodes.CAPTCHA_REQUIRED) return RecGovSessionCodes.CAPTCHA_REQUIRED
-        if (reason in unrecognizedLoginPageReasons) return RecGovSessionCodes.LOGIN_PAGE_CHANGED
-        return when (val code = body.stringValue(FIELD_ERROR) ?: auth?.stringValue(FIELD_ERROR)) {
-            null, COMPANION_LOGIN_FAILED -> RecGovSessionCodes.LOGIN_FAILED
-            else -> code
-        }
+        val reported = body.stringValue(FIELD_ERROR) ?: auth?.stringValue(FIELD_ERROR)
+        val raw = if (reported == RecGovSessionCodes.COMPANION_LOGIN_FAILED) auth?.stringValue(FIELD_REASON) ?: reported else reported
+        val failure = exchange.failure(raw, failureDetail(body))
+        val translated = translatedLoginCodes[failure.code] ?: unrecognizedLoginPageCode(failure.code)
+        if (translated == null) return CompanionLoginResult.Failed(failure.code, failure.detail)
+        val detail = listOfNotNull(failure.code, failure.detail).joinToString(TRANSLATED_DETAIL_SEPARATOR)
+        return CompanionLoginResult.Failed(translated, detail)
     }
+
+    private fun unrecognizedLoginPageCode(code: String): String? =
+        RecGovSessionCodes.LOGIN_PAGE_CHANGED.takeIf { code in unrecognizedLoginPageReasons }
 
     /**
      * The failure's own words, plus a note when the companion kept artifacts.
@@ -338,11 +334,25 @@ internal class CompanionSessionClient(
                 if (exchange.succeeded) {
                     CompanionActionResult.Ok
                 } else {
-                    CompanionActionResult.Failed(
-                        exchange.body.stringValue(FIELD_ERROR) ?: RecGovSessionCodes.LOGIN_FAILED,
-                        exchange.body.stringValue(FIELD_DETAIL),
+                    val auth = exchange.body.objectValue(FIELD_RECGOV_AUTH)
+                    exchange.failure(
+                        exchange.body.stringValue(FIELD_ERROR) ?: auth?.stringValue(FIELD_ERROR),
+                        exchange.body.stringValue(FIELD_DETAIL) ?: auth?.stringValue(FIELD_DETAIL),
                     )
                 }
+        }
+
+    private fun Exchange.Answered.failure(
+        code: String?,
+        detail: String?,
+    ): CompanionActionResult.Failed =
+        if (code != null) {
+            CompanionActionResult.Failed(code, detail)
+        } else {
+            CompanionActionResult.Failed(
+                RecGovSessionCodes.COMPANION_INVALID_RESPONSE,
+                "http $status: ${body.toString().take(MAX_ERROR_BODY_CHARS)}",
+            )
         }
 
     private fun unavailableAction(detail: String?): CompanionActionResult =
@@ -423,7 +433,7 @@ internal class CompanionSessionClient(
             runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
                 // A body this layer cannot read is indistinguishable from an
                 // absent companion as far as the caller is concerned.
-                ?: return Exchange.Unreachable("$COMPANION_INVALID_RESPONSE: ${raw.take(MAX_ERROR_BODY_CHARS)}")
+                ?: return Exchange.Unreachable("${RecGovSessionCodes.COMPANION_INVALID_RESPONSE}: ${raw.take(MAX_ERROR_BODY_CHARS)}")
         return Exchange.Answered(response.statusCode(), parsed)
     }
 

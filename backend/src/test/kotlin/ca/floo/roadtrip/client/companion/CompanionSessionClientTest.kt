@@ -291,7 +291,59 @@ class CompanionSessionClientTest {
         }
 
     @Test
-    fun `a plain credential rejection becomes login_failed`() =
+    fun `rec_gov's own login error becomes login_failed and keeps rec_gov's text`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/login" to
+                            TestResponse(
+                                status = 401,
+                                body =
+                                    """
+                                    {"ok":false,"recgov_auth":{"logged_in":false,"error":"login_error",
+                                     "reason":"login_error","detail":"Invalid email or password."}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "nope")
+
+                    assertEquals<CompanionLoginResult>(
+                        CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_FAILED, "login_error: Invalid email or password."),
+                        result,
+                    )
+                }
+        }
+
+    @Test
+    fun `a login that never produced a session is not reported as rejected credentials`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/login" to
+                            TestResponse(
+                                status = 401,
+                                body =
+                                    """
+                                    {"ok":false,"recgov_auth":{"logged_in":false,"error":"recaccount_not_observed",
+                                     "reason":"recaccount_not_observed","detail":"no session after submit"}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
+
+                    assertEquals<CompanionLoginResult>(
+                        CompanionLoginResult.Failed("recaccount_not_observed", "no session after submit"),
+                        result,
+                    )
+                }
+        }
+
+    @Test
+    fun `an older companion's blocker reason is read when its error is the generic code`() =
         runBlocking {
             CompanionTestServer
                 .of(
@@ -302,14 +354,27 @@ class CompanionSessionClientTest {
                                 body =
                                     """
                                     {"ok":false,"recgov_auth":{"logged_in":false,"error":"recgov_login_failed",
-                                     "reason":"login_rejected","detail":"bad password"}}
+                                     "reason":"login_form_still_visible","detail":"form still up"}}
                                     """.trimIndent(),
                             ),
                     ),
                 ).use { server ->
-                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "nope")
+                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
 
-                    assertEquals<CompanionLoginResult>(CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_FAILED, "bad password"), result)
+                    assertEquals<CompanionLoginResult>(CompanionLoginResult.Failed("login_form_still_visible", "form still up"), result)
+                }
+        }
+
+    @Test
+    fun `a failed login answer with no code at all is reported as a malformed answer`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/login" to TestResponse(status = 500, body = """{"ok":false}""")))
+                .use { server ->
+                    val failed = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2") as CompanionLoginResult.Failed
+
+                    assertEquals(RecGovSessionCodes.COMPANION_INVALID_RESPONSE, failed.code)
+                    assertTrue(failed.detail!!.contains("http 500"), failed.detail!!)
                 }
         }
 
@@ -332,7 +397,10 @@ class CompanionSessionClientTest {
                 ).use { server ->
                     val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
 
-                    assertEquals<CompanionLoginResult>(CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_PAGE_CHANGED, null), result)
+                    assertEquals<CompanionLoginResult>(
+                        CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_PAGE_CHANGED, "email_input_not_found"),
+                        result,
+                    )
                 }
         }
 
@@ -447,6 +515,68 @@ class CompanionSessionClientTest {
         }
 
     @Test
+    fun `verify that answers non-2xx with no code is a malformed answer, not an expired session`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/verify" to TestResponse(status = 502, body = """{"ok":false}""")))
+                .use { server ->
+                    val failed = clientFor(server.baseUrl).verify(PROFILE_ID) as CompanionActionResult.Failed
+
+                    assertEquals(RecGovSessionCodes.COMPANION_INVALID_RESPONSE, failed.code)
+                    assertTrue(failed.detail!!.contains("http 502"), failed.detail!!)
+                }
+        }
+
+    @Test
+    fun `a failed refresh reports the code the companion nests under recgov_auth`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/refresh" to
+                            TestResponse(
+                                status = 401,
+                                body =
+                                    """
+                                    {"ok":false,"recgov_auth":{"logged_in":false,"error":"recgov_refresh_failed",
+                                     "detail":"stored session rejected"},"diagnostics":null}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).refresh(PROFILE_ID)
+
+                    assertEquals<CompanionActionResult>(
+                        CompanionActionResult.Failed(RecGovSessionCodes.REFRESH_FAILED, "stored session rejected"),
+                        result,
+                    )
+                }
+        }
+
+    @Test
+    fun `a failed logout reports the companion's nested code, not login_failed`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/logout" to
+                            TestResponse(
+                                status = 500,
+                                body =
+                                    """
+                                    {"ok":false,"recgov_auth":{"logged_in":null,"error":"recgov_logout_exception",
+                                     "detail":"page crashed"}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).logout(PROFILE_ID)
+
+                    assertEquals<CompanionActionResult>(CompanionActionResult.Failed("recgov_logout_exception", "page crashed"), result)
+                }
+        }
+
+    @Test
     fun `logout posts the profile id`() =
         runBlocking {
             CompanionTestServer
@@ -520,7 +650,7 @@ class CompanionSessionClientTest {
         }
 
     @Test
-    fun `a login answer with a structured detail still maps to a code`() =
+    fun `a login answer with a structured detail keeps the companion's own code`() =
         runBlocking {
             CompanionTestServer
                 .of(
@@ -539,7 +669,26 @@ class CompanionSessionClientTest {
                     val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "nope")
 
                     assertEquals<CompanionLoginResult>(
-                        CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_FAILED, null),
+                        CompanionLoginResult.Failed(RecGovSessionCodes.COMPANION_LOGIN_FAILED, null),
+                        result,
+                    )
+                }
+        }
+
+    @Test
+    fun `a health route that failed keeps the companion's code and detail`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(status = 500, body = """{"ok":false,"error":"store_corrupt","detail":"store.json is not JSON"}"""),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).health(PROFILE_ID)
+
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.CheckFailed("store_corrupt", "store.json is not JSON"),
                         result,
                     )
                 }
@@ -600,6 +749,19 @@ class CompanionSessionClientTest {
 
                     assertEquals("cart_not_added", failed.error)
                     assertEquals("no hold", failed.detail)
+                }
+        }
+
+    @Test
+    fun `a success answer without cart_added is a contract breach, not a vendor refusal`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/atc" to TestResponse(body = """{"ok":true}""")))
+                .use { server ->
+                    val failed = clientFor(server.baseUrl).addToCart(atcPayload()) as RecGovAtcOutcome.Failed
+
+                    assertEquals(RecGovSessionCodes.COMPANION_INVALID_RESPONSE, failed.error)
+                    assertTrue(failed.detail.orEmpty().contains("http 200"), failed.detail.orEmpty())
                 }
         }
 

@@ -78,7 +78,7 @@ private val cases: Map<String, JsonObject> =
         "health_active" to health(answered(CompanionSessionHealth.Active)),
         "health_never_logged_in" to health(answered(CompanionSessionHealth.NeverLoggedIn)),
         "health_inactive" to health(answered(CompanionSessionHealth.Inactive(RecGovSessionCodes.SESSION_EXPIRED))),
-        "health_check_failed" to health(answered(CompanionSessionHealth.CheckFailed(RecGovSessionCodes.AUTH_CHECK_EXCEPTION))),
+        "health_check_failed" to health(answered(CompanionSessionHealth.CheckFailed(RecGovSessionCodes.AUTH_CHECK_EXCEPTION, DETAIL))),
         "health_unavailable" to health(answered(CompanionSessionHealth.Unavailable(DETAIL))),
         "health_timed_out" to health(RelayAnswer.TimedOut),
         "sign_out_wiped" to signOut(answered(ProfileWipe(signedOut = true, destroyed = CompanionActionResult.Ok))),

@@ -27,6 +27,14 @@ internal object RecGovBookingCodes {
 
     /** Rec.gov showed the site but offered no Reserve/Add-to-Cart control. */
     const val NO_RESERVE_BUTTON = "recgov_no_reserve_button"
+
+    const val CART_EMPTY = "cart_empty"
+    const val CART_MISSING_EXPECTED_ITEM = "missing_expected_item"
+    const val CART_HTTP_ERROR = "cart_http_error"
+    const val CART_FETCH_FAILED = "cart_fetch_failed"
+    const val CART_NOT_VERIFIED = "cart_not_verified"
+    const val AUTOMATION_EXCEPTION = "atc_automation_exception"
+    const val ATC_RESULT_UNEXPLAINED = "atc_result_unexplained"
 }
 
 /** The profile could not be signed in unattended; only the user can fix it. */
@@ -35,6 +43,8 @@ internal const val RECGOV_SESSION_EXPIRED_DETAIL = "session expired — re-login
 
 /** The companion itself is broken; nothing the owner can do about it. */
 internal const val COMPANION_ERROR_DETAIL = "the booking service hit an internal error"
+
+private const val RE_LOGIN_DETAIL_SEPARATOR = " — "
 
 private val reLoginRefusalDetails: Map<String, String> =
     mapOf(
@@ -151,9 +161,14 @@ internal class RecGovBookingAdapter(
                     recovery.code,
                     recovery.detail,
                 )
-                ProfileHoldBlocker(recovery.code, reLoginRefusalDetails[recovery.code] ?: recovery.detail)
+                ProfileHoldBlocker(recovery.code, reLoginRefusalDetail(recovery))
             }
         }
+
+    private fun reLoginRefusalDetail(recovery: CompanionActionResult.Failed): String? {
+        val friendly = reLoginRefusalDetails[recovery.code] ?: return recovery.detail
+        return listOfNotNull(friendly, recovery.detail).joinToString(RE_LOGIN_DETAIL_SEPARATOR)
+    }
 
     private fun profileIdFor(owner: UserId): String = session?.profileId(owner) ?: owner.value.toString()
 }
