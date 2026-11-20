@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
@@ -178,6 +179,59 @@ class FailoverAvailabilityFetcherTest {
         tracker: ProviderCooldownTracker,
         clock: FakeClock,
     ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
+
+    @Test
+    fun `statuses the served batch could not classify are counted against its provider`() =
+        runBlocking {
+            val clock = FakeClock()
+            val counted = mutableListOf<Pair<BookingProvider, Int>>()
+            val metrics =
+                object : RoadtripMetrics by RoadtripMetrics.NoOp {
+                    override fun availabilityStatusUnrecognized(
+                        provider: BookingProvider,
+                        cells: Int,
+                    ) {
+                        counted += provider to cells
+                    }
+                }
+            val provider =
+                ScriptedProvider(BookingProvider.RECGOV).apply {
+                    scriptReturns(emptyBatch().copy(unrecognizedStatuses = mapOf("Lottery" to 3, "Walk-Up Only" to 1)))
+                }
+
+            FailoverAvailabilityFetcher(
+                cooldowns = trackerWith(clock),
+                clock = { clock.now },
+                unrecognized = UnrecognizedStatusReporter(metrics),
+            ).fetch(providers = listOf(provider), campground = testCampground, campsites = listOf(campsite(1L)), window = window)
+
+            assertEquals(listOf(BookingProvider.RECGOV to 4), counted)
+        }
+
+    @Test
+    fun `a batch with every status classified counts nothing`() =
+        runBlocking {
+            val clock = FakeClock()
+            val counted = mutableListOf<Int>()
+            val metrics =
+                object : RoadtripMetrics by RoadtripMetrics.NoOp {
+                    override fun availabilityStatusUnrecognized(
+                        provider: BookingProvider,
+                        cells: Int,
+                    ) {
+                        counted += cells
+                    }
+                }
+            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
+
+            FailoverAvailabilityFetcher(
+                cooldowns = trackerWith(clock),
+                clock = { clock.now },
+                unrecognized = UnrecognizedStatusReporter(metrics),
+            ).fetch(providers = listOf(provider), campground = testCampground, campsites = listOf(campsite(1L)), window = window)
+
+            assertEquals(emptyList(), counted)
+        }
 
     @Test
     fun `each candidate is handed the campsites its own call shape can cover`() =

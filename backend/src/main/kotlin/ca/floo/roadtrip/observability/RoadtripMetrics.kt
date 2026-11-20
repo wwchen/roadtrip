@@ -93,12 +93,22 @@ interface RoadtripMetrics {
         durationMs: Int? = null,
     )
 
+    fun availabilityStatusUnrecognized(
+        provider: BookingProvider,
+        cells: Int,
+    )
+
     /** For tests and for any entry point that runs without the agent. */
     object NoOp : RoadtripMetrics {
         override fun availabilityFetchCompleted(
             provider: BookingProvider,
             outcome: String,
             durationMs: Int?,
+        ) = Unit
+
+        override fun availabilityStatusUnrecognized(
+            provider: BookingProvider,
+            cells: Int,
         ) = Unit
 
         override fun availabilityRunFinished(

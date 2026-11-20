@@ -5,4 +5,5 @@ import java.time.Instant
 data class CampflareAvailability(
     val campgrounds: Map<String, CampflareCampgroundAvailability>,
     val observedAt: Instant,
+    val unrecognizedStatuses: Map<String, Int> = emptyMap(),
 )

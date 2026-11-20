@@ -21,6 +21,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RecGovObservationsTest {
@@ -179,6 +180,49 @@ class RecGovObservationsTest {
         val batch = classify(clientReturning(map), days = 1)
 
         assertEquals(mapOf(100L to AvailabilityStatus.UNKNOWN), batch.statusesOn(0))
+        assertEquals(mapOf("Walk-Up Only" to 1), batch.unrecognizedStatuses)
+    }
+
+    @Test
+    fun `a status rec gov sends is classified, not left unrecognized`() {
+        val sent =
+            mapOf(
+                "Available" to AvailabilityStatus.AVAILABLE,
+                "Open" to AvailabilityStatus.AVAILABLE,
+                "Reserved" to AvailabilityStatus.RESERVED,
+                "Not Available" to AvailabilityStatus.RESERVED,
+                "Not Reservable" to AvailabilityStatus.FIRST_COME,
+                "Closed" to AvailabilityStatus.CLOSED,
+                "Not Available Cutoff" to AvailabilityStatus.RESERVED,
+                "Not Reservable Management" to AvailabilityStatus.CLOSED,
+                "NYR" to AvailabilityStatus.UNKNOWN,
+            )
+        val siteIds = sent.keys.indices.map { (it + 1).toString() }
+        val map = siteIds.zip(sent.keys).associate { (siteId, raw) -> siteId to campsiteWith(mapOf(futureKey(0) to raw)) }
+        val batch = classify(clientReturning(map), days = 1, catalogSiteIds = siteIds)
+
+        assertEquals(siteIds.zip(sent.values).associate { (siteId, status) -> siteId.toLong() to status }, batch.statusesOn(0))
+        assertEquals(emptyMap(), batch.unrecognizedStatuses)
+    }
+
+    @Test
+    fun `a window inside the booking cutoff is full, not closed for the season`() {
+        val cutoff = (0..2L).associate { futureKey(it) to "Not Available Cutoff" }
+        val batch = classify(clientReturning(mapOf("100" to campsiteWith(cutoff))), days = 3)
+
+        assertFalse(isClosedForSeason(campsiteWindowStatuses(batch.startDate, batch.endDate, batch.observations)))
+    }
+
+    @Test
+    fun `each unrecognized status is counted under its verbatim value`() {
+        val map =
+            mapOf(
+                "100" to campsiteWith(mapOf(futureKey(0) to "Lottery", futureKey(1) to "Lottery", futureKey(2) to " Lottery ")),
+                "200" to campsiteWith(mapOf(futureKey(0) to "Walk-Up Only")),
+            )
+        val batch = classify(clientReturning(map), days = 3, catalogSiteIds = listOf("100", "200"))
+
+        assertEquals(mapOf("Lottery" to 2, " Lottery " to 1, "Walk-Up Only" to 1), batch.unrecognizedStatuses)
     }
 
     @Test

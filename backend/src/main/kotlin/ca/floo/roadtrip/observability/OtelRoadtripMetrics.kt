@@ -15,6 +15,7 @@ private const val METRIC_FETCH_DURATION = "roadtrip.availability.fetch.duration"
 private const val METRIC_RUN = "roadtrip.availability.run"
 private const val METRIC_RUN_DURATION = "roadtrip.availability.run.duration"
 private const val METRIC_POLL_SKIPPED = "roadtrip.availability.poll.skipped"
+private const val METRIC_STATUS_UNRECOGNIZED = "roadtrip.availability.status.unrecognized"
 private const val METRIC_WATCH_TRIGGER = "roadtrip.watch.trigger"
 private const val METRIC_INGEST_RUN = "roadtrip.ingest.run"
 private const val METRIC_RECGOV_KEEPALIVE = "roadtrip.recgov.keepalive"
@@ -28,6 +29,7 @@ private const val UNIT_CYCLES = "{cycle}"
 private const val UNIT_TRIGGERS = "{trigger}"
 private const val UNIT_PROFILES = "{profile}"
 private const val UNIT_FIRES = "{fire}"
+private const val UNIT_CELLS = "{cell}"
 
 /** Attribute value when a terminal outcome carries no error code. */
 private const val ERROR_NONE = "none"
@@ -103,6 +105,13 @@ internal class OtelRoadtripMetrics(
             .setUnit(UNIT_CYCLES)
             .build()
 
+    private val unrecognizedStatuses =
+        meter
+            .counterBuilder(METRIC_STATUS_UNRECOGNIZED)
+            .setDescription("Availability cells whose vendor status has no classification, by provider")
+            .setUnit(UNIT_CELLS)
+            .build()
+
     private val watchTriggers =
         meter
             .counterBuilder(METRIC_WATCH_TRIGGER)
@@ -149,6 +158,13 @@ internal class OtelRoadtripMetrics(
         // Null when the adapter never got far enough to time a call; counting it
         // in the histogram as 0ms would drag every latency percentile down.
         durationMs?.let { fetchDuration.record(it.toLong(), attributes) }
+    }
+
+    override fun availabilityStatusUnrecognized(
+        provider: BookingProvider,
+        cells: Int,
+    ) {
+        unrecognizedStatuses.add(cells.toLong(), Attributes.of(attrProvider, provider.id))
     }
 
     override fun availabilityRunFinished(

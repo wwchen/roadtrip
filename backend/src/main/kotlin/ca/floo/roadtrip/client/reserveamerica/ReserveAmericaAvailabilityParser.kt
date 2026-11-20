@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.client.reserveamerica
 
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.UnrecognizedStatusTally
 import java.time.LocalDate
 
 object ReserveAmericaAvailabilityParser {
@@ -10,6 +11,7 @@ object ReserveAmericaAvailabilityParser {
         Regex("""<div class='td status\s+([^']*)'[^>]*>(.*?)</div>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val resultTotalRegex = Regex("""id='resulttotal_dr_(?:top|bottom)'\s*>\s*(\d+)\s*</span>""")
     private val tagRegex = Regex("""<[^>]+>""")
+    private val whitespaceRegex = Regex("""\s+""")
 
     fun parse(
         html: String,
@@ -22,6 +24,7 @@ object ReserveAmericaAvailabilityParser {
                 .toInt()
         val dates = (0 until dayCount).map { startDate.plusDays(it.toLong()) }
         val statuses = linkedMapOf<String, Map<LocalDate, AvailabilityStatus>>()
+        val unrecognized = UnrecognizedStatusTally()
         for (row in siteRows(html)) {
             val siteId = siteIdRegex.find(row)?.groupValues?.get(1) ?: continue
             val byDate = linkedMapOf<LocalDate, AvailabilityStatus>()
@@ -29,13 +32,19 @@ object ReserveAmericaAvailabilityParser {
                 .findAll(row)
                 .take(dates.size)
                 .forEachIndexed { i, match ->
-                    byDate[dates[i]] = classify(match.groupValues[1], stripTags(match.groupValues[2]))
+                    val code = cellCode(match.groupValues[1])
+                    val label = stripTags(match.groupValues[2])
+                    byDate[dates[i]] = unrecognized.orUnknown("$code/$label", classify(code.lowercase(), label.lowercase()))
                 }
             if (byDate.isNotEmpty()) {
                 statuses[siteId] = byDate
             }
         }
-        return ParsedReserveAmericaMatrix(statuses = statuses, totalSites = totalSites(html))
+        return ParsedReserveAmericaMatrix(
+            statuses = statuses,
+            totalSites = totalSites(html),
+            unrecognizedStatuses = unrecognized.counts(),
+        )
     }
 
     /**
@@ -50,26 +59,25 @@ object ReserveAmericaAvailabilityParser {
         }
     }
 
+    private fun cellCode(classTail: String): String =
+        classTail
+            .trim()
+            .split(whitespaceRegex)
+            .firstOrNull()
+            .orEmpty()
+
     private fun classify(
-        classTail: String,
-        text: String,
-    ): AvailabilityStatus {
-        val code =
-            classTail
-                .trim()
-                .split(Regex("""\s+"""))
-                .firstOrNull()
-                .orEmpty()
-                .lowercase()
-        val label = text.trim().lowercase()
-        return when {
+        code: String,
+        label: String,
+    ): AvailabilityStatus? =
+        when {
             code == "a" || label == "a" -> AvailabilityStatus.AVAILABLE
             code == "r" || label == "r" -> AvailabilityStatus.RESERVED
             code == "w" || label == "w" -> AvailabilityStatus.FIRST_COME
             code == "u" || code == "x" || label == "u" || label == "x" -> AvailabilityStatus.CLOSED
-            else -> AvailabilityStatus.UNKNOWN
+            code == "p" || label == "p" -> AvailabilityStatus.UNKNOWN
+            else -> null
         }
-    }
 
     private fun totalSites(html: String): Int? =
         resultTotalRegex

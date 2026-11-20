@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -15,6 +16,7 @@ import java.time.Instant
 internal open class FailoverAvailabilityFetcher(
     private val cooldowns: ProviderCooldownTracker,
     private val clock: () -> Instant = Instant::now,
+    private val unrecognized: UnrecognizedStatusReporter = UnrecognizedStatusReporter(RoadtripMetrics.NoOp),
 ) {
     data class AttemptRecord(
         val provider: BookingProvider,
@@ -64,6 +66,7 @@ internal open class FailoverAvailabilityFetcher(
             when (attempt.outcome) {
                 FetchOutcome.OK -> {
                     cooldowns.recordSuccess(provider.id)
+                    attempt.batch?.let { unrecognized.report(provider.id, it.unrecognizedStatuses) }
                     return FailoverResult(batch = attempt.batch, servedBy = provider.id, attempts = attempts)
                 }
                 FetchOutcome.RATE_LIMITED,

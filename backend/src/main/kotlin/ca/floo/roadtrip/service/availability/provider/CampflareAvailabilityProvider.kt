@@ -68,6 +68,7 @@ class CampflareAvailabilityProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
+            unrecognizedStatuses = data.unrecognizedStatuses,
         )
     }
 
@@ -104,6 +105,7 @@ class CampflareAvailabilityProvider(
         startDate: LocalDate,
         endDate: LocalDate,
         observations: List<CampsiteDayObservation>,
+        unrecognizedStatuses: Map<String, Int>,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(
             provider = CAMPFLARE_PROVIDER,
@@ -112,6 +114,7 @@ class CampflareAvailabilityProvider(
             observations = observations,
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
             scope = BookingProviderRef.Campflare(campgroundId = campgroundId),
+            unrecognizedStatuses = unrecognizedStatuses,
         )
 
     private fun campflareIdOrThrow(campground: Campground): String =
