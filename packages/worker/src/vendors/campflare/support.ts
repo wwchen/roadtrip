@@ -5,6 +5,9 @@ import { kotlinTrim } from '../../etl/kotlin-text.js';
 import type { ParseResult } from '../../etl/source-etl.js';
 import { campflareCampgroundUrl } from './urls.js';
 
+const INT_MIN = -(2 ** 31);
+const INT_MAX = 2 ** 31 - 1;
+
 export const CAMPGROUNDS_ETL_SLUG = 'campflare-campgrounds';
 export const CAMPSITES_ETL_SLUG = 'campflare-campsites';
 export const CAMPFLARE_SOURCE_LINK_TITLE = 'Campflare source';
@@ -40,7 +43,18 @@ export function doubleField(raw: JsonObject | null | undefined, name: string): n
 }
 
 export function intField(raw: JsonObject | null | undefined, name: string): number | null {
-  return intOrNull(fieldOf(raw, name));
+  const value = fieldOf(raw, name);
+  const exact = intOrNull(value);
+  if (exact !== null) return exact;
+  const number = doubleOrNull(value);
+  if (number === null || !Number.isInteger(number) || number < INT_MIN || number > INT_MAX) return null;
+  return number + 0;
+}
+
+export function notWholeNumberWarning(raw: JsonObject | null | undefined, name: string): string | null {
+  const content = contentOrNull(fieldOf(raw, name));
+  if (content === null || intField(raw, name) !== null) return null;
+  return `Campflare ${name} ${content} is not a whole number`;
 }
 
 export function booleanField(raw: JsonObject | null | undefined, name: string): boolean | null {

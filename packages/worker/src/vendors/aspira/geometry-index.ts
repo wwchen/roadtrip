@@ -10,6 +10,7 @@ const MAX_LATITUDE = 90;
 const MIN_LONGITUDE = -180;
 const MAX_LONGITUDE = 180;
 const EMPTY_KEY = '';
+const AMBIGUOUS_SPREAD_DEGREES = 0.2;
 
 export type GeometrySourceRef = readonly [slug: string, source: GeometrySource];
 
@@ -20,6 +21,32 @@ export function byNormalizedName<T>(rows: Iterable<T>, name: (row: T) => string)
     if (key !== EMPTY_KEY && !byName.has(key)) byName.set(key, row);
   }
   return byName;
+}
+
+function isFarFrom(point: NamedPoint, other: NamedPoint): boolean {
+  return (
+    Math.abs(point.latitude - other.latitude) > AMBIGUOUS_SPREAD_DEGREES ||
+    Math.abs(point.longitude - other.longitude) > AMBIGUOUS_SPREAD_DEGREES
+  );
+}
+
+function ambiguousNames(points: readonly NamedPoint[]): Map<string, string[]> {
+  const byKey = new Map<string, NamedPoint[]>();
+  for (const point of points) {
+    const key = normalize(point.name);
+    if (key === EMPTY_KEY) continue;
+    const group = byKey.get(key);
+    if (group === undefined) byKey.set(key, [point]);
+    else group.push(point);
+  }
+  const ambiguous = new Map<string, string[]>();
+  for (const [key, group] of byKey) {
+    const first = group[0] as NamedPoint;
+    if (group.some((point) => isFarFrom(point, first))) {
+      ambiguous.set(key, [...new Set(group.map((point) => point.name))]);
+    }
+  }
+  return ambiguous;
 }
 
 function isOnEarth(point: NamedPoint): boolean {
@@ -47,8 +74,17 @@ export function buildGeometryIndex(
       if (isOnEarth(point)) plottable.push(point);
       else dropped += 1;
     }
+    const ambiguous = ambiguousNames(plottable);
     for (const [key, point] of byNormalizedName(plottable, (row) => row.name)) {
+      if (ambiguous.has(key)) continue;
       if (!byName.has(key)) byName.set(key, { latitude: point.latitude, longitude: point.longitude, source: slug });
+    }
+    if (ambiguous.size > 0) {
+      const listed = [...ambiguous].map(([key, names]) => `${key} <- [${names.join(', ')}]`).join('; ');
+      log.warn(
+        `${etlSlug}: geometry input slug=${slug} left ${ambiguous.size} names unindexed because points sharing them ` +
+          `lie more than ${AMBIGUOUS_SPREAD_DEGREES} degrees apart: ${listed}`,
+      );
     }
     const added = byName.size - before;
     log.info(

@@ -49,6 +49,7 @@ open class EtlOrchestrator(
         val terminalEtlSlug: String,
         val parsed: Int,
         val transformed: Int,
+        val warned: Int,
         val upsertResult: CatalogUpsertResult,
     )
 
@@ -60,6 +61,7 @@ open class EtlOrchestrator(
         val upserted: Int,
         val skipped: Int,
         val swept: Int,
+        val warned: Int,
     )
 
     /**
@@ -101,6 +103,7 @@ open class EtlOrchestrator(
             upserted = stats.upsertResult.upsertedCount,
             skipped = stats.upsertResult.skippedCount,
             swept = stats.upsertResult.sweptCount,
+            warned = stats.warned,
         )
     }
 
@@ -139,6 +142,8 @@ open class EtlOrchestrator(
         var transformBad = 0
         var upserted = 0
         var repoSkipped = 0
+        var warned = 0
+        val warningTally = LinkedHashMap<String, Int>()
 
         try {
             for (parseResult in etl.parse(bundle)) {
@@ -149,6 +154,10 @@ open class EtlOrchestrator(
                             when (transformResult) {
                                 is TransformResult.Ok -> {
                                     transformOk++
+                                    if (transformResult.warnings.isNotEmpty()) {
+                                        warned++
+                                        for (warning in transformResult.warnings) warningTally.merge(warning, 1, Int::plus)
+                                    }
                                     val counts = batcher.add(transformResult.record)
                                     upserted += counts.upserted
                                     repoSkipped += counts.skipped
@@ -222,16 +231,39 @@ open class EtlOrchestrator(
                     repoSkipped,
                 )
             }
+            logWarningTally(sectionLabel, rowName, etl.etlSlug, warned, warningTally)
             return Stats(
                 poiDataName = rowName,
                 terminalEtlSlug = etl.etlSlug,
                 parsed = seen,
                 transformed = transformOk,
+                warned = warned,
                 upsertResult = ups,
             )
         } catch (e: Throwable) {
             importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
+        }
+    }
+
+    private fun logWarningTally(
+        sectionLabel: String,
+        rowName: String,
+        etlSlug: String,
+        warned: Int,
+        tally: Map<String, Int>,
+    ) {
+        if (warned == 0) return
+        log.warn(
+            "{} '{}' terminal slug={} kept {} records carrying {} distinct warnings",
+            sectionLabel,
+            rowName,
+            etlSlug,
+            warned,
+            tally.size,
+        )
+        for ((warning, count) in tally.entries.sortedByDescending { it.value }.take(WARNING_TALLY_LOG_LIMIT)) {
+            log.warn("{} '{}' terminal slug={} warning x{}: {}", sectionLabel, rowName, etlSlug, count, warning)
         }
     }
 
@@ -273,6 +305,7 @@ open class EtlOrchestrator(
 
     companion object {
         private const val ROW_ERROR_LOG_SAMPLE_LIMIT = 10
+        private const val WARNING_TALLY_LOG_LIMIT = 25
 
         internal val registry: Map<String, TerminalEtlDefinition<*, *>> = productionTerminalEtlDefinitions
     }

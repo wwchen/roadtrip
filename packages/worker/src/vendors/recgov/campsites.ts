@@ -165,11 +165,11 @@ function campsiteRecord(
   campsiteId: string,
   raw: JsonObject,
   facilityId: string,
-): CampsiteUpsertCandidate {
+): TransformResult<CampsiteUpsertCandidate> {
   const promoted = promoteAttributes(raw);
   const campsiteType = primitiveStringField(raw, FIELD.campsiteType);
   const siteKind = campsiteKindRecGov(campsiteType);
-  return {
+  const record: CampsiteUpsertCandidate = {
     dataProviderRef: DataProviderRef.recGov(campsiteId),
     bookingProvider: BookingProvider.RECGOV,
     bookingProviderRef: campsiteId,
@@ -191,6 +191,7 @@ function campsiteRecord(
     minPeople: intOrNull(fieldOf(raw, FIELD.minPeople)),
     sourcePayload: serializeOpaquePayload(extendInDocumentOrder(raw, { [PARENT_FACILITY_KEY]: facilityId })),
   };
+  return { ok: true, record, warnings: siteKind.warning === null ? [] : [siteKind.warning] };
 }
 
 export class RecGovCampsitesEtl implements SourceEtl<Envelope[], CampsiteUpsertCandidate> {
@@ -225,7 +226,7 @@ export class RecGovCampsitesEtl implements SourceEtl<Envelope[], CampsiteUpsertC
           yield { ok: false, sourceId: campsiteId, errors: [EXPECTED_CAMPSITE_OBJECT] };
           continue;
         }
-        yield { ok: true, record: campsiteRecord(campsiteId, element, facilityId) };
+        yield campsiteRecord(campsiteId, element, facilityId);
       }
     }
   }

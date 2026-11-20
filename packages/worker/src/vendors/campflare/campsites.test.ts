@@ -72,17 +72,51 @@ describe('campsite price and schedule are raw vendor json', () => {
   });
 });
 
-describe('integer columns follow how kotlinx reads the literal', () => {
-  test('a whole number written with a fraction is not an int and a bare integer is', () => {
+describe('integer columns', () => {
+  test('a whole number written with a fraction is the integer it names, as is a bare integer', () => {
     const record = recordOf(
-      `{${BASE},"max_people":8,"max_cars":2.0,"driveway_length":25.0,"max_rv_length":25,"max_trailer_length":25.0}`,
+      `{${BASE},"max_people":8,"max_cars":2.0,"driveway_length":40.0,"max_rv_length":25,"max_trailer_length":25.0}`,
     );
     expect(record).toMatchObject({
       maxPeople: 8,
-      maxCars: null,
-      drivewayLength: null,
+      maxCars: 2,
+      drivewayLength: 40,
       maxRvLength: 25,
       maxTrailerLength: 25,
+    });
+    expect(transformed(`{${BASE},"kind":"rv","driveway_length":40.0,"max_rv_length":-0.0}`)[0]).toMatchObject({
+      ok: true,
+      warnings: [],
+      record: { drivewayLength: 40, maxRvLength: 0 },
+    });
+  });
+
+  test('a true fraction, a number past the int range or a non-number is null and named in a warning', () => {
+    const [result] = transformed(
+      `{${BASE},"kind":"rv","max_people":"many","max_cars":null,"driveway_length":45.5,"max_rv_length":3000000000.0}`,
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      record: { maxPeople: null, maxCars: null, drivewayLength: null, maxRvLength: null },
+      warnings: [
+        'Campflare max_people many is not a whole number',
+        'Campflare driveway_length 45.5 is not a whole number',
+        'Campflare max_rv_length 3000000000.0 is not a whole number',
+      ],
+    });
+  });
+
+  test('a quoted whole number reads as the integer it names', () => {
+    expect(recordOf(`{${BASE},"driveway_length":"40.0"}`).drivewayLength).toBe(40);
+  });
+});
+
+describe('kind', () => {
+  test('an unlisted Campflare kind is kept as OTHER with the kind named in a warning', () => {
+    expect(transformed(`{${BASE},"kind":"houseboat"}`)[0]).toMatchObject({
+      ok: true,
+      record: { kind: CampsiteKind.OTHER, kindListed: 'houseboat' },
+      warnings: ["unlisted Campflare kind 'houseboat'"],
     });
   });
 });

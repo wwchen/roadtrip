@@ -83,11 +83,12 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
         // from ctx.rawDir directly; the YAML keeps it as a sibling
         // data_source so fetch + cache-clear flows still address it.
         val locationsDir = File(ctx.rawDir, "tesla-locations")
-        val superchargers =
+        val rows =
             dto.rows.mapNotNull { row ->
                 val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
                 transformRow(row, rawIndex, locationsDir)
             }
+        val superchargers = rows.map { it.first }
         // sanitizeSlug is lossy (case-fold + non-alnum → `-`); two distinct
         // upstream slugs can collapse to the same DB key and overwrite via
         // ON CONFLICT. Detect and fail rather than silently drop rows.
@@ -103,14 +104,14 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
                     "distinct upstream slugs collapsing to the same key. Sample: $sample",
             )
         }
-        return superchargers.asSequence().map { TransformResult.Ok(it) }
+        return rows.asSequence().map { (record, warnings) -> TransformResult.Ok(record, warnings) }
     }
 
     private fun transformRow(
         row: TeslaIndexRow,
         rawIndex: JsonObject?,
         locationsDir: File,
-    ): TeslaSuperchargerUpsertCandidate? {
+    ): Pair<TeslaSuperchargerUpsertCandidate, List<String>>? {
         // Filter mirrors scripts/fetch_tesla_locations.py:na_supercharger_slugs.
         // Trust supercharger_function over location_type — Tesla's bulk index
         // sometimes labels real Supercharger sites with surprising types
@@ -127,22 +128,27 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
         // Detail's `name` is "Woodburn, OR"-style; index `title` is the
         // useless string "locations". Prefer detail; fall back to a
         // slug-derived label so unenriched rows still render usefully.
-        val name =
+        val listedName =
             detail?.name?.takeIf { it.isNotBlank() }
                 ?: row.title?.takeIf { it.isNotBlank() && it != "locations" }
-                ?: "Supercharger $slug"
+        val openToPublic = detail?.openToPublic
+        val warnings =
+            listOfNotNull(
+                NAMED_BY_SLUG.takeIf { listedName == null },
+                OPEN_TO_PUBLIC_UNLISTED.takeIf { openToPublic == null },
+            )
 
         val (region, country) = regionCountryOf(detail)
 
         return TeslaSuperchargerUpsertCandidate(
             locationSlug = sanitizeSlug(slug),
-            commonSiteName = name,
+            commonSiteName = listedName ?: slug,
             latitude = lat,
             longitude = lon,
             locationGuid = detail?.locationGuid?.takeIf { it.isNotBlank() },
             siteStatus = sf.siteStatus?.takeIf { it.isNotBlank() } ?: DEFAULT_TESLA_SITE_STATUS,
             accessType = detail?.accessType?.takeIf { it.isNotBlank() },
-            openToPublic = detail?.openToPublic ?: true,
+            openToPublic = openToPublic ?: true,
             openToNonTeslas = detail?.openToNonTeslas,
             trailerFriendly = detail?.isTrailerFriendly,
             twentyFourSeven = detail?.accessHours?.twentyFourSeven,
@@ -158,7 +164,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
             availabilityProfile = rawDetail?.jsonObjectField(AVAILABILITY_PROFILE_KEY),
             indexPayload = rawIndex,
             detailPayload = rawDetail,
-        )
+        ) to warnings
     }
 
     /**
@@ -238,6 +244,8 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
 
     companion object {
         private const val AMENITIES_KEY = "amenities"
+        private const val NAMED_BY_SLUG = "Tesla site has no name; named by its location slug"
+        private const val OPEN_TO_PUBLIC_UNLISTED = "Tesla openToPublic not listed; stored as open to the public"
         private const val AVAILABILITY_PROFILE_KEY = "availabilityProfile"
         private val log = LoggerFactory.getLogger(TeslaIndexEtl::class.java)
         private val json = Json { ignoreUnknownKeys = true }

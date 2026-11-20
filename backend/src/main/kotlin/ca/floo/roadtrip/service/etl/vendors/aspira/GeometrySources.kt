@@ -11,7 +11,7 @@ object GeometrySources {
         envelopes: List<Envelope>,
     ): GeometrySource =
         when (spec.format) {
-            GeometryFormat.USCAMPGROUNDS_CSV -> UsCampgroundsCsvSource(envelopes, spec.state)
+            GeometryFormat.USCAMPGROUNDS_CSV -> UsCampgroundsCsvSource(envelopes, spec.state, spec.types)
             GeometryFormat.BCPARKS_STRAPI -> BcParksStrapiSource(envelopes)
             GeometryFormat.ARCGIS_CENTROIDS -> ArcGisCentroidSource(envelopes)
             GeometryFormat.GEOJSON_POINTS -> GeoJsonFeaturesSource(envelopes, spec.nameProperty)

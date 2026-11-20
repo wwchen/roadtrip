@@ -31,6 +31,13 @@ const SLUG_REPLACEMENT = '-';
 const UNSAFE_SLUG_RUN = /[^a-z0-9_:-]+/g;
 const SLUG_EDGE = /^-+|-+$/g;
 const LOAD_FAILURE_LOG = 'tesla-locations parse failed for slug=';
+const NAMED_BY_SLUG = 'Tesla site has no name; named by its location slug';
+const OPEN_TO_PUBLIC_UNLISTED = 'Tesla openToPublic not listed; stored as open to the public';
+
+interface TeslaRow {
+  record: TeslaSuperchargerUpsertCandidate;
+  warnings: string[];
+}
 
 function sanitizeSlug(slug: string): string {
   return slug.toLowerCase().replace(UNSAFE_SLUG_RUN, SLUG_REPLACEMENT).replace(SLUG_EDGE, '');
@@ -77,7 +84,7 @@ function transformRow(
   row: TeslaIndexRow,
   rawIndex: JsonObject | undefined,
   locationsDir: string,
-): TeslaSuperchargerUpsertCandidate | null {
+): TeslaRow | null {
   const fn = row.superchargerFunction;
   if (fn === null || fn.showOnFindUs === HIDDEN_FROM_FIND_US) return null;
   const slug = nonBlank(row.locationUrlSlug);
@@ -89,17 +96,22 @@ function transformRow(
 
   const title = nonBlank(row.title);
   const usableTitle = title === PLACEHOLDER_TITLE ? null : title;
-  const name = nonBlank(detail?.name) ?? usableTitle ?? `Supercharger ${slug}`;
+  const listedName = nonBlank(detail?.name) ?? usableTitle;
+  const openToPublic = detail?.openToPublic ?? null;
+  const warnings = [
+    ...(listedName === null ? [NAMED_BY_SLUG] : []),
+    ...(openToPublic === null ? [OPEN_TO_PUBLIC_UNLISTED] : []),
+  ];
 
-  return {
+  const record: TeslaSuperchargerUpsertCandidate = {
     locationSlug: sanitizeSlug(slug),
-    commonSiteName: name,
+    commonSiteName: listedName ?? slug,
     latitude: row.latitude,
     longitude: row.longitude,
     locationGuid: nonBlank(detail?.locationGuid),
     siteStatus: nonBlank(fn.siteStatus) ?? DEFAULT_TESLA_SITE_STATUS,
     accessType: nonBlank(detail?.accessType),
-    openToPublic: detail?.openToPublic ?? true,
+    openToPublic: openToPublic ?? true,
     openToNonTeslas: detail?.openToNonTeslas ?? null,
     trailerFriendly: detail?.isTrailerFriendly ?? null,
     twentyFourSeven: detail?.twentyFourSeven ?? null,
@@ -116,6 +128,7 @@ function transformRow(
     indexPayload: rawIndex === undefined ? null : serializeOpaquePayload(rawIndex),
     detailPayload: raw === null || raw === undefined ? null : serializeOpaquePayload(raw),
   };
+  return { record, warnings };
 }
 
 function collisionMessage(collisions: [string, TeslaSuperchargerUpsertCandidate[]][]): string {
@@ -150,13 +163,13 @@ export class TeslaIndexEtl implements SourceEtl<TeslaIndexDto, TeslaSupercharger
 
   *transform(dto: TeslaIndexDto, ctx: TransformCtx): Iterable<TransformResult<TeslaSuperchargerUpsertCandidate>> {
     const locationsDir = path.join(ctx.rawDir, LOCATIONS_DIR);
-    const records: TeslaSuperchargerUpsertCandidate[] = [];
+    const rows: TeslaRow[] = [];
     for (const row of dto.rows) {
       const rawIndex = row.locationUrlSlug === null ? undefined : dto.rawBySlug.get(row.locationUrlSlug);
-      const record = transformRow(row, rawIndex, locationsDir);
-      if (record !== null) records.push(record);
+      const transformed = transformRow(row, rawIndex, locationsDir);
+      if (transformed !== null) rows.push(transformed);
     }
-    assertNoSlugCollisions(records);
-    for (const record of records) yield { ok: true, record };
+    assertNoSlugCollisions(rows.map(({ record }) => record));
+    for (const { record, warnings } of rows) yield { ok: true, record, warnings };
   }
 }

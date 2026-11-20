@@ -6,7 +6,7 @@ export type ParseResult<DTO> =
   | { ok: false; sourceId?: string; errors: string[] };
 
 export type TransformResult<OUT> =
-  | { ok: true; record: OUT }
+  | { ok: true; record: OUT; warnings?: readonly string[] }
   | { ok: false; sourceId?: string; errors: string[] };
 
 export interface SourceEtl<DTO, OUT> {

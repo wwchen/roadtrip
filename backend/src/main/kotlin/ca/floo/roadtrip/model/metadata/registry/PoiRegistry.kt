@@ -38,6 +38,7 @@ private const val MIN_FUZZY_THRESHOLD_EXCLUSIVE = 0.0
 private const val MAX_FUZZY_THRESHOLD_INCLUSIVE = 1.0
 
 private const val SOURCE_STATE_KEY = "state"
+private const val SOURCE_TYPES_KEY = "types"
 private const val SOURCE_NAME_PROPERTY_KEY = "name_property"
 
 /**
@@ -456,6 +457,8 @@ class PoiRegistry(
                 }
             }
             validateSourceFilter(where, source, SOURCE_STATE_KEY, source.state, GeometryFormat.USCAMPGROUNDS_CSV, errs)
+            val typesFilter = source.types?.let { types -> if (types.isEmpty() || types.any(String::isBlank)) "" else types.joinToString() }
+            validateSourceFilter(where, source, SOURCE_TYPES_KEY, typesFilter, GeometryFormat.USCAMPGROUNDS_CSV, errs)
             validateSourceFilter(
                 where,
                 source,

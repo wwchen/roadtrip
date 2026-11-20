@@ -20,8 +20,6 @@ const OG_DESCRIPTION = new RegExp(`og:description"${JAVA_WHITESPACE}+content='([
 const OG_IMAGE = new RegExp(`og:image"${JAVA_WHITESPACE}+content='([^']+)'`);
 const OG_URL = new RegExp(`og:url"${JAVA_WHITESPACE}+content='([^']+)'`);
 const TELEPHONE = /itemprop="telephone"[^>]*>([^<]+)/;
-const DEFAULT_REGION = 'AB';
-const DEFAULT_COUNTRY = 'CA';
 const DEFAULT_SOURCE_ID_PREFIX = 'ra';
 const REGION_ARG = 'region';
 const COUNTRY_ARG = 'country';
@@ -31,6 +29,17 @@ const SOURCE_ID_PREFIX_ARG = 'source_id_prefix';
 const NO_PAGES_SUFFIX = 'no pages';
 const NO_PARKS_SUFFIX = 'no park pages parsed';
 const NON_FINITE_COORDINATE = 'is not a finite double';
+const PARK_ID_NOT_A_NUMBER = 'park id is not a number';
+const NO_LATITUDE = 'no place:location:latitude';
+const NO_LONGITUDE = 'no place:location:longitude';
+const NO_TITLE = 'no og:title';
+const BLANK_TITLE = 'blank og:title';
+
+function requiredArg(ctx: TransformCtx, etlSlug: string, key: string): string {
+  const value = ctx.argFor(etlSlug, key);
+  if (value === undefined) throw new Error(`${etlSlug} is missing required arg '${key}'`);
+  return value;
+}
 
 interface ReserveAmericaSettings {
   contract: string;
@@ -43,11 +52,11 @@ interface ReserveAmericaSettings {
 }
 
 function settingsOf(ctx: TransformCtx, etlSlug: string, contract: string): ReserveAmericaSettings {
-  const region = ctx.argFor(etlSlug, REGION_ARG) ?? DEFAULT_REGION;
+  const region = requiredArg(ctx, etlSlug, REGION_ARG);
   return {
     contract,
     region,
-    country: ctx.argFor(etlSlug, COUNTRY_ARG) ?? DEFAULT_COUNTRY,
+    country: requiredArg(ctx, etlSlug, COUNTRY_ARG),
     agency: ctx.requiredConstantAgency(etlSlug),
     provider: ctx.argFor(etlSlug, PROVIDER_ARG) ?? BookingProvider.RESERVEAMERICA,
     titleSuffix: ctx.argFor(etlSlug, TITLE_SUFFIX_ARG) ?? `, ${region}`,
@@ -64,16 +73,17 @@ function trimmedNonBlank(text: string | null): string | null {
   return text === null ? null : nonBlank(kotlinTrim(text));
 }
 
-function parsePark(parkId: bigint, html: string): ParsedPark | null {
+function parsePark(partLabel: string, parkId: bigint, html: string): ParseResult<ParsedPark> {
+  const rejected = (reason: string): ParseResult<ParsedPark> => ({ ok: false, sourceId: partLabel, errors: [reason] });
   const lat = doubleGroup(LATITUDE, html);
-  if (lat === null) return null;
+  if (lat === null) return rejected(NO_LATITUDE);
   const lon = doubleGroup(LONGITUDE, html);
-  if (lon === null) return null;
+  if (lon === null) return rejected(NO_LONGITUDE);
   const rawTitle = firstGroup(OG_TITLE, html);
-  if (rawTitle === null) return null;
+  if (rawTitle === null) return rejected(NO_TITLE);
   const name = kotlinTrim(rawTitle);
-  if (isKotlinBlank(name)) return null;
-  return {
+  if (isKotlinBlank(name)) return rejected(BLANK_TITLE);
+  const park: ParsedPark = {
     parkId,
     name,
     lat,
@@ -83,6 +93,7 @@ function parsePark(parkId: bigint, html: string): ParsedPark | null {
     photoUrl: nonBlank(firstGroup(OG_IMAGE, html)),
     infoUrl: nonBlank(firstGroup(OG_URL, html)),
   };
+  return { ok: true, dto: park };
 }
 
 function displayName(rawName: string, titleSuffix: string): string {
@@ -129,9 +140,13 @@ export class ReserveAmericaCampgroundsEtl implements SourceEtl<ReserveAmericaDto
       const partLabel = envelope.part;
       if (partLabel === undefined || !partLabel.startsWith(PARK_PART_PREFIX)) continue;
       const parkId = kotlinStringToLongOrNull(partLabel.slice(PARK_PART_PREFIX.length));
-      if (parkId === null) continue;
-      const park = parsePark(parkId, contentOf(envelope.payload));
-      if (park !== null) parks.push(park);
+      if (parkId === null) {
+        yield { ok: false, sourceId: partLabel, errors: [PARK_ID_NOT_A_NUMBER] };
+        continue;
+      }
+      const parsed = parsePark(partLabel, parkId, contentOf(envelope.payload));
+      if (parsed.ok) parks.push(parsed.dto);
+      else yield parsed;
     }
     yield parks.length === 0
       ? { ok: false, errors: [`${this.etlSlug}: ${NO_PARKS_SUFFIX}`] }

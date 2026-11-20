@@ -133,6 +133,12 @@ and the row declares that join in a `geometry:` block on the ETL entry:
 - `sources` is **ordered, and the order is preference**: when two sources carry
   the same normalized name, the earlier one's point wins. Parks Canada declares
   campground points before park-polygon centroids for exactly that reason.
+- Within one source, points that share a normalized name and lie within 0.2
+  degrees (latitude or longitude) of the first are one place, and the first
+  keeps the name. Points further apart than that make the name ambiguous: the
+  source indexes it under no point, a warning names it, and a later source may
+  still claim it. A name is never pinned to whichever of two distant places
+  came first.
 - `format` is a closed enum — one value, one parser class:
 
   | `format` | reads |
@@ -145,6 +151,12 @@ and the row declares that join in a `geometry:` block on the ETL entry:
 - `state` filters a source to one state code, matched case-insensitively
   against the CSV's state column. Valid **only** on `uscampgrounds_csv`, the
   only nationwide feed.
+- `types` filters a source to the listed agency types in the CSV's type column
+  (`SP` state park, `CP` county park, `SF` state forest, `NP` national park,
+  `NF` national forest, …), matched case-insensitively. Valid **only** on
+  `uscampgrounds_csv`. Washington declares `[SP, CP, SF]`, so a state-park leaf
+  such as Dosewallips is never matched to the national-park campground that
+  shares its name.
 - `name_property` names the feature attribute holding the name. Valid **only**
   on `geojson_points`; the default is `name`, then `Name`.
 - `match.fuzzy_threshold` is the minimum Jaccard token overlap for a fuzzy name
@@ -157,10 +169,10 @@ startup failure rather than a silently dropped setting:
 
 - a geometry adapter with no `geometry:` block, or with an empty `sources` list;
 - a `geometry.sources[].input` that is not in the row's `inputs:`, or declared twice;
-- `state` on a format other than `uscampgrounds_csv`, or `name_property` on a
-  format other than `geojson_points`;
-- a blank `state` or `name_property` — a filter that matches nothing would empty
-  the join rather than narrow it;
+- `state` or `types` on a format other than `uscampgrounds_csv`, or
+  `name_property` on a format other than `geojson_points`;
+- a blank `state` or `name_property`, or an empty `types` list or a blank entry
+  in it — a filter that matches nothing would empty the join rather than narrow it;
 - a `fuzzy_threshold` outside `(0, 1]`, `NaN` included;
 - `BcParksCampgroundsEtl` declaring anything but exactly one `bcparks_strapi` source;
 - a `geometry:` block on an adapter that joins no geometry;
@@ -231,6 +243,7 @@ For the `etls:` entry in your `poi_data:` row, create what its `adapter:` field 
 - `multiPart = true` if any input data_source writes a directory of `page-NNN.json` files. Default `false` is one envelope per run.
 - `parse(bundle) → Sequence<ParseResult<DTO>>`. `bundle` exposes one accessor per declared data_source slug. Yield `ParseResult.Bad` for recoverable page/row parse failures.
 - `transform(dto, ctx) → Sequence<TransformResult<OUT>>`. Yield `TransformResult.Ok(candidate)` for each upsert candidate and `TransformResult.Bad` for recoverable row-level failures.
+- A row worth keeping that carries a value your tables do not list (an unknown site type, a number that is not a whole number, a missing country) is `TransformResult.Ok(candidate, warnings)`, each warning naming the vendor's value verbatim. Never default such a value silently: the orchestrator counts the rows that carry warnings into `counts.warned_records` and logs each distinct warning with its tally.
 - Terminal `OUT` is one of the catalog candidate types: `CampgroundUpsertCandidate`, `CampsiteUpsertCandidate`, `TeslaSuperchargerUpsertCandidate`, or `PlanetFitnessLocationUpsertCandidate`.
 
 For terminal ETLs that need reservation-provider context (Aspira, RecGov,
@@ -414,7 +427,9 @@ docker exec roadtrip-postgres-1 psql -U roadtrip -d roadtrip -c \
 ```
 
 `counts.seen` should be the number of rows the terminal ETL considered:
-successful transform records plus parse/transform bad rows. If it is lower
+successful transform records plus parse/transform bad rows.
+`counts.warned_records` is how many of the kept rows carried a value the ETL
+does not list; the import log names each such value with its tally. If it is lower
 than expected, add a unit test against captured raw envelopes under
 `backend/src/test/resources/etl-fixtures/<slug>/` to pin down where parsing or
 transforming dropped rows.

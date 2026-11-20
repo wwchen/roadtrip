@@ -88,7 +88,13 @@ function gridCapture(facilityId: string, header: string, unitsText: string): Cap
   return { part: `grid-${facilityId}`, payload: objectOf(text) };
 }
 
-function singleUnitGrid(facilityId: string, header = '', unit = unitText('9001', '"Name":"PINE 001"')): Capture {
+const LISTED_UNIT_TYPE_ID = 1;
+
+function singleUnitGrid(
+  facilityId: string,
+  header = '',
+  unit = unitText('9001', `"Name":"PINE 001","UnitTypeId":${LISTED_UNIT_TYPE_ID}`),
+): Capture {
   return gridCapture(facilityId, header, `{"u":${unit}}`);
 }
 
@@ -151,7 +157,7 @@ describe('transform', () => {
     facilityCapture('611', '"PlaceId":690,"Name":"Pine Loop","FacilityTypeNew":1,"FacilityBehaviourType":1,"AllowWebBooking":true'),
     facilityCapture('612', '"PlaceId":690,"Name":"Day Use","FacilityTypeNew":2,"FacilityBehaviourType":1,"AllowWebBooking":true'),
     singleUnitGrid('611', '"PlaceId":690,"Name":"Pine Loop"'),
-    singleUnitGrid('612', '"PlaceId":690,"Name":"Day Use"', unitText('9002', '"Name":"DAY 001"')),
+    singleUnitGrid('612', '"PlaceId":690,"Name":"Day Use"', unitText('9002', `"Name":"DAY 001","UnitTypeId":${LISTED_UNIT_TYPE_ID}`)),
   ];
 
   test('a unit becomes a campsite linked to the california campground of its place', () => {
@@ -381,21 +387,63 @@ describe('kind', () => {
     expect(onlyRecord([placeCapture('1', { '5': ' Tent Site ' }), singleUnitGrid('5', '"PlaceId":1')]).kindListed).toBe(' Tent Site ');
   });
 
-  test('facility 1989 of place-1138 takes its kind from the unit type the document writes first, not the smallest key', () => {
-    const record = onlyRecord([fixtureCapture('place-1138'), singleUnitGrid('1989', '"PlaceId":1138')]);
-    expect(record.kindListed).toBe('Group Campsite');
-    expect(record.kind).toBe(CampsiteKind.GROUP);
+  test('each unit of facility 1989 of place-1138 takes the kind of its own UnitTypeId, not the facility\'s first', () => {
+    const records = recordsOf([
+      fixtureCapture('place-1138'),
+      gridCapture(
+        '1989',
+        '"PlaceId":1138',
+        `{"a":${unitText('1', '"UnitTypeId":4312')},"b":${unitText('2', '"UnitTypeId":4303')},"c":${unitText('3', '"UnitTypeId":4304')}}`,
+      ),
+    ]);
+    expect(records.map((record) => [record.kindListed, record.kind])).toEqual([
+      ['Group Campsite', CampsiteKind.GROUP],
+      ['Campsite', CampsiteKind.STANDARD],
+      ['Day Use Pavilion', CampsiteKind.DAY_USE],
+    ]);
   });
 
-  test('facility 2037 of place-1192 takes the first of three out-of-order unit types', () => {
-    const record = onlyRecord([fixtureCapture('place-1192'), singleUnitGrid('2037', '"PlaceId":1192')]);
-    expect(record.kindListed).toBe('Campsite');
-    expect(record.kind).toBe(CampsiteKind.STANDARD);
+  test('facility 2037 of place-1192 reads a tent unit as a tent site though the facility lists Campsite first', () => {
+    const record = onlyRecord([
+      fixtureCapture('place-1192'),
+      singleUnitGrid('2037', '"PlaceId":1192', unitText('9001', '"UnitTypeId":4328')),
+    ]);
+    expect(record.kindListed).toBe('Tent Campsite');
+    expect(record.kind).toBe(CampsiteKind.TENT);
   });
 
-  test('facility 1940 of place-1077 lists the unit type written first of the two', () => {
-    const record = onlyRecord([fixtureCapture('place-1077'), singleUnitGrid('1940', '"PlaceId":1077')]);
-    expect(record.kindListed).toBe('Hike/Bike Campsite');
+  test('facility 1940 of place-1077 reads the hike-in unit type of its unit', () => {
+    const record = onlyRecord([
+      fixtureCapture('place-1077'),
+      singleUnitGrid('1940', '"PlaceId":1077', unitText('9001', '"UnitTypeId":4317')),
+    ]);
+    expect(record.kindListed).toBe('Hike in Campsite');
+    expect(record.kind).toBe(CampsiteKind.WALK_IN);
+  });
+
+  test('a unit whose type its place does not list, or that names no type, is kept as OTHER with a warning', () => {
+    const unlisted = run([
+      placeCapture('1', { '5': 'Tent Site' }),
+      singleUnitGrid('5', '"PlaceId":1', unitText('9001', '"UnitTypeId":77')),
+    ]).results;
+    expect(unlisted).toEqual([
+      expect.objectContaining({
+        ok: true,
+        warnings: ['ReserveCalifornia unit type 77 not listed by place 1 facility 5'],
+        record: expect.objectContaining({ kind: CampsiteKind.OTHER, kindListed: null }),
+      }),
+    ]);
+    const untyped = run([placeCapture('1', { '5': 'Tent Site' }), singleUnitGrid('5', '"PlaceId":1', unitText('9001'))]).results;
+    expect(untyped).toEqual([
+      expect.objectContaining({ ok: true, warnings: ['ReserveCalifornia unit has no UnitTypeId'] }),
+    ]);
+  });
+
+  test('a listed unit type the kind table does not know is kept as OTHER with the name in a warning', () => {
+    const [result] = run([placeCapture('1', { '5': 'Mystery' }), singleUnitGrid('5', '"PlaceId":1')]).results;
+    expect(result).toEqual(
+      expect.objectContaining({ ok: true, warnings: ["unlisted ReserveCalifornia unit type 'Mystery'"] }),
+    );
   });
 });
 
@@ -422,7 +470,7 @@ describe('source payload', () => {
 
   test('the facility name and the facility object are left out when there is no grid name or facility page', () => {
     const record = onlyRecord([placeCapture('1', { '5': null }), singleUnitGrid('5', '"PlaceId":1')]);
-    expect(Object.keys(payloadOf(record)).sort()).toEqual(['Name', 'UnitId', PARENT_PLACE_ID_KEY, 'facility_id', 'unit_id']);
+    expect(Object.keys(payloadOf(record)).sort()).toEqual(['Name', 'UnitId', 'UnitTypeId', PARENT_PLACE_ID_KEY, 'facility_id', 'unit_id']);
   });
 
   test('keys the adapter adds replace the unit\'s own and keys it does not add are left', () => {

@@ -19,6 +19,7 @@ import {
   jsonObjectResults,
   normalizedLatitude,
   normalizedLongitude,
+  notWholeNumberWarning,
   objectField,
   stringField,
 } from './support.js';
@@ -52,6 +53,7 @@ const FIELD = {
   description: 'description',
 } as const;
 
+const WHOLE_NUMBER_FIELDS = [FIELD.maxPeople, FIELD.maxCars, FIELD.drivewayLength, FIELD.maxRvLength] as const;
 const EQUIPMENT_NAME_KEY = 'name';
 const MISSING_ID = 'missing id';
 const MISSING_CAMPGROUND_ID = 'missing campground_id';
@@ -94,8 +96,14 @@ function campsiteRecord(raw: JsonObject): TransformResult<CampsiteUpsertCandidat
   const reservationUrl = stringField(raw, FIELD.reservationUrl);
   const recgovRef = extractRecgovCampsiteRef(reservationUrl);
   const description = stringField(raw, FIELD.description);
+  const siteKind = campsiteKindCampflare(rawKind);
+  const warnings = [
+    siteKind.warning,
+    ...WHOLE_NUMBER_FIELDS.map((field) => notWholeNumberWarning(raw, field)),
+  ].filter((warning): warning is string => warning !== null);
   return {
     ok: true,
+    warnings,
     record: {
       dataProviderRef: DataProviderRef.campflare(id),
       bookingProvider: BookingProvider.CAMPFLARE,
@@ -103,7 +111,7 @@ function campsiteRecord(raw: JsonObject): TransformResult<CampsiteUpsertCandidat
       bookingAliases: recgovRef === null ? [] : [{ provider: BookingProvider.RECGOV, ref: recgovRef }],
       parentDataProviderRef: DataProviderRef.campflare(campgroundId),
       name,
-      kind: campsiteKindCampflare(rawKind),
+      kind: siteKind.kind,
       loopName: stringField(raw, FIELD.loopName),
       latitude: normalizedLatitude(doubleField(raw, FIELD.latitude)),
       longitude: normalizedLongitude(doubleField(raw, FIELD.longitude)),

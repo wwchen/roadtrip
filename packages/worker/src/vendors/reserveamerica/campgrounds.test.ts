@@ -186,6 +186,8 @@ function ctxWith(args: Record<string, string>, agency: PoiDataEntry['agency'] | 
   return TransformCtx.load(RAW_DIR, registry);
 }
 
+const PLACE_ARGS = { region: 'AB', country: 'CA' };
+
 function transformDirect(
   args: Record<string, string>,
   title = 'Foo, NY',
@@ -205,16 +207,19 @@ function transformDirect(
       },
     ],
   };
-  const results = [...new ReserveAmericaCampgroundsEtl('variant', 'NY').transform(dto, ctxWith(args, agency))];
+  const results = [
+    ...new ReserveAmericaCampgroundsEtl('variant', 'NY').transform(dto, ctxWith({ ...PLACE_ARGS, ...args }, agency)),
+  ];
   const [only] = results;
   if (only === undefined || !only.ok) throw new Error('expected one ok record');
   return only.record;
 }
 
 describe('the production registry rows', () => {
-  test('Alberta takes every default and New York states its own region and country', () => {
+  test('Alberta and New York each state their own region and country', () => {
     expect(PRODUCTION_CTX.subcategoryFor(AB_SLUG)).toBe('provincial');
-    expect(PRODUCTION_CTX.argFor(AB_SLUG, 'region')).toBeUndefined();
+    expect(PRODUCTION_CTX.argFor(AB_SLUG, 'region')).toBe('AB');
+    expect(PRODUCTION_CTX.argFor(AB_SLUG, 'country')).toBe('CA');
     expect(PRODUCTION_CTX.argFor(AB_SLUG, 'contract')).toBe('ABPP');
     expect(PRODUCTION_CTX.subcategoryFor(NY_SLUG)).toBe('state');
     expect(PRODUCTION_CTX.argFor(NY_SLUG, 'region')).toBe('NY');
@@ -482,10 +487,13 @@ describe('real captures', () => {
     expect(record?.mediumDescription).toBe('De Veaux Woods State Park');
   });
 
-  test('a New York day-use page with no coordinates is dropped rather than placed at zero', () => {
+  test('a New York day-use page with no coordinates is reported bad rather than placed at zero', () => {
     const results = parsedOf(NY_SLUG, 'NY', NY_INPUT, [captured(NY_FIXTURE_DIR, 'park-10885.json')]);
 
-    expect(results).toEqual([{ ok: false, errors: [`${NY_SLUG}: no park pages parsed`] }]);
+    expect(results).toEqual([
+      { ok: false, sourceId: 'park-10885', errors: ['no place:location:latitude'] },
+      { ok: false, errors: [`${NY_SLUG}: no park pages parsed`] },
+    ]);
   });
 });
 
@@ -620,12 +628,20 @@ describe('the settings arguments', () => {
     expect(record.dataProviderRef.serialize()).toBe('on-5');
   });
 
-  test('with no arguments the suffix follows the default region and the country is Canada', () => {
+  test('the suffix follows the region when no suffix is given', () => {
     const record = transformDirect({}, 'Foo, AB');
 
     expect(record.name).toBe('Foo');
     expect(record.location).toEqual({ latitude: 1.5, longitude: -2.5, region: 'AB', country: 'CA' });
     expect(record.dataProviderRef.serialize()).toBe('ra-5');
+  });
+
+  test('a row that does not state its region or its country is refused rather than defaulted', () => {
+    const dto: ReserveAmericaDto = { parks: [] };
+    const etl = new ReserveAmericaCampgroundsEtl('variant', 'NY');
+
+    expect(() => [...etl.transform(dto, ctxWith({ country: 'CA' }))]).toThrow("variant is missing required arg 'region'");
+    expect(() => [...etl.transform(dto, ctxWith({ region: 'AB' }))]).toThrow("variant is missing required arg 'country'");
   });
 
   test('the default suffix follows an overridden region', () => {
@@ -661,7 +677,9 @@ describe('the settings arguments', () => {
     const dto: ReserveAmericaDto = { parks: [] };
     const etl = new ReserveAmericaCampgroundsEtl('variant', 'NY');
 
-    expect(() => [...etl.transform(dto, ctxWith({}, null))]).toThrow('variant is missing required poi_data.agency');
-    expect(() => [...etl.transform(dto, ctxWith({}, { kind: 'derived', field: 'X' }))]).toThrow('not a constant agency');
+    expect(() => [...etl.transform(dto, ctxWith(PLACE_ARGS, null))]).toThrow('variant is missing required poi_data.agency');
+    expect(() => [...etl.transform(dto, ctxWith(PLACE_ARGS, { kind: 'derived', field: 'X' }))]).toThrow(
+      'not a constant agency',
+    );
   });
 });

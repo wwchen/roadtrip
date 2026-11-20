@@ -28,6 +28,7 @@ export interface GeometrySourceSpec {
   input: string;
   format: GeometryFormat;
   state?: string;
+  types?: string[];
   nameProperty?: string;
 }
 
@@ -110,6 +111,7 @@ interface RawGeometrySource {
   input: string;
   format: GeometryFormat;
   state?: string;
+  types?: string[];
   name_property?: string;
 }
 
@@ -195,6 +197,7 @@ function toGeometry(raw: RawGeometryPolicy): GeometryPolicy {
       input: source.input,
       format: source.format,
       state: source.state,
+      types: source.types,
       nameProperty: source.name_property,
     })),
     match: {

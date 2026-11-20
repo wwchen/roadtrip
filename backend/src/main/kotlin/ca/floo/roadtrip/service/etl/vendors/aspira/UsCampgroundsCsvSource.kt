@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonPrimitive
 private const val LONGITUDE_COL = 0
 private const val LATITUDE_COL = 1
 private const val NAME_COL = 4
+private const val TYPE_COL = 5
 private const val STATE_COL = 12
 private const val MIN_COLS = STATE_COL + 1
 
@@ -22,10 +23,12 @@ private const val MIN_COLS = STATE_COL + 1
 class UsCampgroundsCsvSource(
     private val envelopes: List<Envelope>,
     private val stateFilter: String? = null,
+    private val typeFilter: List<String>? = null,
 ) : GeometrySource {
     override fun points(): Sequence<NamedPoint> =
         sequence {
             val wantedState = stateFilter?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+            val wantedTypes = typeFilter?.map { it.trim().uppercase() }?.toSet()
             for (env in envelopes) {
                 val text = env.payload.jsonPrimitive.contentOrNull ?: continue
                 for (line in text.lineSequence()) {
@@ -33,6 +36,7 @@ class UsCampgroundsCsvSource(
                     val cols = csvSplit(line)
                     if (cols.size < MIN_COLS) continue
                     if (wantedState != null && cols[STATE_COL].trim().uppercase() != wantedState) continue
+                    if (wantedTypes != null && cols[TYPE_COL].trim().uppercase() !in wantedTypes) continue
                     val lon = cols[LONGITUDE_COL].toDoubleOrNull() ?: continue
                     val lat = cols[LATITUDE_COL].toDoubleOrNull() ?: continue
                     val name = cols.getOrNull(NAME_COL)?.trim().orEmpty()

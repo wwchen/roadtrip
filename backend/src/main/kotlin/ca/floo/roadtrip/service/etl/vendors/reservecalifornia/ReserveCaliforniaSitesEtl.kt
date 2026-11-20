@@ -50,9 +50,17 @@ class ReserveCaliforniaSitesEtl(
                     yield(TransformResult.Bad(grid.facilityId.toString(), listOf("facility not linked from parent place $placeId")))
                     continue
                 }
-                val unitType = place.unitTypeByFacilityId[grid.facilityId]
-                val siteKind = CampsiteKinds.reserveCalifornia(unitType)
+                val unitTypeNames = place.unitTypeNamesByFacilityId[grid.facilityId].orEmpty()
                 for (unit in grid.units) {
+                    val unitType = unit.unitTypeId?.let { unitTypeNames[it] }
+                    val siteKind = CampsiteKinds.reserveCalifornia(unitType)
+                    val kindWarning =
+                        when {
+                            unit.unitTypeId == null -> "ReserveCalifornia unit has no UnitTypeId"
+                            unitType == null ->
+                                "ReserveCalifornia unit type ${unit.unitTypeId} not listed by place $placeId facility ${grid.facilityId}"
+                            else -> siteKind.warning
+                        }
                     yield(
                         TransformResult.Ok(
                             CampsiteUpsertCandidate(
@@ -68,6 +76,7 @@ class ReserveCaliforniaSitesEtl(
                                 electricHookups = siteKind.electric,
                                 sourcePayload = campsiteSourcePayload(unit, grid, placeId, facility),
                             ),
+                            listOfNotNull(kindWarning),
                         ),
                     )
                 }

@@ -45,6 +45,8 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
         val rawKind = raw.stringField("kind")
         val reservationUrl = raw.stringField("reservation_url")
         val recgovRef = extractRecgovCampsiteRef(reservationUrl)
+        val siteKind = CampsiteKinds.campflare(rawKind)
+        val warnings = listOfNotNull(siteKind.warning) + wholeNumberFields.mapNotNull { raw.notWholeNumberWarning(it) }
         return TransformResult.Ok(
             CampsiteUpsertCandidate(
                 dataProviderRef = DataProviderRef.Campflare(id = campsiteId),
@@ -53,7 +55,7 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 bookingAliases = listOfNotNull(recgovRef?.let { BookingAlias(BookingProvider.RECGOV, it) }),
                 parentDataProviderRef = DataProviderRef.Campflare(id = parentId),
                 name = name!!,
-                kind = CampsiteKinds.campflare(rawKind),
+                kind = siteKind.kind,
                 loopName = raw.stringField("loop_name"),
                 latitude = normalizedLatitude(raw.doubleField("latitude")),
                 longitude = normalizedLongitude(raw.doubleField("longitude")),
@@ -68,16 +70,17 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 waterHookups = raw.booleanField("water_hookups"),
                 electricHookups = raw.booleanField("electric_hookups"),
                 sewerHookups = raw.booleanField("sewer_hookups"),
-                maxPeople = raw.intField("max_people"),
-                maxCars = raw.intField("max_cars"),
+                maxPeople = raw.intField(MAX_PEOPLE),
+                maxCars = raw.intField(MAX_CARS),
                 pullThrough = raw.booleanField("pull_through"),
-                drivewayLength = raw.intField("driveway_length"),
-                maxRvLength = raw.intField("max_rv_length"),
+                drivewayLength = raw.intField(DRIVEWAY_LENGTH),
+                maxRvLength = raw.intField(MAX_RV_LENGTH),
                 maxTrailerLength = raw.doubleField("max_trailer_length"),
                 photos = campflarePhotos(raw.arrayField("photos")),
                 description = raw.stringField("description")?.let(HtmlText::stripTags)?.takeIf { it.isNotBlank() },
                 sourcePayload = raw,
             ),
+            warnings,
         )
     }
 
@@ -91,3 +94,9 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
             }?.trim()?.takeIf(String::isNotEmpty)
         }
 }
+
+private const val MAX_PEOPLE = "max_people"
+private const val MAX_CARS = "max_cars"
+private const val DRIVEWAY_LENGTH = "driveway_length"
+private const val MAX_RV_LENGTH = "max_rv_length"
+private val wholeNumberFields = listOf(MAX_PEOPLE, MAX_CARS, DRIVEWAY_LENGTH, MAX_RV_LENGTH)

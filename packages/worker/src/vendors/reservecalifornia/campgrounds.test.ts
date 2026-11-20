@@ -470,21 +470,23 @@ describe('the place payload', () => {
     expect(refusedWith({ facilities: '{"1":{"FacilityId":[]}}' })).toThrow(ARRAY_NOT_PRIMITIVE);
   });
 
-  test('the unit type of a facility is the name of its first unit type with one', () => {
+  test('each facility lists every unit type by its UnitTypeId, falling back to the key, and skips unnamed ones', () => {
     const place = placeOf({
       facilities:
-        '{"1":{"UnitTypes":{"a":{"Name":"Alpha"},"b":{"Name":"Beta"}}},"2":{"UnitTypes":{"a":{"Id":1},"b":5,"c":null,"d":{"Name":null},"e":{"Name":"Echo"}}},"3":{"UnitTypes":{}},"4":{},"5":{"UnitTypes":{"a":{"Name":""}}}}',
+        '{"1":{"UnitTypes":{"10":{"UnitTypeId":10,"Name":"Alpha"},"x":{"UnitTypeId":11,"Name":"Beta"}}},"2":{"UnitTypes":{"20":{"Id":1},"21":5,"22":null,"23":{"Name":null},"24":{"Name":"Echo"},"y":{"Name":"Nameless key"}}},"3":{"UnitTypes":{}},"4":{},"5":{"UnitTypes":{"50":{"Name":""}}}}',
     });
-    expect([...place.unitTypeByFacilityId]).toEqual([
-      [1n, 'Alpha'],
-      [2n, 'Echo'],
-      [5n, ''],
+    expect([...place.unitTypeNamesByFacilityId].map(([id, names]) => [id, [...names]])).toEqual([
+      [1n, [[10n, 'Alpha'], [11n, 'Beta']]],
+      [2n, [[24n, 'Echo']]],
+      [3n, []],
+      [4n, []],
+      [5n, [[50n, '']]],
     ]);
   });
 
   test('a unit type name that is a number reads as its text', () => {
-    const place = placeOf({ facilities: '{"1":{"UnitTypes":{"a":{"Name":12.50}}}}' });
-    expect(place.unitTypeByFacilityId.get(1n)).toBe('12.50');
+    const place = placeOf({ facilities: '{"1":{"UnitTypes":{"7":{"Name":12.50}}}}' });
+    expect(place.unitTypeNamesByFacilityId.get(1n)?.get(7n)).toBe('12.50');
   });
 
   test('UnitTypes that is not an object is refused, an array one included', () => {
@@ -492,22 +494,19 @@ describe('the place payload', () => {
     expect(refusedWith({ facilities: '{"1":{"UnitTypes":[]}}' })).toThrow(NOT_AN_OBJECT);
   });
 
-  test('a later unit type is not read once an earlier one has a name', () => {
-    const place = placeOf({ facilities: '{"1":{"UnitTypes":{"a":{"Name":"First"},"b":{"Name":[]}}}}' });
-    expect(place.unitTypeByFacilityId.get(1n)).toBe('First');
+  test('a unit type name that is an array is refused wherever it sits', () => {
+    expect(refusedWith({ facilities: '{"1":{"UnitTypes":{"7":{"Name":"First"},"8":{"Name":[]}}}}' })).toThrow(
+      ARRAY_NOT_PRIMITIVE,
+    );
   });
 
-  test('a unit type name that is an array is refused when no earlier unit type had one', () => {
-    expect(refusedWith({ facilities: '{"1":{"UnitTypes":{"a":{"Name":[]}}}}' })).toThrow(ARRAY_NOT_PRIMITIVE);
-  });
-
-  test('two entries resolving to one facility id keep the unit type of the later one in the document', () => {
+  test('two entries resolving to one facility id keep the unit types of the later one in the document', () => {
     const place = placeOf({
       facilities:
-        '{"9":{"FacilityId":7,"UnitTypes":{"a":{"Name":"Nine"}}},"3":{"FacilityId":7,"UnitTypes":{"a":{"Name":"Three"}}}}',
+        '{"9":{"FacilityId":7,"UnitTypes":{"1":{"Name":"Nine"}}},"3":{"FacilityId":7,"UnitTypes":{"2":{"Name":"Three"}}}}',
     });
     expect(place.facilityIds).toEqual([7n]);
-    expect(place.unitTypeByFacilityId.get(7n)).toBe('Three');
+    expect([...(place.unitTypeNamesByFacilityId.get(7n) ?? [])]).toEqual([[2n, 'Three']]);
   });
 
   test('image and description are trimmed and an empty one is absent', () => {
@@ -531,47 +530,20 @@ describe('the place payload', () => {
   });
 });
 
-describe('document order of unit types', () => {
-  test('place-1077 names the unit type of facility 1940 from the entry the document writes first', () => {
+describe('unit types from the captured places', () => {
+  test('place-1077 lists every unit type of facility 1940, not only the first one written', () => {
     const { catalog } = run([fixtureCapture('place-1077')]);
-    expect(catalog?.places.get(1077n)?.unitTypeByFacilityId.get(1940n)).toBe('Hike/Bike Campsite');
+    const names = catalog?.places.get(1077n)?.unitTypeNamesByFacilityId.get(1940n);
+    expect(names?.size).toBeGreaterThan(1);
+    expect([...(names?.values() ?? [])]).toContain('Hike/Bike Campsite');
   });
 
-  test('place-1138 names facility 1989 from 4312, which the document writes before 4303 and 4304', () => {
+  test('place-1138 lists 4312, 4303 and 4304 for facility 1989', () => {
     const { catalog } = run([fixtureCapture('place-1138')]);
-    expect(catalog?.places.get(1138n)?.unitTypeByFacilityId.get(1989n)).toBe('Group Campsite');
-  });
-
-  test('place-1192 reads each of its three facilities from the first entry written', () => {
-    const { catalog } = run([fixtureCapture('place-1192')]);
-    const place = catalog?.places.get(1192n);
-    expect([...(place?.unitTypeByFacilityId ?? [])]).toEqual([
-      [2035n, 'Premium Cottage_4'],
-      [2036n, 'Premium Cabin (3 People)'],
-      [2037n, 'Campsite'],
-    ]);
-    expect(place?.facilityIds).toEqual([2035n, 2036n, 2037n]);
-  });
-
-  test('unit types written out of order read in the order written when built from text', () => {
-    const place = placeOf({
-      facilities: '{"1":{"UnitTypes":{"30":{"Name":"Thirty"},"4":{"Name":"Four"},"200":{"Name":"Two hundred"}}}}',
-    });
-    expect(place.unitTypeByFacilityId.get(1n)).toBe('Thirty');
-  });
-
-  test('a unit type keyed by text and one keyed by a number keep the order written', () => {
-    const place = placeOf({
-      facilities: '{"1":{"UnitTypes":{"b":{"Name":"Bee"},"7":{"Name":"Seven"},"a":{"Name":"Ay"}}}}',
-    });
-    expect(place.unitTypeByFacilityId.get(1n)).toBe('Bee');
-  });
-
-  test('when the first entry in the document has no name the next one written is used, not the smallest key', () => {
-    const place = placeOf({
-      facilities: '{"1":{"UnitTypes":{"9":{"Id":9},"5":{"Name":"Five"},"2":{"Name":"Two"}}}}',
-    });
-    expect(place.unitTypeByFacilityId.get(1n)).toBe('Five');
+    const names = catalog?.places.get(1138n)?.unitTypeNamesByFacilityId.get(1989n);
+    expect(names?.get(4312n)).toBe('Group Campsite');
+    expect(names?.has(4303n)).toBe(true);
+    expect(names?.has(4304n)).toBe(true);
   });
 });
 
