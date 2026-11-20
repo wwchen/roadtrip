@@ -130,7 +130,7 @@ repositories {
 }
 
 val ktorVersion = "3.6.1"
-val jooqVersion = "3.21.9"
+val jooqVersion = "3.21.10"
 val postgresVersion = "42.7.14"
 val flywayVersion = "13.12.2"
 val testcontainersVersion = "1.21.4"
@@ -201,7 +201,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.6.6")
+    implementation("ch.qos.logback:logback-classic:1.6.7")
     // JSON log encoder that emits the fully-formatted message (SLF4J {}
     // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
     // which logged the raw pattern + a separate arguments array. 8.x targets

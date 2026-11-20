@@ -305,7 +305,7 @@ services:
     # Public hostname routing is managed in Cloudflare Zero Trust; this
     # container only needs the tunnel token.
     profiles: [tunnel]
-    image: cloudflare/cloudflared:2026.11.0
+    image: cloudflare/cloudflared:2026.11.1
     restart: unless-stopped
     logging: *log-rotation
     # TUNNEL_TOKEN_FILE, not --token: a flag would put the token in the
