@@ -36,6 +36,14 @@ internal const val RECGOV_SESSION_EXPIRED_DETAIL = "session expired — re-login
 /** The companion itself is broken; nothing the owner can do about it. */
 internal const val COMPANION_ERROR_DETAIL = "the booking service hit an internal error"
 
+private val reLoginRefusalDetails: Map<String, String> =
+    mapOf(
+        RecGovSessionCodes.LOGIN_FAILED to "your saved credentials did not sign you back in — check them in Settings",
+        RecGovSessionCodes.LOGIN_PAGE_CHANGED to
+            "the sign-in page has changed, so you could not be signed back in; " +
+            "your credentials were not rejected, and the booking service needs attention",
+    )
+
 internal class RecGovBookingAdapter(
     private val companionAtc: RecGovAtcExecutor,
     /**
@@ -143,7 +151,7 @@ internal class RecGovBookingAdapter(
                     recovery.code,
                     recovery.detail,
                 )
-                ProfileHoldBlocker(recovery.code, recovery.detail)
+                ProfileHoldBlocker(recovery.code, reLoginRefusalDetails[recovery.code] ?: recovery.detail)
             }
         }
 

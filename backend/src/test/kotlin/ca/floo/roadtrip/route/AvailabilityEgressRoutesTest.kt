@@ -18,6 +18,7 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.route.internal.INTERNAL_API_VERSION_HEADER
 import ca.floo.roadtrip.route.internal.availabilityEgressRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityEgressController
@@ -28,6 +29,7 @@ import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -187,6 +189,34 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
                     setBody("""{"campground":{"data_provider":"${DataProvider.RECGOV.id}","data_provider_ref":"$CAMPGROUND_REF"}}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(0, provider.calls.size)
+        }
+    }
+
+    @Test
+    fun `a caller speaking a version this server serves is answered`() =
+        egress(listOf(recgov())) {
+            val response =
+                client.post(EGRESS_PATH) {
+                    contentType(ContentType.Application.Json)
+                    header(INTERNAL_API_VERSION_HEADER, "1")
+                    setBody(wire.encodeToString(AvailabilityEgressRequestDto.serializer(), request()))
+                }
+            assertEquals(HttpStatusCode.OK, response.status)
+        }
+
+    @Test
+    fun `a caller speaking another version is 400 internal_version_unsupported and calls no provider`() {
+        val provider = recgov()
+        egress(listOf(provider)) {
+            val response =
+                client.post(EGRESS_PATH) {
+                    contentType(ContentType.Application.Json)
+                    header(INTERNAL_API_VERSION_HEADER, "2")
+                    setBody(wire.encodeToString(AvailabilityEgressRequestDto.serializer(), request()))
+                }
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals("internal_version_unsupported", errorOf(response.bodyAsText()))
             assertEquals(0, provider.calls.size)
         }
     }

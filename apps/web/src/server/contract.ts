@@ -33,6 +33,7 @@ export type {
   PoiCampsitesAvailabilityResponseDto,
   PoiCampsitesResponseSchema,
   BuildInfoDto,
+  HealthResponseDto,
   CampgroundDetailsRequestDto,
   CampgroundDetailsResponseDto,
   CampgroundSearchRequestDto,

@@ -349,3 +349,22 @@ export const config = {
     );
   },
 };
+
+export interface ConfigProblem {
+  group: string;
+  message: string;
+}
+
+export function configProblems(): ConfigProblem[] {
+  const problems: ConfigProblem[] = [];
+  for (const [group, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(config))) {
+    if (descriptor.get === undefined) continue;
+    try {
+      descriptor.get.call(config);
+    } catch (error) {
+      if (!(error instanceof ConfigError)) throw error;
+      problems.push({ group, message: error.message });
+    }
+  }
+  return problems;
+}
