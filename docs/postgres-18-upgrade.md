@@ -125,12 +125,43 @@ mini-ca steps with the local compose instead.
 
 ## Neon
 
-1. Create a new Neon project on Postgres 18 in the same region (`aws-us-east-2`). Neon's PG18
-   ships PostGIS 3.6.4, the same as the image; its PG16 ships 3.3.10.
-2. `CREATE EXTENSION postgis` in the new database, then dump the old project and restore it with
-   an 18 `pg_dump` and `pg_restore` (Neon refuses a restore from an older `pg_restore`). Neon's
-   guide is "Migrate data from another Neon project".
-3. Point `roadtrip-web`'s `DATABASE_URL` (reads) and `APP_DATABASE_URL` (app writes) on Vercel,
-   and the `NEON_MIGRATE_URL` secret that
-   `neon-migrate.yml` uses at the new project, redeploy, and keep the old project until the new
-   one has served traffic.
+The project holds more than tables. Sign-in is Neon Auth, which lives in the project, and
+Vercel's Neon integration owns the production branch, the per-PR preview branches,
+`DATABASE_URL_UNPOOLED` and `NEON_AUTH_BASE_URL`. A new project means a new Neon Auth endpoint,
+new signing keys and a re-linked integration. Neon's PG18 ships PostGIS 3.6.4, the image's
+version; its PG16 ships 3.3.10.
+
+Building the new project:
+
+1. Create it on Postgres 18 in `aws-us-east-2`, with a `main` branch, database `roadtrip` and
+   owner `roadtrip`, and the old compute settings (0.25 CU, no suspend).
+2. Provision Neon Auth (Better Auth) on `roadtrip`, then copy the old settings: trusted origins,
+   magic link, email and password, Google, the organization plugin. The SMTP password is not
+   readable through the API; enter it in the console.
+3. Create `roadtrip_web` (with `default_transaction_read_only = on`), `roadtrip_web_writer` (both
+   with `statement_timeout = 10s`) and `grafana_reader` in SQL, as `roadtrip`, without passwords.
+   The Neon role API would make them admins. Their table grants come with the dump.
+4. Dump everything but `neon_auth` with an 18 `pg_dump -Fc -N neon_auth`, and the user data of
+   Neon Auth with `pg_dump -Fc -a` of `neon_auth.user`, `account`, `organization`, `member` and
+   `invitation`. Leave `session`, `verification`, `jwks` and `project_config`: Neon owns them
+   and the new project has its own.
+5. Restore the main dump from a `pg_restore -l` list without the entries owned by `cloud_admin`
+   and the `COMMENT ON EXTENSION postgis`, which a non-superuser cannot apply; `CREATE
+   EXTENSION` recreates them. Then restore the auth dump with `-a`.
+
+The first copy took 69 minutes to dump at 0.25 CU. The tables that change in production are
+small (the user tables and Neon Auth); the catalog changes only when the importer runs.
+
+Cutting over:
+
+1. Set passwords for `roadtrip_web` and `roadtrip_web_writer` in the console.
+2. Re-copy the user tables and the Neon Auth user data, so nothing written since the first
+   copy is lost. If the importer has run since, re-copy the catalog too.
+3. Re-link the Vercel integration to the new project, which replaces `DATABASE_URL_UNPOOLED`,
+   `NEON_AUTH_BASE_URL` and the preview branches.
+4. Point the hand-set `DATABASE_URL` (reads, `roadtrip_web`) and `APP_DATABASE_URL` (writes,
+   `roadtrip_web_writer`) on Vercel, and the `NEON_MIGRATE_URL` secret `neon-migrate.yml` uses,
+   at the new project. Redeploy. Every signed-in user is signed out once: the old sessions
+   belong to the old Neon Auth.
+5. Keep the old project until the new one has served traffic. Rolling back is pointing the
+   variables and the integration back.
