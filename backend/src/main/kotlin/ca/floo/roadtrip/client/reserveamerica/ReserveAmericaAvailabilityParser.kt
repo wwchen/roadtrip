@@ -1,10 +1,12 @@
 package ca.floo.roadtrip.client.reserveamerica
 
+import ca.floo.roadtrip.client.AvailabilityPayloadReads
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.UnrecognizedStatusTally
 import java.time.LocalDate
 
 object ReserveAmericaAvailabilityParser {
+    private val reads = AvailabilityPayloadReads("reserveamerica")
     private val siteLabelRegex = Regex("""<div class='siteListLabel'>""")
     private val siteIdRegex = Regex("""siteId=(\d+)""")
     private val statusCellRegex =
@@ -24,8 +26,13 @@ object ReserveAmericaAvailabilityParser {
                 .toInt()
         val dates = (0 until dayCount).map { startDate.plusDays(it.toLong()) }
         val statuses = linkedMapOf<String, Map<LocalDate, AvailabilityStatus>>()
+        val rows = siteRows(html)
+        val totalSites = totalSites(html)
+        if (rows.isEmpty() && totalSites == null) {
+            throw reads.unreadable("no siteListLabel rows and no resulttotal_dr marker: ${reads.excerpt(html)}")
+        }
         val unrecognized = UnrecognizedStatusTally()
-        for (row in siteRows(html)) {
+        for (row in rows) {
             val siteId = siteIdRegex.find(row)?.groupValues?.get(1) ?: continue
             val byDate = linkedMapOf<LocalDate, AvailabilityStatus>()
             statusCellRegex
@@ -40,9 +47,12 @@ object ReserveAmericaAvailabilityParser {
                 statuses[siteId] = byDate
             }
         }
+        if (rows.isNotEmpty() && dates.isNotEmpty() && statuses.isEmpty()) {
+            throw reads.unreadable("${rows.size} site rows but no status cells: ${reads.excerpt(rows.first())}")
+        }
         return ParsedReserveAmericaMatrix(
             statuses = statuses,
-            totalSites = totalSites(html),
+            totalSites = totalSites,
             unrecognizedStatuses = unrecognized.counts(),
         )
     }

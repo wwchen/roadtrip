@@ -1,15 +1,14 @@
 package ca.floo.roadtrip.client.reservecalifornia
 
+import ca.floo.roadtrip.client.AvailabilityPayloadReads
 import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.support.ReserveCaliforniaException
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.net.URI
@@ -23,6 +22,7 @@ class HttpReserveCaliforniaAvailabilityClient(
     private val httpClient: HttpClient = defaultClient(),
 ) : ReserveCaliforniaAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val payloadReads = AvailabilityPayloadReads("reservecalifornia")
 
     override suspend fun fetchGrid(
         facilityId: Long,
@@ -90,7 +90,7 @@ class HttpReserveCaliforniaAvailabilityClient(
             VendorHttpTransport.send(httpClient, req, "reservecalifornia", url) { message, status, cause ->
                 ReserveCaliforniaException(message, httpStatus = status, cause = cause)
             }
-        return Json.parseToJsonElement(body).jsonObject
+        return payloadReads.parseObject(body)
     }
 
     companion object {

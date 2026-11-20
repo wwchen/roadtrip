@@ -83,12 +83,6 @@ class PoiAvailabilityFusionTest {
     }
 
     @Test
-    fun `an unrecognised upstream status parses to unknown`() {
-        assertEquals(AvailabilityStatus.AVAILABLE, AvailabilityStatus.parse("Available"))
-        assertEquals(AvailabilityStatus.UNKNOWN, AvailabilityStatus.parse("gibberish"))
-    }
-
-    @Test
     fun `no sites at all is unknown, not closed`() {
         assertEquals(AvailabilityStatus.UNKNOWN, rollupStatus(emptyList()))
 

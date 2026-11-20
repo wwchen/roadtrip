@@ -10,8 +10,10 @@ import {
   AvailabilityUnavailableError,
   AvailabilityWindowRefusedError,
   availabilityWeek,
+  readerCapabilities,
   type EgressFetch,
   type WeekSettings,
+  type WeekTarget,
 } from './availabilityMatrixService';
 
 const NOW = new Date('2026-11-05T12:00:00Z');
@@ -135,10 +137,44 @@ test.each([
   [302, 'egress_redirected'],
   [200, 'egress_not_json'],
   [503, 'rate_limited'],
-])('a mini-ca answer of %s %s is unavailable and logged', async (status, code) => {
+])('a mini-ca answer of %s %s is unavailable with its status and code, and logged', async (status, code) => {
   const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  await expect(week(failing(status, code))).rejects.toBeInstanceOf(AvailabilityUnavailableError);
+  await expect(week(failing(status, code))).rejects.toMatchObject({ name: 'AvailabilityUnavailableError', status, code });
   expect(log).toHaveBeenCalled();
+  log.mockRestore();
+});
+
+test('a mini-ca failure keeps the detail its body carried', async () => {
+  const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const body = { state: 'error', error: 'unreadable_response', detail: 'AvailabilityPayloadException: recgov availability payload unreadable: campsites' };
+  await expect(week(failing(503, 'unreadable_response', body))).rejects.toMatchObject({
+    status: 503,
+    code: 'unreadable_response',
+    detail: body.detail,
+  });
+  log.mockRestore();
+});
+
+test.each([
+  [404, null],
+  [404, 'unknown'],
+])('a %s whose code is %s is not catalog drift: it is unavailable with that code', async (status, code) => {
+  const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  await expect(week(failing(status, code))).rejects.toMatchObject({ name: 'AvailabilityUnavailableError', status, code });
+  log.mockRestore();
+});
+
+test('a failed capability lookup fails the week instead of reading as unsupported', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const failure = new Error('connection terminated unexpectedly');
+  const brokenDb = {
+    execute: async () => {
+      throw failure;
+    },
+  } as unknown as Parameters<typeof readerCapabilities>[0];
+  const target = { campground: { campgroundId: NEAR_CAMPGROUND_ID } as WeekTarget['campground'], campsites: [] };
+  await expect(readerCapabilities(brokenDb, target, async () => 'signed_out')).rejects.toBe(failure);
+  expect(log).toHaveBeenCalledWith(expect.any(String), expect.any(String), failure);
   log.mockRestore();
 });
 

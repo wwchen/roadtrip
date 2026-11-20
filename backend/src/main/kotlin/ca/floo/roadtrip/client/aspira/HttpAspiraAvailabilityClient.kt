@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.client.aspira
 
+import ca.floo.roadtrip.client.AvailabilityPayloadReads
 import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.client.VendorHttpTransport
@@ -30,6 +31,7 @@ class HttpAspiraAvailabilityClient(
 ) : AspiraAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
     private val json = Json { ignoreUnknownKeys = true }
+    private val aspiraPayload = AvailabilityPayloadReads("aspira")
 
     // Single global mutex: one in-flight Aspira call at a time. Aspira's WAF
     // is host-side (Azure App Gateway), and the threat is volume-from-our-IP.
@@ -170,7 +172,7 @@ class HttpAspiraAvailabilityClient(
         body: String,
         mapId: Int,
     ): AspiraAvailability {
-        val root = Json.parseToJsonElement(body).jsonObject
+        val root = aspiraPayload.parseObject(body)
         val map =
             root["mapAvailabilities"]
                 ?.jsonArray
@@ -180,15 +182,15 @@ class HttpAspiraAvailabilityClient(
                 v.jsonArray.map { it.jsonPrimitive.intOrNull ?: AspiraStatus.UNKNOWN }
             } ?: emptyMap()
         val resources =
-            root["resourceAvailabilities"]?.jsonObject?.mapValues { (_, v) ->
-                v.jsonArray.map { day ->
+            aspiraPayload.obj(root["resourceAvailabilities"], "resourceAvailabilities").mapValues { (resourceId, v) ->
+                aspiraPayload.array(v, "resourceAvailabilities $resourceId").map { day ->
                     (day as? JsonObject)
                         ?.get("availability")
                         ?.jsonPrimitive
                         ?.intOrNull
                         ?: AspiraStatus.UNKNOWN
                 }
-            } ?: emptyMap()
+            }
         return AspiraAvailability(
             mapId = mapId,
             parkRollup = map,

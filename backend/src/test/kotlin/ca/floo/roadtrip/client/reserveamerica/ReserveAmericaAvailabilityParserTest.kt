@@ -1,9 +1,13 @@
 package ca.floo.roadtrip.client.reserveamerica
 
+import ca.floo.roadtrip.fixtures.mangledAvailabilityFixture
+import ca.floo.roadtrip.model.availability.AvailabilityPayloadException
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class ReserveAmericaAvailabilityParserTest {
     @Test
@@ -41,6 +45,56 @@ class ReserveAmericaAvailabilityParserTest {
             ),
             parsed.statuses["253488"],
         )
+    }
+
+    @Test
+    fun `a page with neither site rows nor a result total is unreadable, not a park with no sites`() {
+        val thrown =
+            assertFailsWith<AvailabilityPayloadException> {
+                ReserveAmericaAvailabilityParser.parse(
+                    html = mangledAvailabilityFixture("reserveamerica-session-expired.html"),
+                    startDate = LocalDate.parse("2026-06-22"),
+                    endDate = LocalDate.parse("2026-06-26"),
+                )
+            }
+
+        assertEquals("reserveamerica", thrown.provider)
+        assertTrue(thrown.message!!.contains("siteListLabel"), thrown.message)
+        assertTrue(thrown.message!!.contains("Session Expired"), thrown.message)
+    }
+
+    @Test
+    fun `site rows that carry no status cell at all are unreadable`() {
+        val thrown =
+            assertFailsWith<AvailabilityPayloadException> {
+                ReserveAmericaAvailabilityParser.parse(
+                    html =
+                        """
+                        <span id='resulttotal_dr_top'>1</span>
+                        <div class='siteListLabel'>
+                          <a href="/campsiteDetails.do?contractCode=NY&amp;siteId=253481&amp;parkId=489">042</a>
+                        </div>
+                        <div class='td state r'>R</div>
+                        """.trimIndent(),
+                    startDate = LocalDate.parse("2026-06-22"),
+                    endDate = LocalDate.parse("2026-06-23"),
+                )
+            }
+
+        assertTrue(thrown.message!!.contains("status"), thrown.message)
+    }
+
+    @Test
+    fun `a result total of zero with no rows is a well-formed empty page`() {
+        val parsed =
+            ReserveAmericaAvailabilityParser.parse(
+                html = "<span id='resulttotal_dr_top'>0</span>",
+                startDate = LocalDate.parse("2026-06-22"),
+                endDate = LocalDate.parse("2026-06-26"),
+            )
+
+        assertEquals(0, parsed.totalSites)
+        assertEquals(emptyMap(), parsed.statuses)
     }
 
     @Test

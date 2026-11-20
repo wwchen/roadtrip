@@ -1,6 +1,6 @@
 import type { Db } from '@roadtrip/db';
 import { shippedTenantRegistry, type CampsiteKind } from '@roadtrip/domain';
-import { fetchEgress, type EgressFetch } from '../../client/availabilityEgress';
+import { fetchEgress, isCampgroundUnknown, type EgressFetch } from '../../client/availabilityEgress';
 import { AVAILABILITY_STORED_TIMEOUT_MS, config } from '../../config';
 import type {
   AvailabilityEgressRequestDto,
@@ -23,13 +23,13 @@ import {
 import { capabilityDto } from '../../mapper/http/capabilityHttp';
 import { liveReaderStanding } from '../../wiring/readerStanding';
 import { addToCartCapability } from '../booking/addToCartCapability';
+import type { ReaderStanding } from '../booking/model';
 import { addDays, poiDateContext } from '../booking/dateContext';
 import { fuseWeek, weekCache } from './matrixFusion';
 
 export const GATED_WATCH_CAPABILITIES: AvailabilityWatchCapabilitiesDto = { trigger_kinds: [], add_to_cart: { state: 'unsupported' } };
 const STORED_READ_LOG = 'availability stored read';
 const STATUS_BAD_REQUEST = 400;
-const STATUS_NOT_FOUND = 404;
 const STATUS_NOT_IMPLEMENTED = 501;
 const DEFAULT_WEEK_DAYS = 7;
 const CATALOG_DRIFT_LOG = 'availability catalog drift';
@@ -44,10 +44,23 @@ export class AvailabilityTargetError extends Error {
   }
 }
 
+export interface StoredReadFailure {
+  status: number;
+  code: string | null;
+  detail?: string;
+}
+
 export class AvailabilityUnavailableError extends Error {
-  constructor() {
-    super('availability is unavailable');
+  readonly status: number | null;
+  readonly code: string | null;
+  readonly detail: string | undefined;
+
+  constructor(failure?: StoredReadFailure) {
+    super(failure === undefined ? 'availability is unavailable' : `availability is unavailable: ${JSON.stringify(failure)}`);
     this.name = 'AvailabilityUnavailableError';
+    this.status = failure?.status ?? null;
+    this.code = failure?.code ?? null;
+    this.detail = failure?.detail;
   }
 }
 
@@ -117,11 +130,13 @@ async function storedWeek(
   }
   const result = await fetchStored(egressRequest(target, startDate, endDate, 'stored'));
   if (result.kind === 'cells') return result.body;
-  if (result.status === STATUS_NOT_FOUND) return unknownToMiniCa(target, startDate, endDate, now);
+  if (isCampgroundUnknown(result)) return unknownToMiniCa(target, startDate, endDate, now);
   if (result.status === STATUS_BAD_REQUEST && result.body !== null) throw new AvailabilityWindowRefusedError(result.body);
   if (result.status === STATUS_NOT_IMPLEMENTED) throw new AvailabilityTargetError('unknown_campground');
-  console.warn(STORED_READ_LOG, JSON.stringify({ status: result.status, code: result.code, campground: target.campground.dataProviderRef }));
-  throw new AvailabilityUnavailableError();
+  const detail = result.body?.detail ?? (result.code === null ? `mini-ca answered HTTP ${result.status} with no error code` : undefined);
+  const failure: StoredReadFailure = { status: result.status, code: result.code, ...(detail === undefined ? {} : { detail }) };
+  console.warn(STORED_READ_LOG, JSON.stringify({ ...failure, campground: target.campground.dataProviderRef }));
+  throw new AvailabilityUnavailableError(failure);
 }
 
 function cellsOf(stored: AvailabilityEgressResponseDto, idByKey: ReadonlyMap<string, bigint>): StoredCell[] {
@@ -198,15 +213,19 @@ export function currentWeekSettings(): WeekSettings {
   return { ttlSeconds: config.availabilityTtlSeconds, now: new Date() };
 }
 
-async function readerCapabilities(db: Db, target: WeekTarget): Promise<AvailabilityWatchCapabilitiesDto> {
+export async function readerCapabilities(
+  db: Db,
+  target: WeekTarget,
+  standing: () => Promise<ReaderStanding> = liveReaderStanding,
+): Promise<AvailabilityWatchCapabilitiesDto> {
   try {
     const identities = await campgroundBookingIdentities(db, target.campground.campgroundId, target.campsites.map((campsite) => campsite.id));
     return {
       trigger_kinds: [],
-      add_to_cart: capabilityDto(addToCartCapability(identities.campsites, identities.campground, await liveReaderStanding(), shippedTenantRegistry())),
+      add_to_cart: capabilityDto(addToCartCapability(identities.campsites, identities.campground, await standing(), shippedTenantRegistry())),
     };
   } catch (error) {
-    console.warn(CAPABILITY_LOG, error instanceof Error ? error.name : typeof error);
-    return GATED_WATCH_CAPABILITIES;
+    console.error(CAPABILITY_LOG, JSON.stringify({ campground: String(target.campground.campgroundId) }), error);
+    throw error;
   }
 }

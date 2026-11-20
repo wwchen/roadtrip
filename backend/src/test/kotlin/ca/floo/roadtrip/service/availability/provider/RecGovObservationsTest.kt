@@ -304,7 +304,7 @@ class RecGovObservationsTest {
     }
 
     @Test
-    fun `upstream error propagates so route layer can 503`() {
+    fun `a message that merely names 429 is not a rate limit without the status`() {
         val client =
             object : RecGovAvailabilityClient {
                 override suspend fun fetchMonth(
@@ -316,8 +316,22 @@ class RecGovObservationsTest {
             runCatching {
                 classify(client, days = 1)
             }.exceptionOrNull()
-        require(ex is AvailabilityProviderError.RateLimited) { "expected RateLimited, got $ex" }
-        assertEquals("rate_limited", ex.code)
+        require(ex is AvailabilityProviderError.Unknown) { "expected Unknown, got $ex" }
+        assertEquals("java.lang.IllegalStateException: rec.gov 429 after 3 retries", ex.message)
+    }
+
+    @Test
+    fun `a message containing rate is not a rate limit`() {
+        val client =
+            object : RecGovAvailabilityClient {
+                override suspend fun fetchMonth(
+                    campgroundId: String,
+                    monthStart: String,
+                ): Map<String, Campsite> = throw IllegalArgumentException("could not separate the loop name")
+            }
+        val ex = runCatching { classify(client, days = 1) }.exceptionOrNull()
+        require(ex is AvailabilityProviderError) { "expected AvailabilityProviderError, got $ex" }
+        assertEquals(AvailabilityProviderError.Unknown.CODE, ex.code)
     }
 
     @Test

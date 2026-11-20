@@ -1,0 +1,9 @@
+{
+  "mapId": -2147483647,
+  "mapAvailabilities": [1, 1, 0],
+  "resourceAvailabilityList": {
+    "-2147483633": [
+      { "availability": 0, "remainingQuota": null }
+    ]
+  }
+}

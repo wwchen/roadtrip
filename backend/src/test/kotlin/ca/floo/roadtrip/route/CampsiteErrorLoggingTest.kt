@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.model.availability.AvailabilityPayloadException
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.route.api.pois.mapProviderError
 import ca.floo.roadtrip.route.api.pois.upstreamHttpStatus
@@ -19,6 +20,7 @@ import java.net.ConnectException
 import java.nio.channels.ClosedChannelException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -171,6 +173,41 @@ class CampsiteErrorLoggingTest {
             assertEquals("upstream_5xx", dto.error, wrapper.toString())
             assertEquals(503, dto.upstreamStatus, wrapper.toString())
         }
+    }
+
+    @Test
+    fun `an unreadable vendor answer renders its own code with the parse detail`() {
+        val e =
+            AvailabilityProviderError.UnreadableResponse(
+                AvailabilityPayloadException("recgov", "missing campsites object in {\"count\":1}"),
+            )
+
+        val (status, dto) = mapProviderError(e)
+
+        assertEquals(HttpStatusCode.ServiceUnavailable, status)
+        assertEquals("unreadable_response", dto.error)
+        val detail = assertNotNull(dto.detail)
+        assertTrue(detail.contains(AvailabilityPayloadException::class.java.name), detail)
+        assertTrue(detail.contains("missing campsites object"), detail)
+        assertEquals(null, dto.upstreamStatus)
+    }
+
+    @Test
+    fun `our own failure renders unknown with the exception's class and message`() {
+        val (_, dto) = mapProviderError(AvailabilityProviderError.Unknown(IllegalStateException("campsite index out of sync")))
+
+        assertEquals("unknown", dto.error)
+        assertEquals("java.lang.IllegalStateException: campsite index out of sync", dto.detail)
+    }
+
+    @Test
+    fun `a vendor failure carries the vendor's message as detail beside its code`() {
+        val e = AvailabilityProviderError.UpstreamUnavailable(AspiraException("aspira HTTP 502 for mapId=1", httpStatus = 502))
+
+        val (_, dto) = mapProviderError(e)
+
+        assertEquals("upstream_5xx", dto.error)
+        assertEquals("ca.floo.roadtrip.support.AspiraException: aspira HTTP 502 for mapId=1", dto.detail)
     }
 
     @Test

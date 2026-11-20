@@ -30,7 +30,13 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     });
   } catch (error) {
     if (error instanceof AvailabilityWindowRefusedError) return Response.json(error.body, { status: STATUS_BAD_REQUEST });
-    if (error instanceof AvailabilityUnavailableError) return availabilityError(STATUS_SERVICE_UNAVAILABLE, AVAILABILITY_UNAVAILABLE);
+    if (error instanceof AvailabilityUnavailableError) {
+      return availabilityError(
+        STATUS_SERVICE_UNAVAILABLE,
+        error.code ?? AVAILABILITY_UNAVAILABLE,
+        error.detail === undefined ? {} : { detail: error.detail },
+      );
+    }
     if (error instanceof AvailabilityTargetError) return availabilityError(STATUS_NOT_FOUND, error.code);
     throw error;
   }
