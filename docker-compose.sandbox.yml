@@ -1,7 +1,7 @@
 
 services:
   postgres:
-    image: postgis/postgis:18-3.6
+    image: postgis/postgis:18-3.7
     platform: linux/amd64
     restart: "no"
     hostname: postgres
