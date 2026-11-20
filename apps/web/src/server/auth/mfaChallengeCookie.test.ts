@@ -29,8 +29,26 @@ test.each([[undefined], [''], ['not-base64-!!'], ['AAAA']])('a missing or unread
   expect(openMfaChallenge(KEY, value, 7n, NOW)).toEqual({ code: MFA_CHALLENGE_UNKNOWN });
 });
 
-test('a tampered cookie is mfa_challenge_unknown', () => {
+const COOKIE_ENCODING = 'base64url';
+const NONCE_BYTE = 0;
+const CIPHERTEXT_BYTE = 12;
+const LAST_TAG_BYTE = -1;
+const EVERY_BIT = 0xff;
+
+function withByteFlipped(value: string, index: number): string {
+  const bytes = Buffer.from(value, COOKIE_ENCODING);
+  const at = index < 0 ? bytes.length + index : index;
+  bytes[at] = bytes[at]! ^ EVERY_BIT;
+  return bytes.toString(COOKIE_ENCODING);
+}
+
+test.each([
+  ['nonce', NONCE_BYTE],
+  ['ciphertext', CIPHERTEXT_BYTE],
+  ['tag', LAST_TAG_BYTE],
+])('a cookie with a changed %s byte is mfa_challenge_unknown', (_part, index) => {
   const value = sealMfaChallenge(KEY, { challengeId: 'ch-1', userId: 7n, expiresAt: LATER });
-  const tampered = `${value.slice(0, -2)}${value.endsWith('A') ? 'B' : 'A'}${value.slice(-1)}`;
+  const tampered = withByteFlipped(value, index);
+  expect(tampered).not.toBe(value);
   expect(openMfaChallenge(KEY, tampered, 7n, NOW)).toEqual({ code: MFA_CHALLENGE_UNKNOWN });
 });
