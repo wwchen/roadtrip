@@ -297,6 +297,7 @@ class ApiContractCoverageTest {
         assertEquals(
             listOf(
                 "POST /api/settings/notifications/slack/test",
+                "POST /auth/password/begin",
                 "PUT /api/settings/notifications",
             ),
             ApiContract.endpoints

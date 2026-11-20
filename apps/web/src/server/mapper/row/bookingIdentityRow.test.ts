@@ -7,7 +7,7 @@ const CAMPGROUND_PREFIX = 'cg_';
 
 describe('bookingIdentityOf', () => {
   test('reads the three columns', () => {
-    const decoder = createColumnDecoder();
+    const decoder = createColumnDecoder('test row');
     const identity = bookingIdentityOf(
       { booking_provider: 'recgov', booking_provider_ref: '100', booking_aliases: [ALIAS] },
       decoder,
@@ -17,7 +17,7 @@ describe('bookingIdentityOf', () => {
   });
 
   test('reads them under a prefix', () => {
-    const decoder = createColumnDecoder();
+    const decoder = createColumnDecoder('test row');
     const identity = bookingIdentityOf(
       {
         booking_provider: 'other',
@@ -32,9 +32,9 @@ describe('bookingIdentityOf', () => {
   });
 
   test('missing or malformed aliases read as none', () => {
-    const missing = createColumnDecoder();
+    const missing = createColumnDecoder('test row');
     expect(bookingIdentityOf({ booking_provider: null, booking_provider_ref: null }, missing).bookingAliases).toEqual([]);
-    const malformed = createColumnDecoder();
+    const malformed = createColumnDecoder('test row');
     expect(
       bookingIdentityOf({ booking_provider: 'recgov', booking_provider_ref: '1', booking_aliases: 'not aliases' }, malformed).bookingAliases,
     ).toEqual([]);

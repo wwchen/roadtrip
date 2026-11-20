@@ -21,13 +21,18 @@ import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.routing.RoutePlanService
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.headersOf
 import io.ktor.server.routing.Route
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -321,10 +326,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `routing failure returns 503`() =
+    fun `an unconfigured router is 503 routing_not_configured with the cause`() =
         testApplication {
-            // Empty route cache + null Mapbox token → directions() throws,
-            // handler should surface 503.
             application {
                 routeTestApplication {
                     testPoisOnRouteRoutes(poisOnRouteService(RouteCache(MapboxDirections(token = null))))
@@ -339,7 +342,83 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                     )
                 }
             assertEquals(HttpStatusCode.ServiceUnavailable, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("routing_not_configured", body["error"]!!.jsonPrimitive.content)
+            assertEquals("roadtrip.mapbox.token not configured", body["detail"]!!.jsonPrimitive.content)
         }
+
+    @Test
+    fun `on-route with no drivable route is 422 route_not_found carrying Mapbox's message`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    testPoisOnRouteRoutes(poisOnRouteService(RouteCache(noRouteDirections())))
+                }
+            }
+            val resp =
+                client.post("/api/pois/on-route") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"waypoints":[{"lat":49.28,"lng":-123.1},{"lat":47.61,"lng":-122.33}],""" +
+                            """"radius_miles":30}""",
+                    )
+                }
+            assertEquals(HttpStatusCode.UnprocessableEntity, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("route_not_found", body["error"]!!.jsonPrimitive.content)
+            assertEquals("Mapbox code=NoRoute: No route found", body["detail"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `route endpoint with no drivable route is 422 route_not_found carrying Mapbox's message`() =
+        testApplication {
+            application { routeTestApplication { testRouteRoutes(RouteCache(noRouteDirections())) } }
+
+            val resp = client.get("/api/route?coords=-123.1,49.28%3B-122.33,47.61")
+
+            assertEquals(HttpStatusCode.UnprocessableEntity, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("route_not_found", body["error"]!!.jsonPrimitive.content)
+            assertEquals("Mapbox code=NoRoute: No route found", body["detail"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `route endpoint with a rejected token is 502 routing_auth_failed`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    testRouteRoutes(
+                        RouteCache(
+                            mockDirections(HttpStatusCode.Unauthorized, """{"message":"Not Authorized - Invalid Token"}"""),
+                        ),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/route?coords=-123.1,49.28%3B-122.33,47.61")
+
+            assertEquals(HttpStatusCode.BadGateway, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("routing_auth_failed", body["error"]!!.jsonPrimitive.content)
+            assertTrue(body["detail"]!!.jsonPrimitive.content.contains("Not Authorized - Invalid Token"))
+        }
+
+    private fun noRouteDirections(): MapboxDirections =
+        mockDirections(HttpStatusCode.OK, """{"code":"NoRoute","message":"No route found"}""")
+
+    private fun mockDirections(
+        status: HttpStatusCode,
+        body: String,
+    ): MapboxDirections =
+        MapboxDirections(
+            token = "pk.test",
+            httpClient =
+                HttpClient(
+                    MockEngine {
+                        respond(content = body, status = status, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                    },
+                ),
+        )
 
     /** Pre-seed a RouteCache with the Vancouver → Seattle line used by these tests. */
     private fun primedRoute(token: String? = null): RouteCache {

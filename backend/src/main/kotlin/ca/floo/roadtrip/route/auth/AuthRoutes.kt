@@ -8,27 +8,37 @@ import ca.floo.roadtrip.model.api.PasswordCompleteRequestDto
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.auth.User
+import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
+import ca.floo.roadtrip.route.common.decodeOptionalTextJsonBody
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.queryParam
+import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.LoginFlowState
 import ca.floo.roadtrip.service.auth.encode
+import ca.floo.roadtrip.support.AuthException
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
+import java.io.IOException
 
 private const val LOGIN_FAILED_ERROR = "login_failed"
+private const val IDENTITY_PROVIDER_UNREACHABLE_ERROR = "identity_provider_unreachable"
+private const val LOGIN_INTERNAL_ERROR = "login_internal_error"
+private const val INVALID_BODY_ERROR = "invalid_body"
+private const val NO_LOGIN_FLOW_DETAIL = "no usable login flow: the flow cookie or the code and state are missing, expired or tampered"
 private const val AUTH_DISABLED_ERROR = "auth_not_configured"
 private const val RETURN_TO_PARAM = "return_to"
 private const val CONNECTION_PARAM = "connection"
@@ -84,7 +94,7 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
             // on) as a query parameter, not an HTTP error.
             call.queryParam(PROVIDER_ERROR_PARAM)?.let { providerError ->
                 log.warn("identity provider refused the authorization request: {}", providerError)
-                return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.Unauthorized)
+                return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.Unauthorized, providerError)
             }
 
             val code = call.queryParam(CODE_PARAM)
@@ -94,17 +104,17 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                 // Includes a tampered or expired flow cookie — indistinguishable
                 // from a missing one, deliberately.
                 log.warn("callback without a usable login flow")
-                return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadRequest)
+                return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadRequest, NO_LOGIN_FLOW_DETAIL)
             }
 
             val result =
-                runCatching { auth.authController.completeLogin(code, state, flow) }
-                    .getOrElse { failure ->
-                        // The message names which check failed and is for
-                        // operators; the client is told only that it failed.
-                        log.warn("login could not be completed: {}", failure.message)
-                        return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.Unauthorized)
-                    }
+                try {
+                    auth.authController.completeLogin(code, state, flow)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    return@get call.respondLoginFailure("login", e)
+                }
 
             call.response.setSessionCookie(
                 token = result.session.token,
@@ -125,14 +135,29 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
             // signed straight back in.
             val providerLogout =
                 auth.appRootUrl?.let { root ->
-                    runCatching { auth.authController.providerLogoutUrl(root) }.getOrNull()
+                    try {
+                        auth.authController.providerLogoutUrl(root)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        log.warn("provider logout URL unavailable; ending only the local session", e)
+                        null
+                    }
                 }
             call.respondRedirect(providerLogout ?: DEFAULT_RETURN_TO)
         }.access(RouteAccess.Anonymous)
 
         post("/password/begin") {
             val auth = wiring ?: return@post call.respondAuthDisabled()
-            val body = runCatching { call.receive<PasswordBeginRequestDto>() }.getOrNull()
+            val body =
+                when (
+                    val parsed =
+                        call.decodeOptionalTextJsonBody<PasswordBeginRequestDto?>(roadtripApiJson) { null }
+                ) {
+                    is RouteBodyResult.Invalid ->
+                        return@post call.respondApiError(INVALID_BODY_ERROR, HttpStatusCode.BadRequest, parsed.detail)
+                    is RouteBodyResult.Valid -> parsed.value
+                }
             val start =
                 runCatching { auth.authController.beginPasswordLogin(body?.returnTo) }
                     .getOrElse { failure ->
@@ -160,19 +185,27 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
             val flowCookie = call.request.loginFlowCookie()
             call.response.clearLoginFlowCookie(auth.isCookieSecure)
 
-            val body = runCatching { call.receive<PasswordCompleteRequestDto>() }.getOrNull()
-            val flow = flowCookie?.let { LoginFlowState.decode(it, auth.flowSigningKey) }
-            if (body == null || flow == null) {
-                log.warn("password/complete without a usable flow or body")
-                return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadRequest)
-            }
+            val body =
+                when (val parsed = call.receiveJsonBody<PasswordCompleteRequestDto>()) {
+                    is RouteBodyResult.Invalid ->
+                        return@post call.respondApiError(INVALID_BODY_ERROR, HttpStatusCode.BadRequest, parsed.detail)
+                    is RouteBodyResult.Valid -> parsed.value
+                }
+            val flow =
+                flowCookie?.let { LoginFlowState.decode(it, auth.flowSigningKey) }
+                    ?: run {
+                        log.warn("password/complete without a usable login flow")
+                        return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadRequest, NO_LOGIN_FLOW_DETAIL)
+                    }
 
             val result =
-                runCatching { auth.authController.completeLogin(body.code, body.state, flow) }
-                    .getOrElse { failure ->
-                        log.warn("password login could not be completed: {}", failure.message)
-                        return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.Unauthorized)
-                    }
+                try {
+                    auth.authController.completeLogin(body.code, body.state, flow)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    return@post call.respondLoginFailure("password login", e)
+                }
 
             call.response.setSessionCookie(
                 token = result.session.token,
@@ -185,7 +218,8 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
             summary = "Exchange the login code for a session cookie; answers 204 with no body",
             description =
                 "The flow cookie set by the begin route is required and is cleared either way. " +
-                    "401 means the provider refused the code; 503 means no identity provider is configured.",
+                    "401 means the provider refused the code; 502 means the provider could not be reached; " +
+                    "500 means roadtrip failed while signing in; 503 means no identity provider is configured.",
         ).access(RouteAccess.Anonymous)
     }
 
@@ -214,6 +248,28 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
             .access(RouteAccess.Anonymous)
     }
 }
+
+private suspend fun ApplicationCall.respondLoginFailure(
+    stage: String,
+    failure: Exception,
+) {
+    when (failure) {
+        is AuthException -> {
+            log.warn("{} refused", stage, failure)
+            respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.Unauthorized)
+        }
+        is IOException -> {
+            log.error("{} could not reach the identity provider", stage, failure)
+            respondApiError(IDENTITY_PROVIDER_UNREACHABLE_ERROR, HttpStatusCode.BadGateway, failure.described())
+        }
+        else -> {
+            log.error("{} failed inside roadtrip", stage, failure)
+            respondApiError(LOGIN_INTERNAL_ERROR, HttpStatusCode.InternalServerError, failure.described())
+        }
+    }
+}
+
+private fun Throwable.described(): String = "${this::class.simpleName}: $message"
 
 private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto =
     meResponseForUser(

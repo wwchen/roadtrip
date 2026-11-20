@@ -64,12 +64,20 @@ describe('geocode', () => {
     await expect(geocode('mineral')).resolves.toEqual({ results: [result] });
   });
 
-  test.each([
-    ['a 500', textResponse('boom', 500)],
-    ['a 429', jsonResponse({ error: 'rate_limited' }, 429)],
-  ])('yields an empty result list on %s', async (_label, response) => {
-    stubFetch(response);
+  test('a refusal is an error carrying its code and detail, not an empty answer', async () => {
+    stubFetch(jsonResponse({ error: 'geocoding_unavailable', detail: 'mapbox token missing' }, 503));
 
-    await expect(geocode('x')).resolves.toEqual({ results: [] });
+    await expect(geocode('x')).rejects.toMatchObject({
+      name: 'HttpError',
+      status: 503,
+      code: 'geocoding_unavailable',
+      detail: 'mapbox token missing',
+    });
+  });
+
+  test('a non-JSON failure keeps its body as the detail', async () => {
+    stubFetch(textResponse('boom', 500));
+
+    await expect(geocode('x')).rejects.toMatchObject({ name: 'HttpError', status: 500, detail: 'boom' });
   });
 });

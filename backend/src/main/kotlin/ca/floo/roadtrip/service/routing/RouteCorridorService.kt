@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.routing
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.support.CorridorUnavailableException
 import ca.floo.roadtrip.support.RoutingException
+import ca.floo.roadtrip.support.RoutingFailure
 
 private const val CORRIDOR_UNAVAILABLE = "corridor_unavailable"
 
@@ -20,6 +21,6 @@ internal open class RouteCorridorService(
                 radiusMeters = routeCorridorRadiusMeters(radiusMiles),
             )
         } catch (e: CorridorUnavailableException) {
-            throw RoutingException(CORRIDOR_UNAVAILABLE, e)
+            throw RoutingException("$CORRIDOR_UNAVAILABLE: ${e.message}", e, RoutingFailure.CORRIDOR)
         }
 }

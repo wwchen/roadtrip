@@ -18,6 +18,7 @@ import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.siteTypeWireList
 import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
+import ca.floo.roadtrip.route.common.valueOrNull
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
@@ -99,18 +100,20 @@ internal fun Route.campsiteRoutes(
                             }
 
                         val startDate =
-                            try {
-                                call.optionalDateQuery("start_date")
-                            } catch (e: Exception) {
-                                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-                                return@get
+                            call.optionalDateQuery("start_date").valueOrNull { invalid ->
+                                return@get call.respondAvailabilityError(
+                                    BAD_DATE_WINDOW_ERROR,
+                                    HttpStatusCode.BadRequest,
+                                    detail = invalid.detail,
+                                )
                             }
                         val endDate =
-                            try {
-                                call.optionalDateQuery("end_date")
-                            } catch (e: Exception) {
-                                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-                                return@get
+                            call.optionalDateQuery("end_date").valueOrNull { invalid ->
+                                return@get call.respondAvailabilityError(
+                                    BAD_DATE_WINDOW_ERROR,
+                                    HttpStatusCode.BadRequest,
+                                    detail = invalid.detail,
+                                )
                             }
 
                         try {
@@ -196,6 +199,8 @@ internal fun upstreamHttpStatus(e: AvailabilityProviderError): Int? {
 
 /** Depth cap so a self-referential cause chain can't spin or flood a log line. */
 private const val MAX_CAUSE_DEPTH = 8
+
+private const val BAD_DATE_WINDOW_ERROR = "bad_date_window"
 
 private suspend fun ApplicationCall.respondAvailabilityError(
     error: String,

@@ -67,7 +67,7 @@ class RouteCache(
                 log.debug("route persistent cache hit: key={}", key)
                 return response
             } catch (e: Exception) {
-                log.warn("route persistent cache decode failed key={}", key)
+                log.warn("route persistent cache decode failed key={}", key, e)
                 persistentCache.delete(namespace, key)
             }
         }

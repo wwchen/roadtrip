@@ -87,24 +87,32 @@ describe('routeLegLines', () => {
 });
 
 describe('routeErrorMessage', () => {
-  test('names the failures a user can act on', () => {
-    expect(routeErrorMessage('duplicate_adjacent')).toBe('Two adjacent stops are the same.');
-    expect(routeErrorMessage('too_few_points')).toBe('Need at least 2 stops.');
-    expect(routeErrorMessage('too_many_points')).toBe('Too many stops.');
-    expect(routeErrorMessage('routing_unavailable')).toBe('Routing temporarily unavailable.');
+  test('names the failures a user can act on and keeps the raw code and detail', () => {
+    expect(routeErrorMessage({ error: 'duplicate_adjacent', detail: 'points 1 and 0 are identical', status: 400 })).toBe(
+      'Two adjacent stops are the same. (duplicate_adjacent: points 1 and 0 are identical · HTTP 400)',
+    );
+    expect(routeErrorMessage({ error: 'too_few_points' })).toBe('Need at least 2 stops. (too_few_points)');
+    expect(routeErrorMessage({ error: 'too_many_points' })).toBe('Too many stops. (too_many_points)');
   });
 
-  test('falls back to the status for a code it does not know', () => {
-    expect(routeErrorMessage('teapot', 418)).toBe('Routing error (418)');
-    expect(routeErrorMessage(null, 500)).toBe('Routing error (500)');
+  test('a stop pair with no drivable route says so, with Mapbox\'s words', () => {
+    expect(
+      routeErrorMessage({ error: 'route_not_found', detail: 'Mapbox code=NoRoute: No route found', status: 422 }),
+    ).toBe('No drivable route connects these stops. (route_not_found: Mapbox code=NoRoute: No route found · HTTP 422)');
   });
 
-  test('names a transport failure differently', () => {
-    expect(routeErrorMessage(null)).toBe('Network error');
+  test('a code it does not know renders verbatim with its detail', () => {
+    expect(routeErrorMessage({ error: 'teapot', detail: 'short and stout', status: 418 })).toBe(
+      'teapot: short and stout · HTTP 418',
+    );
+  });
+
+  test('a transport failure keeps its class and message', () => {
+    expect(routeErrorMessage(new TypeError('Failed to fetch'))).toBe('TypeError: Failed to fetch');
   });
 
   test('does not resolve a prototype member as a message', () => {
-    expect(routeErrorMessage('toString', 500)).toBe('Routing error (500)');
-    expect(routeErrorMessage('constructor', 500)).toBe('Routing error (500)');
+    expect(routeErrorMessage({ error: 'toString', status: 500 })).toBe('toString · HTTP 500');
+    expect(routeErrorMessage({ error: 'constructor', status: 500 })).toBe('constructor · HTTP 500');
   });
 });

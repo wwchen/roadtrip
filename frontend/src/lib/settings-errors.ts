@@ -5,12 +5,13 @@
  * prototype chain and `??` never fired, because a function is not nullish.
  */
 import { VENDOR, accountCopy } from './strings';
+import { errorFactsOf, errorReport } from './error-report';
 
 /** Most values are the message; the generic booking codes take the campground's `booking_system`. */
 type SettingsErrorMessage = string | ((bookingSystem?: string) => string);
 
 const MESSAGES = new Map<string, SettingsErrorMessage>([
-  ['invalid_field', 'Please check the highlighted fields.'],
+  ['invalid_field', 'A field was refused.'],
   ['slack_invalid_auth', 'Slack rejected this token.'],
   ['slack_not_configured', 'No Slack token is set.'],
   ['slack_send_failed', "Couldn't send to Slack."],
@@ -111,30 +112,12 @@ const MESSAGES = new Map<string, SettingsErrorMessage>([
   ],
 ]);
 
-/** Shown for an unrecognised or absent code; the raw code is what makes a bug report actionable. */
-const DEFAULT_MESSAGE = 'Something went wrong. Please try again.';
-
-function unmappedMessage(code: string | undefined | null): string {
-  return code ? `Something went wrong (${code}). Please try again.` : DEFAULT_MESSAGE;
+export function settingsErrorCopy(code: string | undefined | null, bookingSystem?: string): string | undefined {
+  const entry = code == null ? undefined : MESSAGES.get(code);
+  return typeof entry === 'function' ? entry(bookingSystem) : entry;
 }
 
-/**
- * A short message for a settings error code.
- *
- * Total by construction — every input yields a string, including `undefined` — so
- * callers never guard the result. That is the original's contract and the reason
- * call sites can write `settingsErrorMessage(err.code)` directly.
- *
- * [bookingSystem] is only read by the handful of generic booking-action codes
- * above; every other entry is a plain string and ignores it. Callers outside
- * the cart flow (settings, Slack, email) have no campground in hand and pass
- * nothing, which is exactly the neutral fallback those entries are for.
- */
-export function settingsErrorMessage(code: string | undefined | null, bookingSystem?: string): string {
-  const entry = code == null ? undefined : MESSAGES.get(code);
-  if (typeof entry === 'function') return entry(bookingSystem);
-  // `??`, not `||`: a mapped message is shown as written, including one deliberately
-  // set to the empty string. `||` would silently substitute the default for it,
-  // which is the kind of difference that only shows up the day someone adds one.
-  return entry ?? unmappedMessage(code);
+export function settingsErrorMessage(err: unknown, bookingSystem?: string): string {
+  const facts = errorFactsOf(err);
+  return errorReport(settingsErrorCopy(facts.code, bookingSystem), facts);
 }

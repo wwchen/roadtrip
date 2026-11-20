@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Banner, Button, EmptyState, Select, Skeleton, Table, Tag } from '@ui';
 import type { AvailabilityPoller } from '@/api/availability-dashboard-api';
 import { formatTimestamp } from '@/lib/format';
+import { describeError, errorFactsOf, errorReport } from '@/lib/error-report';
 import {
   COOLDOWN_STATUS,
   NOT_FOUND_STATUS,
@@ -119,10 +120,10 @@ export function PollersTab({ route }: PollersTabProps) {
         // invalidation in useForcePoller is the whole response.
         setRowFeedback(pollerId, '');
       } else {
-        setRowFeedback(pollerId, `error (${status})`);
+        setRowFeedback(pollerId, `error: ${errorReport(undefined, { ...errorFactsOf(body), status })}`);
       }
     } catch (err) {
-      setRowFeedback(pollerId, `error: ${(err as Error)?.message ?? 'failed'}`);
+      setRowFeedback(pollerId, `error: ${describeError(err)}`);
     }
   };
 
@@ -155,7 +156,7 @@ export function PollersTab({ route }: PollersTabProps) {
         <h2>Status</h2>
         <div className="rt-dash-counters">
           {summary.isPending && 'Loading…'}
-          {summary.isError && `Counters error: ${(summary.error as Error)?.message ?? 'failed'}`}
+          {summary.isError && `Counters error: ${describeError(summary.error)}`}
           {summary.data && (
             <>
               <Counter label="active" value={summary.data.active} />
@@ -202,7 +203,7 @@ export function PollersTab({ route }: PollersTabProps) {
 
       <section className="rt-dash-panel" aria-live="polite">
         {pollers.isError ? (
-          <Banner status="error">{`Error: ${(pollers.error as Error)?.message ?? 'failed'}`}</Banner>
+          <Banner status="error">{`Error: ${describeError(pollers.error)}`}</Banner>
         ) : pollers.isPending ? (
           <Skeleton aria-label="Loading pollers" />
         ) : (

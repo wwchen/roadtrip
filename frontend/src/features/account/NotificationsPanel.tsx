@@ -102,8 +102,7 @@ export function NotificationsPanel({
       // that carries its own tick cannot be read out or restyled as one.
       setStatus({ target, ok: true, message: 'Sent' });
     } catch (err) {
-      const code = (err as { code?: string } | null)?.code;
-      setStatus({ target, ok: false, message: settingsErrorMessage(code) });
+      setStatus({ target, ok: false, message: settingsErrorMessage(err) });
     } finally {
       setPending(false);
     }

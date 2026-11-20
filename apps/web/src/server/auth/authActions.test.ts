@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   AUTH_UNAVAILABLE,
   EMAIL_NOT_VERIFIED,
+  INVALID_CREDENTIALS,
   PASSWORD_TOO_SHORT,
   USER_ALREADY_EXISTS,
   USER_NOT_FOUND,
@@ -64,10 +65,22 @@ test('password sign-in redirects to a safe return_to', async () => {
 });
 
 test('a wrong password shows one message', async () => {
-  const signIn = port({ signInWithPassword: vi.fn(async () => ({ ok: false, code: 'INVALID_EMAIL_OR_PASSWORD' }) as const) });
+  const signIn = port({ signInWithPassword: vi.fn(async () => ({ ok: false, code: INVALID_CREDENTIALS }) as const) });
   expect(await signInWithPasswordAction(signIn, form(credentials), ORIGIN)).toEqual({
     kind: 'message',
     state: { message: WRONG_PASSWORD, canResendVerification: false },
+  });
+});
+
+test.each([
+  ['a rate limit', 'over_request_rate_limit', 'status=429 code=over_request_rate_limit message=Too many requests'],
+  ['an unrecognised refusal', 'UNKNOWN', 'status=401 code=none message=none'],
+  ['a banned account', 'banned_user', 'status=403 code=banned_user message=You have been banned'],
+])('%s on sign-in shows its code, never the wrong-password sentence', async (_name, code, cause) => {
+  const signIn = port({ signInWithPassword: vi.fn(async () => ({ ok: false, code, cause }) as const) });
+  expect(await signInWithPasswordAction(signIn, form(credentials), ORIGIN)).toEqual({
+    kind: 'message',
+    state: { message: `${RETRY} (${code}: ${cause})`, canResendVerification: false },
   });
 });
 
@@ -142,18 +155,19 @@ test('sign-up with a short password says so', async () => {
   expect(outcome).toEqual({ kind: 'message', state: { message: PASSWORD_TOO_SHORT_MESSAGE, canResendVerification: false } });
 });
 
-test('an unreachable Neon Auth shows the retry message', async () => {
-  const signIn = port({ signInWithPassword: vi.fn(async () => Promise.reject(Object.assign(new Error('x'), { code: 'NETWORK_DNS' }))) });
+test('an unreachable Neon Auth shows the retry message with the thrown code and message', async () => {
+  const thrown = Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'NETWORK_DNS' });
+  const signIn = port({ signInWithPassword: vi.fn(async () => Promise.reject(thrown)) });
   expect(await signInWithPasswordAction(signIn, form(credentials), ORIGIN)).toEqual({
     kind: 'message',
-    state: { message: RETRY, canResendVerification: false },
+    state: { message: `${RETRY} (NETWORK_DNS: Error: getaddrinfo ENOTFOUND)`, canResendVerification: false },
   });
   expect(warn).toHaveBeenCalledTimes(1);
-  expect(warn).toHaveBeenCalledWith('auth:', 'password_sign_in', 'NETWORK_DNS');
+  expect(warn).toHaveBeenCalledWith('auth:', 'password_sign_in', 'NETWORK_DNS', 'Error: getaddrinfo ENOTFOUND', thrown);
   expect(JSON.stringify(warn.mock.calls)).not.toContain('will@example.com');
 });
 
-test('sign-in disabled gives the retry message for every action', async () => {
+test('sign-in disabled names itself on every action', async () => {
   const actions = [
     signInWithPasswordAction,
     signInWithGoogleAction,
@@ -166,7 +180,7 @@ test('sign-in disabled gives the retry message for every action', async () => {
   for (const action of actions) {
     expect(await action(null, form(credentials), ORIGIN)).toEqual({
       kind: 'message',
-      state: { message: RETRY, canResendVerification: false },
+      state: { message: `${RETRY} (sign_in_not_configured)`, canResendVerification: false },
     });
   }
 });
@@ -175,7 +189,7 @@ test('an unavailable Neon Auth on password sign-in shows the retry message, not 
   const signIn = port({ signInWithPassword: vi.fn(async () => ({ ok: false, code: AUTH_UNAVAILABLE }) as const) });
   expect(await signInWithPasswordAction(signIn, form(credentials), ORIGIN)).toEqual({
     kind: 'message',
-    state: { message: RETRY, canResendVerification: false },
+    state: { message: `${RETRY} (${AUTH_UNAVAILABLE})`, canResendVerification: false },
   });
 });
 
@@ -186,7 +200,7 @@ test.each([
   const sendMagicLink = vi.fn(async () => ({ ok: false, code }) as const);
   expect(await sendMagicLinkAction(port({ sendMagicLink }), form({ email: 'a@x.io' }), ORIGIN)).toEqual({
     kind: 'message',
-    state: { message: RETRY, canResendVerification: false },
+    state: { message: `${RETRY} (${code})`, canResendVerification: false },
   });
   expect(warn).toHaveBeenCalledWith('auth:', 'magic_link', code);
 });
@@ -202,7 +216,7 @@ test('a reset that Neon Auth refuses for a reason other than no such user shows 
   const requestPasswordReset = vi.fn(async () => ({ ok: false, code: 'feature_not_supported' }) as const);
   expect(await requestPasswordResetAction(port({ requestPasswordReset }), form({ email: 'a@x.io' }), ORIGIN)).toEqual({
     kind: 'message',
-    state: { message: RETRY, canResendVerification: false },
+    state: { message: `${RETRY} (feature_not_supported)`, canResendVerification: false },
   });
 });
 
@@ -210,7 +224,23 @@ test('a resend that Neon Auth refuses shows the retry message', async () => {
   const resendVerification = vi.fn(async () => ({ ok: false, code: 'over_email_send_rate_limit' }) as const);
   expect(await resendVerificationAction(port({ resendVerification }), form({ email: 'a@x.io' }), ORIGIN)).toEqual({
     kind: 'message',
-    state: { message: RETRY, canResendVerification: false },
+    state: { message: `${RETRY} (over_email_send_rate_limit)`, canResendVerification: false },
+  });
+});
+
+test('a sign-up refused for a reason with no copy shows its code', async () => {
+  const signUp = vi.fn(async () => ({ ok: false, code: 'signup_disabled', cause: 'status=403 code=signup_disabled message=none' }) as const);
+  expect(await signUpAction(port({ signUp }), form({ ...credentials, name: 'Will' }), ORIGIN)).toEqual({
+    kind: 'message',
+    state: { message: `${RETRY} (signup_disabled: status=403 code=signup_disabled message=none)`, canResendVerification: false },
+  });
+});
+
+test('a reset refused shows its code', async () => {
+  const resetPassword = vi.fn(async () => ({ ok: false, code: 'invalid_token' }) as const);
+  expect(await resetPasswordAction(port({ resetPassword }), form({ token: 't', password: 'p' }), ORIGIN)).toEqual({
+    kind: 'message',
+    state: { message: `${RETRY} (invalid_token)`, canResendVerification: false },
   });
 });
 
@@ -222,4 +252,12 @@ test.each([
   ['something-else', undefined, null],
 ])('the sign-in notice for error=%s reset=%s', (error, reset, expected) => {
   expect(signInNotice(error, reset)).toBe(expected);
+});
+
+test('a Google sign-in the provider refuses shows its code', async () => {
+  const signInWithGoogle = vi.fn(async () => ({ ok: false, code: 'MISSING_REDIRECT_URL' }) as const);
+  expect(await signInWithGoogleAction(port({ signInWithGoogle }), form({}), ORIGIN)).toEqual({
+    kind: 'message',
+    state: { message: `${RETRY} (MISSING_REDIRECT_URL)`, canResendVerification: false },
+  });
 });

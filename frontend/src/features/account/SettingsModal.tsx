@@ -163,7 +163,7 @@ export function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
   const fail = (err: unknown) =>
     setNotice({
       status: 'error',
-      message: settingsErrorMessage((err as { code?: string } | null)?.code),
+      message: settingsErrorMessage(err),
     });
 
   const save = async () => {
@@ -256,7 +256,7 @@ export function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
               <Skeleton aria-label="Loading settings" />
             ) : settingsQuery.isError || !settings ? (
               <Banner status="error">
-                {settingsErrorMessage((settingsQuery.error as { code?: string } | null)?.code)}
+                {settingsErrorMessage(settingsQuery.error)}
               </Banner>
             ) : (
               <>

@@ -1275,6 +1275,23 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `GET watches with a non-numeric poi_id is 400, not every watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+
+            val resp = client.get("$WATCHES_PATH?poi_id=abc") { asUser(USER_TOKEN) }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("invalid_query", obj["error"]!!.jsonPrimitive.content)
+            assertEquals("poi_id must be an integer, got 'abc'", obj["detail"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `GET watches anonymous returns 401`() =
         testApplication {
             application {

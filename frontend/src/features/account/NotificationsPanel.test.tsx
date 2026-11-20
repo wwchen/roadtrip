@@ -207,10 +207,10 @@ describe('test buttons', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Send test message' }));
 
-    expect(await screen.findByText('Slack rejected this token.')).toBeInTheDocument();
+    expect(await screen.findByText('Slack rejected this token. (slack_invalid_auth)')).toBeInTheDocument();
   });
 
-  test('an unknown failure code still says something, and names the code', async () => {
+  test('an unknown failure code renders verbatim', async () => {
     const onTestEmail = vi.fn(async () => {
       throw Object.assign(new Error('nope'), { code: 'brand_new' });
     });
@@ -218,10 +218,7 @@ describe('test buttons', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Send test email' }));
 
-    expect(
-      // The code is the one thing that makes a bug report actionable.
-      await screen.findByText('Something went wrong (brand_new). Please try again.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('brand_new')).toBeInTheDocument();
   });
 
   test('a new test clears the previous result', async () => {
@@ -231,11 +228,11 @@ describe('test buttons', () => {
     renderPanel(settings(), { onTestSlack });
 
     await userEvent.click(screen.getByRole('button', { name: 'Send test message' }));
-    await screen.findByText('Slack rejected this token.');
+    await screen.findByText('Slack rejected this token. (slack_invalid_auth)');
 
     await userEvent.click(screen.getByRole('button', { name: 'Send test email' }));
 
-    expect(screen.queryByText('Slack rejected this token.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Slack rejected this token/)).not.toBeInTheDocument();
     expect(await screen.findByText('Sent')).toBeInTheDocument();
   });
 

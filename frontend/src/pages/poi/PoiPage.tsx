@@ -3,6 +3,7 @@ import { poiPageFor } from '@/domain/poi/types/registry';
 import { AvailabilityWeek } from '@/features/availability/AvailabilityWeek';
 import { poiFromUrl } from '@/lib/poi-url';
 import { usePoiDetail } from '@/queries/poi-detail';
+import { describeError } from '@/lib/error-report';
 import './poi-page-shell.css';
 
 const POI_SKELETON_HEIGHT = '320px';
@@ -42,7 +43,7 @@ export function PoiPage() {
 
       {query.isError ? (
         <Banner status="error" title="Could not load this place">
-          <p>The details request failed.</p>
+          <p>The details request failed. ({describeError(query.error)})</p>
           <Button variant="secondary" onClick={() => void query.refetch()}>
             Try again
           </Button>

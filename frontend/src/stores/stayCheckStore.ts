@@ -42,12 +42,13 @@ export interface StayCheckState {
   /** When the oldest answer was observed, as an ISO instant; null until one lands. */
   observedAt: string | null;
   failure: StayCheckFailure | null;
+  failureDetail: string | null;
   /** When a throttled check may be tried again, in epoch ms; null when nothing is cooling down. */
   retryAt: number | null;
   begin: (query: StayQuery, ids: readonly number[]) => void;
   /** Adds answers as they land, observed no later than [observedAt]. */
   record: (results: Readonly<Record<number, StayResult>>, observedAt: string) => void;
-  finish: (failure: StayCheckFailure | null, retryAt?: number | null) => void;
+  finish: (failure: StayCheckFailure | null, retryAt?: number | null, failureDetail?: string | null) => void;
   reset: () => void;
 }
 
@@ -58,8 +59,12 @@ const INITIAL = {
   running: false,
   observedAt: null,
   failure: null,
+  failureDetail: null,
   retryAt: null,
-} satisfies Pick<StayCheckState, 'query' | 'asked' | 'results' | 'running' | 'observedAt' | 'failure' | 'retryAt'>;
+} satisfies Pick<
+  StayCheckState,
+  'query' | 'asked' | 'results' | 'running' | 'observedAt' | 'failure' | 'failureDetail' | 'retryAt'
+>;
 
 export function sameStayQuery(a: StayQuery | null, b: StayQuery | null): boolean {
   if (a === null || b === null) return false;
@@ -79,7 +84,7 @@ export const useStayCheckStore = create<StayCheckState>((set) => ({
       results: { ...state.results, ...results },
       observedAt: earlier(state.observedAt, observedAt),
     })),
-  finish: (failure, retryAt = null) => set({ running: false, failure, retryAt }),
+  finish: (failure, retryAt = null, failureDetail = null) => set({ running: false, failure, retryAt, failureDetail }),
   // The cooldown outlives the question: the endpoint's limit is per caller, not per stay.
   reset: () => set((state) => ({ ...INITIAL, retryAt: state.retryAt })),
 }));

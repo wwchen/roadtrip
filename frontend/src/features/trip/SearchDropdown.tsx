@@ -15,6 +15,7 @@ export interface SearchDropdownProps {
   /** The keyboard-selected row, or -1 when the mouse is in charge. */
   activeIndex: number;
   onPick: (result: SearchResult) => void;
+  errors?: readonly string[];
 }
 
 /**
@@ -26,7 +27,7 @@ export interface SearchDropdownProps {
  */
 const kindColor = (kind: SearchKind): string => token(KIND_TOKEN[kind] ?? '--rt-kind-default');
 
-export function SearchDropdown({ results, activeIndex, onPick }: SearchDropdownProps) {
+export function SearchDropdown({ results, activeIndex, onPick, errors = [] }: SearchDropdownProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const headers = sectionHeaders(results);
 
@@ -41,7 +42,7 @@ export function SearchDropdown({ results, activeIndex, onPick }: SearchDropdownP
     (row as HTMLElement | null)?.scrollIntoView?.({ block: 'nearest' });
   }, [activeIndex]);
 
-  if (results.length === 0) return null;
+  if (results.length === 0 && errors.length === 0) return null;
 
   return (
     <div
@@ -51,6 +52,11 @@ export function SearchDropdown({ results, activeIndex, onPick }: SearchDropdownP
       role="listbox"
       aria-label="Search results"
     >
+      {errors.map((line) => (
+        <div key={line} className="tb-section" role="alert">
+          {line}
+        </div>
+      ))}
       {results.map((result, index) => (
         <div key={`${result.source}-${result.poiId ?? result.name}-${index}`}>
           {headers[index] ? <div className="tb-section">{headers[index]}</div> : null}
