@@ -48,7 +48,7 @@ FROM backend-base AS backend
 
 COPY --from=frontend /src/frontend/dist /app/static/frontend/dist
 
-FROM node:22-alpine AS web-build
+FROM node:26-alpine AS web-build
 
 WORKDIR /src
 
@@ -70,7 +70,7 @@ RUN npm run build --workspace @roadtrip/domain \
  && npm run build --workspace roadtrip-frontend \
  && npm run build --workspace @roadtrip/web
 
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 
 WORKDIR /app
 
