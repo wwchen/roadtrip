@@ -18,3 +18,22 @@ test('two forms on one page give their fields distinct ids, each label pointing 
   expect(new Set(inputIds).size).toBe(2);
   expect(labelTargets).toEqual(inputIds);
 });
+
+test('an alternate submit shares the main form and its email field, and skips the password requirement', () => {
+  const PASSWORD: FieldSpec = { name: 'password', label: 'Password', type: 'password', autoComplete: 'current-password' };
+  const html = renderToStaticMarkup(
+    <AuthForm
+      action={idle}
+      hidden={{ return_to: '/' }}
+      submitLabel="Sign in"
+      fields={[EMAIL, PASSWORD]}
+      alternate={{ action: idle, label: 'Email me a sign-in link instead' }}
+    />,
+  );
+  expect(html.match(/<form/g)).toHaveLength(1);
+  expect(html.match(/name="email"/g)).toHaveLength(1);
+  const submits = [...html.matchAll(/<button[^>]*type="submit"[^>]*>/g)].map((match) => match[0]);
+  expect(submits).toHaveLength(2);
+  expect(submits[0]).not.toContain('formNoValidate');
+  expect(submits[1]).toContain('formNoValidate');
+});

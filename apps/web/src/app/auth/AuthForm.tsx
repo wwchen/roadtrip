@@ -1,7 +1,7 @@
 'use client';
 
-import { Button, TextField } from '@lew-ds/lds-react';
-import { useActionState, useId } from 'react';
+import { Button, ButtonGroup, TextField } from '@lew-ds/lds-react';
+import { useActionState, useId, useState } from 'react';
 export interface AuthFormState {
   message: string | null;
   canResendVerification: boolean;
@@ -16,6 +16,11 @@ export interface FieldSpec {
   autoComplete: string;
 }
 
+export interface AlternateSubmit {
+  action: FormAction;
+  label: string;
+}
+
 export interface AuthFormProps {
   action: FormAction;
   submitLabel: string;
@@ -24,11 +29,16 @@ export interface AuthFormProps {
   message?: string | null;
   resendAction?: FormAction;
   resendLabel?: string;
-  variant?: 'primary' | 'secondary';
+  alternate?: AlternateSubmit;
+  variant?: 'primary' | 'secondary' | 'tertiary';
 }
+
+type Submitter = 'main' | 'alternate';
 
 const EMPTY_STATE: AuthFormState = { message: null, canResendVerification: false };
 const EMAIL_FIELD: FieldSpec = { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' };
+const UNUSED_ALTERNATE: FormAction = async (previous) => previous;
+const STRONG = 'strong';
 
 export function AuthForm({
   action,
@@ -38,10 +48,15 @@ export function AuthForm({
   message = null,
   resendAction,
   resendLabel,
+  alternate,
   variant = 'primary',
 }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, { ...EMPTY_STATE, message });
+  const [alternateState, alternateAction, alternatePending] = useActionState(alternate?.action ?? UNUSED_ALTERNATE, EMPTY_STATE);
+  const [lastSubmitter, setLastSubmitter] = useState<Submitter>('main');
   const formId = useId();
+  const busy = pending || alternatePending;
+  const shown = lastSubmitter === 'alternate' ? alternateState : state;
   return (
     <>
       <form action={formAction} className="auth-form">
@@ -59,16 +74,36 @@ export function AuthForm({
             required
           />
         ))}
-        <Button type="submit" variant={variant} disabled={pending}>
-          {submitLabel}
-        </Button>
-        {state.message === null ? null : (
+        <ButtonGroup orientation="vertical" width="fill">
+          <Button
+            type="submit"
+            emphasis={variant === 'primary' ? STRONG : undefined}
+            variant={variant === 'primary' ? undefined : variant}
+            disabled={busy}
+            onClick={() => setLastSubmitter('main')}
+          >
+            {submitLabel}
+          </Button>
+          {alternate === undefined ? null : (
+            <Button
+              type="submit"
+              variant="secondary"
+              formAction={alternateAction}
+              formNoValidate
+              disabled={busy}
+              onClick={() => setLastSubmitter('alternate')}
+            >
+              {alternate.label}
+            </Button>
+          )}
+        </ButtonGroup>
+        {shown.message === null ? null : (
           <p className="auth-message" role="status">
-            {state.message}
+            {shown.message}
           </p>
         )}
       </form>
-      {state.canResendVerification && resendAction !== undefined && resendLabel !== undefined ? (
+      {lastSubmitter === 'main' && state.canResendVerification && resendAction !== undefined && resendLabel !== undefined ? (
         <AuthForm action={resendAction} hidden={hidden} submitLabel={resendLabel} fields={[EMAIL_FIELD]} variant="secondary" />
       ) : null}
     </>

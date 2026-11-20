@@ -1,6 +1,7 @@
 import { TOKEN_FIELD } from '@/server/auth/authActions';
 import { RETURN_TO_PARAM, safeReturnTo } from '@/server/auth/returnTo';
 import { resetPassword } from '../actions';
+import { AuthCard } from '../AuthCard';
 import { AuthForm, type FieldSpec } from '../AuthForm';
 import { firstOf, type AuthSearchParams } from '../searchParams';
 
@@ -16,9 +17,8 @@ export default async function ResetPage({ searchParams }: { searchParams: AuthSe
   const returnTo = safeReturnTo(firstOf(params[RETURN_TO_PARAM]));
   const token = firstOf(params[TOKEN_FIELD]) ?? NO_TOKEN;
   return (
-    <section className="auth-panel">
-      <h1>Choose a new password</h1>
+    <AuthCard title="Choose a new password">
       <AuthForm action={resetPassword} submitLabel="Save password" fields={FIELDS} hidden={{ [RETURN_TO_PARAM]: returnTo, [TOKEN_FIELD]: token }} />
-    </section>
+    </AuthCard>
   );
 }

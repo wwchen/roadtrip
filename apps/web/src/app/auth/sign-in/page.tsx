@@ -1,8 +1,10 @@
-import Link from 'next/link';
+import { Link } from '@lew-ds/lds-react';
+import NextLink from 'next/link';
 import { ERROR_PARAM, RESET_PARAM, signInNotice } from '@/server/auth/authActions';
 import { FORGOT_PATH, SIGN_UP_PATH } from '@/server/auth/authPaths';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from '@/server/auth/returnTo';
 import { resendVerification, sendMagicLink, signInWithGoogle, signInWithPassword } from '../actions';
+import { AuthCard, AuthDivider } from '../AuthCard';
 import { AuthForm, type FieldSpec } from '../AuthForm';
 import { firstOf, type AuthSearchParams } from '../searchParams';
 
@@ -16,9 +18,19 @@ export default async function SignInPage({ searchParams }: { searchParams: AuthS
   const params = await searchParams;
   const returnTo = safeReturnTo(firstOf(params[RETURN_TO_PARAM]));
   return (
-    <section className="auth-panel">
-      <h1>Sign in</h1>
-      <AuthForm action={signInWithGoogle} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Continue with Google" fields={NO_FIELDS} variant="secondary" />
+    <AuthCard
+      title="Sign in"
+      footer={
+        <>
+          New here?{' '}
+          <Link as={NextLink} href={withReturnTo(SIGN_UP_PATH, returnTo)}>
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <AuthForm action={signInWithGoogle} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Continue with Google" fields={NO_FIELDS} variant="tertiary" />
+      <AuthDivider label="or" />
       <AuthForm
         action={signInWithPassword}
         hidden={{ [RETURN_TO_PARAM]: returnTo }}
@@ -27,12 +39,11 @@ export default async function SignInPage({ searchParams }: { searchParams: AuthS
         message={signInNotice(firstOf(params[ERROR_PARAM]), firstOf(params[RESET_PARAM]))}
         resendAction={resendVerification}
         resendLabel="Send it again"
+        alternate={{ action: sendMagicLink, label: 'Email me a sign-in link instead' }}
       />
-      <AuthForm action={sendMagicLink} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Email me a link" fields={[EMAIL]} variant="secondary" />
-      <nav className="auth-links">
-        <Link href={withReturnTo(SIGN_UP_PATH, returnTo)}>Create an account</Link>
-        <Link href={withReturnTo(FORGOT_PATH, returnTo)}>Forgot your password?</Link>
-      </nav>
-    </section>
+      <Link as={NextLink} className="auth-aside" href={withReturnTo(FORGOT_PATH, returnTo)}>
+        Forgot your password?
+      </Link>
+    </AuthCard>
   );
 }

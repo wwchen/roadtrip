@@ -1,7 +1,9 @@
-import Link from 'next/link';
+import { Link } from '@lew-ds/lds-react';
+import NextLink from 'next/link';
 import { SIGN_IN_PATH } from '@/server/auth/authPaths';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from '@/server/auth/returnTo';
 import { signUp } from '../actions';
+import { AuthCard } from '../AuthCard';
 import { AuthForm, type FieldSpec } from '../AuthForm';
 import { firstOf, type AuthSearchParams } from '../searchParams';
 
@@ -16,12 +18,18 @@ const FIELDS: readonly FieldSpec[] = [
 export default async function SignUpPage({ searchParams }: { searchParams: AuthSearchParams }) {
   const returnTo = safeReturnTo(firstOf((await searchParams)[RETURN_TO_PARAM]));
   return (
-    <section className="auth-panel">
-      <h1>Create an account</h1>
+    <AuthCard
+      title="Create an account"
+      footer={
+        <>
+          Already have one?{' '}
+          <Link as={NextLink} href={withReturnTo(SIGN_IN_PATH, returnTo)}>
+            Sign in
+          </Link>
+        </>
+      }
+    >
       <AuthForm action={signUp} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Create account" fields={FIELDS} />
-      <nav className="auth-links">
-        <Link href={withReturnTo(SIGN_IN_PATH, returnTo)}>I have an account</Link>
-      </nav>
-    </section>
+    </AuthCard>
   );
 }
