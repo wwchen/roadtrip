@@ -7,7 +7,9 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.support.causeChain
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.time.Instant
@@ -15,6 +17,7 @@ import java.time.Instant
 internal open class FailoverAvailabilityFetcher(
     private val cooldowns: ProviderCooldownTracker,
     private val clock: () -> Instant = Instant::now,
+    private val unrecognized: UnrecognizedStatusReporter = UnrecognizedStatusReporter(RoadtripMetrics.NoOp),
 ) {
     data class AttemptRecord(
         val provider: BookingProvider,
@@ -64,6 +67,7 @@ internal open class FailoverAvailabilityFetcher(
             when (attempt.outcome) {
                 FetchOutcome.OK -> {
                     cooldowns.recordSuccess(provider.id)
+                    attempt.batch?.let { unrecognized.report(provider.id, it.unrecognizedStatuses) }
                     return FailoverResult(batch = attempt.batch, servedBy = provider.id, attempts = attempts)
                 }
                 FetchOutcome.RATE_LIMITED,
@@ -103,11 +107,12 @@ internal open class FailoverAvailabilityFetcher(
                 )
             Attempt(outcome = FetchOutcome.OK, batch = batch, error = null)
         } catch (e: AvailabilityProviderError) {
-            Attempt(outcome = e.toFetchOutcome(), batch = null, error = e.message ?: e::class.simpleName, providerError = e)
+            Attempt(outcome = e.toFetchOutcome(), batch = null, error = causeChain(e), providerError = e)
         } catch (e: Throwable) {
             // The caller's cancellation is not this provider failing: hand it back.
             currentCoroutineContext().ensureActive()
-            Attempt(outcome = FetchOutcome.OTHER, batch = null, error = e.message ?: e.javaClass.simpleName)
+            val unknown = AvailabilityProviderError.Unknown(e)
+            Attempt(outcome = unknown.toFetchOutcome(), batch = null, error = causeChain(e), providerError = unknown)
         }
 
     private fun elapsedMs(
@@ -125,10 +130,10 @@ internal fun availabilityProviderErrorFromAttempt(last: FailoverAvailabilityFetc
     return when (last?.outcome) {
         FetchOutcome.RATE_LIMITED -> AvailabilityProviderError.RateLimited(cause)
         FetchOutcome.BLOCKED -> AvailabilityProviderError.UpstreamBlocked(cause)
-        FetchOutcome.UPSTREAM_5XX,
+        FetchOutcome.UPSTREAM_5XX -> AvailabilityProviderError.UpstreamUnavailable(cause)
         FetchOutcome.OK,
         FetchOutcome.OTHER,
         null,
-        -> AvailabilityProviderError.UpstreamUnavailable(cause)
+        -> AvailabilityProviderError.Unknown(cause)
     }
 }

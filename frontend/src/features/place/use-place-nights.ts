@@ -7,14 +7,8 @@ import {
   type PoiCampsitesAvailabilityResponse,
 } from '@/api/availability-api';
 import { fetchPoiCampsites, type Campsite } from '@/api/campsite-api';
-import {
-  AvailabilityRequestError,
-  GENERIC_AVAILABILITY_ERROR,
-  classifyAvailabilityErrorCode,
-  formatAvailabilityError,
-  retryingHelps,
-  type AvailabilityErrorBody,
-} from '@/lib/availability-errors';
+import { AvailabilityRequestError, retryingHelps } from '@/lib/availability-errors';
+import { describeError } from '@/lib/error-report';
 import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
 import {
   NO_WATCH_CAPABILITIES,
@@ -81,12 +75,7 @@ export function usePlaceNights(poiId: number, stay: PlaceStay): PlaceNightsView 
         signal,
       });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as AvailabilityErrorBody | null;
-        throw new AvailabilityRequestError(
-          formatAvailabilityError(body, response.status),
-          response.status,
-          typeof body?.error === 'string' ? body.error : null,
-        );
+        throw new AvailabilityRequestError(response.status, await response.text().catch(() => null));
       }
       return (await response.json()) as PoiCampsitesAvailabilityResponse;
     },
@@ -130,9 +119,8 @@ export function usePlaceNights(poiId: number, stay: PlaceStay): PlaceNightsView 
 export function failureOf(error: unknown, retry: () => void): PlaceNightsFailure | null {
   if (error == null) return null;
   const stated = error instanceof AvailabilityRequestError ? error : null;
-  const kind = classifyAvailabilityErrorCode(stated?.code ?? null);
   return {
-    reason: stated?.message || GENERIC_AVAILABILITY_ERROR,
-    retry: retryingHelps(kind) ? retry : null,
+    reason: stated ? stated.message : describeError(error),
+    retry: retryingHelps(stated?.code ?? null) ? retry : null,
   };
 }

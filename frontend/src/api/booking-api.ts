@@ -51,6 +51,7 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
         provider_display?: string;
         cartUrl?: string;
         cart_url?: string;
+        detail?: string;
       }
     | null
     | undefined;
@@ -59,6 +60,7 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
     provider: carried?.provider,
     provider_display: carried?.providerDisplay ?? carried?.provider_display,
     cart_url: carried?.cartUrl ?? carried?.cart_url,
+    detail: carried?.detail,
   };
 }
 

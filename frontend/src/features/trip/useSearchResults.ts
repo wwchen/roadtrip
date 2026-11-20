@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { geocode } from '@/api/geocode-api';
 import { searchPois } from '@/api/poi-api';
 import { queryKeys } from '@/queries/keys';
+import { describeError } from '@/lib/error-report';
 import { useMapStore } from '@/stores/mapStore';
 import { GEOCODE_DEBOUNCE_MS } from '@/stores/tripStore';
 import {
@@ -32,11 +33,15 @@ const PROXIMITY_PRECISION = 4;
  */
 const SEARCH_CACHE_MS = 5 * 60_000;
 
+const POI_SEARCH_FAILED = 'Campground search failed';
+const PLACE_SEARCH_FAILED = 'Place search failed';
+
 export interface SearchResults {
   results: SearchResult[];
   isFetching: boolean;
   /** True when both sources answered and neither had anything. */
   isEmpty: boolean;
+  errors: string[];
 }
 
 /**
@@ -101,9 +106,6 @@ export function useSearchResults(query: string): SearchResults {
     staleTime: SEARCH_CACHE_MS,
   });
 
-  // The only report a failed source gets: the other source's rows still show, and
-  // a red banner over a search box the user is still typing in is worse than fewer
-  // results. The vanilla logged the same way, inside its per-source catch.
   useEffect(() => {
     if (pois.error) console.warn('POI search failed', pois.error);
   }, [pois.error]);
@@ -115,9 +117,17 @@ export function useSearchResults(query: string): SearchResults {
     ? mergeSearchResults(poiSearchResults(pois.data?.results), geocodeSearchResults(places.data?.results))
     : [];
 
+  const errors = enabled
+    ? [
+        pois.error ? `${POI_SEARCH_FAILED}: ${describeError(pois.error)}` : null,
+        places.error ? `${PLACE_SEARCH_FAILED}: ${describeError(places.error)}` : null,
+      ].filter((line): line is string => line !== null)
+    : [];
+
   return {
     results,
     isFetching: pois.isFetching || places.isFetching,
-    isEmpty: enabled && !pois.isFetching && !places.isFetching && results.length === 0,
+    isEmpty: enabled && !pois.isFetching && !places.isFetching && results.length === 0 && errors.length === 0,
+    errors,
   };
 }

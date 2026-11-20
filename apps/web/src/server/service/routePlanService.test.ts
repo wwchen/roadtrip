@@ -56,9 +56,13 @@ test('identical adjacent waypoints are duplicate_adjacent without an upstream ca
 test('an upstream failure is routing_unavailable with its message', async () => {
   const plan = createRoutePlanner({
     directions: async () => {
-      throw new RoutingUnavailableError('Mapbox HTTP 500');
+      throw new RoutingUnavailableError('Mapbox code=NoRoute: No route found', 'no_route');
     },
     corridor: async () => CORRIDOR,
   });
-  expect(await plan.plan([[0, 0], [1, 1]], null)).toEqual({ status: 'routing_unavailable', detail: 'Mapbox HTTP 500' });
+  expect(await plan.plan([[0, 0], [1, 1]], null)).toEqual({
+    status: 'routing_unavailable',
+    failure: 'no_route',
+    detail: 'Mapbox code=NoRoute: No route found',
+  });
 });

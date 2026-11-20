@@ -19,16 +19,20 @@ import ca.floo.roadtrip.service.auth.IdentityProviderRegistry
 import ca.floo.roadtrip.service.auth.OidcIdentityProvider
 import ca.floo.roadtrip.service.auth.SessionService
 import ca.floo.roadtrip.service.auth.UserProvisioningService
+import ca.floo.roadtrip.support.AuthException
+import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.application.install
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -38,6 +42,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
+import java.io.IOException
 import java.time.Duration
 import java.time.OffsetDateTime
 import kotlin.test.Test
@@ -93,7 +98,7 @@ private const val AUTHORIZE_URL = "https://test.example/authorize"
  * discovery over the network. It echoes the connection hint it was handed, which
  * is what makes the route's allowlist observable from outside.
  */
-private class EchoingIdentityProvider : IdentityProvider {
+private open class EchoingIdentityProvider : IdentityProvider {
     override val id: String = OidcIdentityProvider.ID
 
     override suspend fun authorizationRequest(
@@ -111,7 +116,9 @@ private class EchoingIdentityProvider : IdentityProvider {
         code: String,
         codeVerifier: String,
         expectedNonce: String,
-    ): IdentityClaims =
+    ): IdentityClaims = claims()
+
+    protected fun claims(): IdentityClaims =
         IdentityClaims(
             subject = "oidc|user-1",
             email = stubUser.email,
@@ -122,8 +129,18 @@ private class EchoingIdentityProvider : IdentityProvider {
     override suspend fun logoutUrl(returnTo: String): String? = null
 }
 
+private class ThrowingIdentityProvider(
+    private val failure: Exception,
+) : EchoingIdentityProvider() {
+    override suspend fun exchange(
+        code: String,
+        codeVerifier: String,
+        expectedNonce: String,
+    ): IdentityClaims = throw failure
+}
+
 /** Minimal [AuthRouteWiring]: only `resolve` and `beginLogin` are exercised. */
-private fun authOnWiring(): AuthRouteWiring {
+private fun authOnWiring(provider: IdentityProvider = EchoingIdentityProvider()): AuthRouteWiring {
     val fakeAuthConfig =
         AuthConfig(
             issuer = "https://test.example",
@@ -142,7 +159,7 @@ private fun authOnWiring(): AuthRouteWiring {
             config = fakeAuthConfig,
             identityProviderRegistry =
                 IdentityProviderRegistry(
-                    providers = listOf(EchoingIdentityProvider()),
+                    providers = listOf(provider),
                     activeId = IdentityProviderId(OidcIdentityProvider.ID),
                 ),
             userProvisioningService = UserProvisioningService(JooqUnitOfWork(detachedCtx)),
@@ -262,6 +279,94 @@ class AuthRoutesTest {
                 body["code_challenge"]!!.jsonPrimitive.content.isNotBlank(),
                 "the PKCE challenge is derived from the verifier the flow cookie carries",
             )
+        }
+
+    @Test
+    fun `POST password begin with no body still begins`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
+            }
+            val resp = client.post("/auth/password/begin")
+            assertEquals(HttpStatusCode.OK, resp.status)
+        }
+
+    @Test
+    fun `POST password begin with a malformed body is 400 with the parser's detail, not a silent default`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
+            }
+            val resp =
+                client.post("/auth/password/begin") {
+                    contentType(ContentType.Application.Json)
+                    setBody("{not json")
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("invalid_body", body["error"]!!.jsonPrimitive.content)
+            assertTrue(body["detail"]!!.jsonPrimitive.content.isNotBlank())
+        }
+
+    private suspend fun ApplicationTestBuilder.completePasswordLogin(): HttpResponse {
+        val cookieClient = createClient { install(HttpCookies) }
+        cookieClient.post("/auth/password/begin")
+        return cookieClient.post("/auth/password/complete") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"code":"the-code","state":"state"}""")
+        }
+    }
+
+    @Test
+    fun `a refused login code is 401 login_failed`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
+                routeTestApplication {
+                    authRoutes(wiring = authOnWiring(ThrowingIdentityProvider(AuthException("Token exchange failed: 400"))))
+                }
+            }
+            val resp = completePasswordLogin()
+            assertEquals(HttpStatusCode.Unauthorized, resp.status)
+            assertEquals(
+                "login_failed",
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
+        }
+
+    @Test
+    fun `an unreachable identity provider is 502 with the cause, not a refused login`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
+                routeTestApplication {
+                    authRoutes(wiring = authOnWiring(ThrowingIdentityProvider(IOException("connect timed out"))))
+                }
+            }
+            val resp = completePasswordLogin()
+            assertEquals(HttpStatusCode.BadGateway, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("identity_provider_unreachable", body["error"]!!.jsonPrimitive.content)
+            assertEquals("IOException: connect timed out", body["detail"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `a storage failure while signing in is 500 with the cause, not a refused login`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
+            }
+            val resp = completePasswordLogin()
+            assertEquals(HttpStatusCode.InternalServerError, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("login_internal_error", body["error"]!!.jsonPrimitive.content)
+            assertTrue(body["detail"]!!.jsonPrimitive.content.isNotBlank())
         }
 
     @Test

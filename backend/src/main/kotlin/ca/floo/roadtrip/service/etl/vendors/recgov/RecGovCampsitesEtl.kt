@@ -127,6 +127,7 @@ class RecGovCampsitesEtl(
                                         mapOf("_parent_facility_id" to JsonPrimitive(facilityId)),
                                     ),
                             ),
+                            listOfNotNull(siteKind.warning),
                         ),
                     )
                 }

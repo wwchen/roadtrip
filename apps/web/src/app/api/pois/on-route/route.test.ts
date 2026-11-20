@@ -8,11 +8,11 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-test('with no MAPBOX_TOKEN, on-route is 503 routing_unavailable', async () => {
+test('with no MAPBOX_TOKEN, on-route is 503 routing_not_configured with the reason', async () => {
   vi.stubEnv('MAPBOX_TOKEN', '');
   const response = await post(BODY);
   expect(response.status).toBe(503);
-  expect(await response.json()).toEqual({ error: 'routing_unavailable' });
+  expect(await response.json()).toEqual({ error: 'routing_not_configured', detail: 'MAPBOX_TOKEN not set' });
 });
 
 test('radius_miles 0 is 400 bad_request', async () => {

@@ -4,7 +4,7 @@
 import { readFile } from 'node:fs/promises'
 import { format } from 'node:util'
 import { pathToFileURL } from 'node:url'
-import { addToCart } from './cart.js'
+import { addToCart, cartCheckDetail } from './cart.js'
 import {
   cartMatchFromArgs,
   cartMatchFromAtcInput,
@@ -16,9 +16,9 @@ const EXIT_SUCCESS = 0
 const EXIT_RUNTIME_FAILURE = 1
 const EXIT_USAGE = 2
 const ERROR_INVALID_PAYLOAD = 'invalid_payload'
-const ERROR_CART_NOT_ADDED = 'cart_not_added'
+const ERROR_ATC_RESULT_UNEXPLAINED = 'atc_result_unexplained'
 const ERROR_ADD_TO_CART_EXCEPTION = 'add_to_cart_exception'
-const DEFAULT_CART_NOT_ADDED_DETAIL = 'cart automation did not confirm a cart hold'
+const ATC_RESULT_UNEXPLAINED_DETAIL = 'cart automation returned a failure without an error code'
 
 export async function runAtcOnce ({
   argv = process.argv.slice(2),
@@ -83,8 +83,8 @@ export async function runAtcOnce ({
   }
 
   writeResult(stdout, failureResult(
-    result?.error || ERROR_CART_NOT_ADDED,
-    result?.detail || cartNotAddedDetail(result?.cart_check),
+    result?.error || result?.cart_check?.reason || ERROR_ATC_RESULT_UNEXPLAINED,
+    result?.detail || (result?.cart_check ? cartCheckDetail(result.cart_check) : ATC_RESULT_UNEXPLAINED_DETAIL),
     {
       ...base,
       corrective_action: result?.corrective_action,
@@ -163,13 +163,6 @@ function failureResult (error, detail, extra = {}) {
     detail,
     ...extra,
   }
-}
-
-function cartNotAddedDetail (cartCheck) {
-  if (!cartCheck?.reason) return DEFAULT_CART_NOT_ADDED_DETAIL
-  const status = cartCheck.status === null || cartCheck.status === undefined ? '?' : cartCheck.status
-  const reservations = cartCheck.reservation_count === undefined ? '?' : cartCheck.reservation_count
-  return `cart verification failed: reason=${cartCheck.reason} status=${status} reservations=${reservations}`
 }
 
 function writeResult (stdout, result) {

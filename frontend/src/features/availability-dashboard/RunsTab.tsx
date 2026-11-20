@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Banner, Button, EmptyState, Select, Skeleton, Table, Tag, TextField } from '@ui';
 import { formatTimestamp, truncate } from '@/lib/format';
+import { describeError } from '@/lib/error-report';
 import { useRuns, type RunFilters } from './useDashboard';
 import { TAB_POLLERS, type TabParams, type TabRoute } from './useTabRoute';
 
@@ -137,7 +138,7 @@ export function RunsTab({ route }: RunsTabProps) {
 
       <section className="rt-dash-panel" aria-live="polite">
         {runs.isError ? (
-          <Banner status="error">{`Error: ${(runs.error as Error)?.message ?? 'failed'}`}</Banner>
+          <Banner status="error">{`Error: ${describeError(runs.error)}`}</Banner>
         ) : runs.isPending ? (
           <Skeleton aria-label="Loading runs" />
         ) : (

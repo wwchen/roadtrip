@@ -332,6 +332,30 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `invalid query values are 400 naming the parameter, never a silent default`() =
+        testApplication {
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
+            val cases =
+                listOf(
+                    "/api/availability/runs?poller_id=abc" to "poller_id",
+                    "/api/availability/runs?since=yesterday" to "since",
+                    "/api/availability/runs?limit=lots" to "limit",
+                    "/api/availability/pollers?offset=first" to "offset",
+                    "/api/availability/changes?poi_id=1&target_date=tomorrow" to "target_date",
+                    "/api/availability/changes?campsite_id=x" to "campsite_id",
+                    "/api/availability/changes/summary?poi_id=1&dates=2026-07-04,someday" to "dates",
+                )
+            for ((url, param) in cases) {
+                val resp = client.get(url)
+                assertEquals(HttpStatusCode.BadRequest, resp.status, url)
+                val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+                assertEquals("invalid_query", body["error"]!!.jsonPrimitive.content, url)
+                val detail = body["detail"]!!.jsonPrimitive.content
+                kotlin.test.assertTrue(detail.startsWith(param), "$url: $detail")
+            }
+        }
+
+    @Test
     fun `GET changes summary requires poi id`() =
         testApplication {
             application { routeTestApplication { testAvailabilityDashboardRoutes() } }

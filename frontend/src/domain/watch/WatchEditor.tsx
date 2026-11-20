@@ -2,7 +2,7 @@
 // opening the editor can never silently strip its configuration.
 import { useId, useState, type ReactNode } from 'react';
 import { LinkButton } from '@ui';
-import { HttpError } from '@/api/http';
+import { errorFactsOf, errorReport } from '@/lib/error-report';
 import type { Watch } from '@/api/watches-api';
 import {
   TRIGGER_KIND_ATC,
@@ -297,19 +297,19 @@ function initialState(
   return { ...state, slackNotify, emailNotify };
 }
 
-/**
- * Turn a save failure into copy.
- *
- * The recognised cases are the ones a user can act on; everything else is "try
- * again", because a raw server message here is noise in a 240px popover.
- */
 function saveErrorMessage(caught: unknown): string {
   // Deliberately says nothing about an expired session, even though that is a failure
   // mode here: a 401 withdraws every watch affordance, which unmounts the cell this
   // popover is anchored to and therefore closes the popover. A message in here would
-  // be raised into a component that is about to disappear.
-  const body = caught instanceof HttpError && typeof caught.body === 'string' ? caught.body : '';
-  if (body.includes('unsupported_trigger')) return 'Add to cart is not available for this watch.';
-  if (body.includes('invalid_trigger_config')) return 'Check the trigger settings and try again.';
-  return 'Could not save. Try again.';
+  // be raised into a component that is about to disappear. `AvailabilityWeek` raises a
+  // toast instead — one surface, and one that outlives the popover.
+  const facts = errorFactsOf(caught);
+  return errorReport((facts.code === null ? undefined : SAVE_ERROR_COPY.get(facts.code)) ?? SAVE_FAILED, facts);
 }
+
+const SAVE_FAILED = 'Could not save. Try again.';
+
+const SAVE_ERROR_COPY = new Map<string, string>([
+  ['unsupported_trigger', 'Add to cart is not available for this watch.'],
+  ['invalid_trigger_config', 'Check the trigger settings and try again.'],
+]);

@@ -24,7 +24,7 @@ class CampsiteKindsTest {
                 "GROUP STANDARD NONELECTRIC" to CampsiteKind.GROUP,
                 "GROUP TENT ONLY AREA NONELECTRIC" to CampsiteKind.GROUP,
                 "GROUP SHELTER NONELECTRIC" to CampsiteKind.GROUP,
-                "GROUP PICNIC AREA" to CampsiteKind.GROUP,
+                "GROUP PICNIC AREA" to CampsiteKind.DAY_USE,
                 "EQUESTRIAN NONELECTRIC" to CampsiteKind.EQUESTRIAN,
                 "CABIN NONELECTRIC" to CampsiteKind.CABIN,
                 "CABIN ELECTRIC" to CampsiteKind.CABIN,
@@ -88,7 +88,7 @@ class CampsiteKindsTest {
                 "management" to CampsiteKind.OTHER,
             )
 
-        assertEquals(expected, expected.keys.associateWith { CampsiteKinds.campflare(it) })
+        assertEquals(expected, expected.keys.associateWith { CampsiteKinds.campflare(it).kind })
     }
 
     @Test
@@ -97,7 +97,7 @@ class CampsiteKindsTest {
 
         assertEquals(
             unclassifiable.map { CampsiteKind.OTHER },
-            unclassifiable.map { CampsiteKinds.campflare(it) },
+            unclassifiable.map { CampsiteKinds.campflare(it).kind },
         )
     }
 
@@ -139,9 +139,22 @@ class CampsiteKindsTest {
                 "Guided Event" to CampsiteKind.DAY_USE,
                 "Hiking Trip" to CampsiteKind.DAY_USE,
                 "Ferry" to CampsiteKind.DAY_USE,
+                "Backcountry Yurt" to CampsiteKind.CABIN,
+                "Cama Beach Cabin" to CampsiteKind.CABIN,
+                "Cama Beach Cabin Category" to CampsiteKind.CABIN,
+                "Elfin Lakes Shelter" to CampsiteKind.CABIN,
+                "Boat In" to CampsiteKind.BOAT_IN,
+                "Group Picnic Area" to CampsiteKind.DAY_USE,
+                "Parking" to CampsiteKind.DAY_USE,
+                "Shuttle" to CampsiteKind.DAY_USE,
+                "Guided Hike" to CampsiteKind.DAY_USE,
+                "Learn-to Activity" to CampsiteKind.DAY_USE,
+                "Day Runner Hike" to CampsiteKind.DAY_USE,
+                "Backpacking Trip" to CampsiteKind.BACKCOUNTRY,
+                "Access Point" to CampsiteKind.BACKCOUNTRY,
             )
 
-        assertEquals(expected, expected.keys.associateWith { CampsiteKinds.aspira(it) })
+        assertEquals(expected, expected.keys.associateWith { CampsiteKinds.aspira(it).kind })
     }
 
     @Test
@@ -150,7 +163,7 @@ class CampsiteKindsTest {
 
         assertEquals(
             unclassifiable.map { CampsiteKind.OTHER },
-            unclassifiable.map { CampsiteKinds.aspira(it) },
+            unclassifiable.map { CampsiteKinds.aspira(it).kind },
         )
     }
 
@@ -191,6 +204,8 @@ class CampsiteKindsTest {
                 "Premium Hook Up (E/W) Campsite" to CampsiteKind.RV,
                 "Tent Site" to CampsiteKind.TENT,
                 "Day Use" to CampsiteKind.DAY_USE,
+                "Dorm (2 ppl)" to CampsiteKind.CABIN,
+                "Beach Dorm (4 ppl)" to CampsiteKind.CABIN,
                 "site" to CampsiteKind.OTHER,
                 "RV Site" to CampsiteKind.OTHER,
                 "" to CampsiteKind.OTHER,
@@ -198,6 +213,30 @@ class CampsiteKindsTest {
 
         assertEquals(expected, expected.keys.associateWith { CampsiteKinds.reserveCalifornia(it).kind })
         assertEquals(CampsiteKind.OTHER, CampsiteKinds.reserveCalifornia(null).kind)
+    }
+
+    @Test
+    fun `rec gov longest leading phrase wins so a group picnic area is day use`() {
+        assertEquals(CampsiteKind.DAY_USE, CampsiteKinds.recgov("GROUP PICNIC AREA").kind)
+        assertEquals(CampsiteKind.GROUP, CampsiteKinds.recgov("GROUP STANDARD AREA ELECTRIC").kind)
+        assertEquals(CampsiteKind.GROUP, CampsiteKinds.recgov("GROUP SHELTER ELECTRIC").kind)
+    }
+
+    @Test
+    fun `an unlisted vendor value is named verbatim in a warning and a missing one says so`() {
+        assertEquals("unlisted rec.gov campsite_type 'BALL FIELD'", CampsiteKinds.recgov(" BALL FIELD ").warning)
+        assertEquals(false, CampsiteKinds.recgov("SOMETHING NEW NONELECTRIC").electric)
+        assertEquals("no rec.gov campsite_type", CampsiteKinds.recgov("   ").warning)
+        assertEquals(null, CampsiteKinds.recgov("STANDARD ELECTRIC").warning)
+        assertEquals("unlisted Campflare kind 'houseboat'", CampsiteKinds.campflare("houseboat").warning)
+        assertEquals("no Campflare kind", CampsiteKinds.campflare(null).warning)
+        assertEquals(VendorKind(CampsiteKind.OTHER, null), CampsiteKinds.campflare("management"))
+        assertEquals("unlisted Aspira resource category 'ELC'", CampsiteKinds.aspira("ELC").warning)
+        assertEquals("no Aspira resource category", CampsiteKinds.aspira(null).warning)
+        assertEquals(null, CampsiteKinds.aspira("Group Camp").warning)
+        assertEquals("unlisted ReserveCalifornia unit type 'RV Site'", CampsiteKinds.reserveCalifornia("RV Site").warning)
+        assertEquals("no ReserveCalifornia unit type", CampsiteKinds.reserveCalifornia("").warning)
+        assertEquals(null, CampsiteKinds.reserveCalifornia("Tent Campsite").warning)
     }
 
     @Test

@@ -54,7 +54,7 @@ export async function findAvailabilityCampground(db: Db, poiId: bigint): Promise
   `);
   const row = rows[0];
   if (row === undefined) return null;
-  const decoder = createColumnDecoder();
+  const decoder = createColumnDecoder(`campgrounds id=${String(row.campground_id)}`);
   return {
     campgroundId: BigInt(row.campground_id as string),
     dataProvider: row.data_provider as string,
@@ -110,7 +110,7 @@ export async function campgroundBookingIdentities(
           WHERE id = ANY(${pgArrayLiteral(campsiteIds.map(String))}::bigint[])
           ORDER BY id
         `);
-  const decoder = createColumnDecoder();
+  const decoder = createColumnDecoder(`campgrounds id=${String(campgroundId)} campsites ids=${campsiteIds.join(",")}`);
   return {
     campground: campground === undefined ? { bookingProvider: null, bookingProviderRef: null, bookingAliases: [] } : bookingIdentityOf(campground, decoder),
     campsites: sites.map((site) => bookingIdentityOf(site, decoder)),

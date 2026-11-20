@@ -11,6 +11,7 @@ import { isStandardBookable } from './facility.js';
 const NO_UNITS_SUFFIX = 'no ReserveCalifornia grid payloads with units parsed';
 const NOT_STANDARD_BOOKABLE = 'facility is not standard bookable';
 const MISSING_PARENT_PLACE_ID = 'missing parent place id';
+const NO_UNIT_TYPE_ID = 'ReserveCalifornia unit has no UnitTypeId';
 
 export class ReserveCaliforniaSitesEtl implements SourceEtl<ReserveCaliforniaCatalog, CampsiteUpsertCandidate> {
   constructor(readonly etlSlug: string) {}
@@ -45,11 +46,19 @@ export class ReserveCaliforniaSitesEtl implements SourceEtl<ReserveCaliforniaCat
         yield { ok: false, sourceId, errors: [`facility not linked from parent place ${placeId}`] };
         continue;
       }
-      const unitType = place.unitTypeByFacilityId.get(grid.facilityId) ?? null;
-      const siteKind = campsiteKindReserveCalifornia(unitType);
+      const unitTypeNames = place.unitTypeNamesByFacilityId.get(grid.facilityId);
       for (const unit of grid.units) {
+        const unitType = unit.unitTypeId === null ? null : (unitTypeNames?.get(unit.unitTypeId) ?? null);
+        const siteKind = campsiteKindReserveCalifornia(unitType);
+        const kindWarning =
+          unit.unitTypeId === null
+            ? NO_UNIT_TYPE_ID
+            : unitType === null
+              ? `ReserveCalifornia unit type ${unit.unitTypeId} not listed by place ${placeId} facility ${grid.facilityId}`
+              : siteKind.warning;
         yield {
           ok: true,
+          warnings: kindWarning === null ? [] : [kindWarning],
           record: {
             dataProviderRef: DataProviderRef.reserveCalifornia(unit.unitId.toString()),
             bookingProvider: BookingProvider.RESERVECALIFORNIA,

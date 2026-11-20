@@ -228,9 +228,12 @@ describe('saving', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
-  test('re-enables and explains after a failure', async () => {
+  test('re-enables and explains after a failure, with the raw refusal', async () => {
     const failing = vi.fn(async () => {
-      throw new HttpError('/api/watches', 400);
+      const error = new HttpError('/api/watches', 400);
+      error.code = 'invalid_window';
+      error.detail = 'end_date must be after start_date';
+      throw error;
     });
     open({ capabilities: caps(['slack_notify']), onSave: failing });
 
@@ -238,28 +241,32 @@ describe('saving', () => {
       save().click();
     });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not save. Try again.');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not save. Try again. (invalid_window: end_date must be after start_date · HTTP 400)',
+    );
     expect(save()).not.toBeDisabled();
   });
 
   test('names the two failures a user can act on', async () => {
-    const withBody = (body: string) =>
+    const withCode = (code: string) =>
       vi.fn(async () => {
         const error = new HttpError('/api/watches', 422);
-        error.body = body;
+        error.code = code;
         throw error;
       });
 
-    const first = open({ capabilities: caps(['slack_notify']), onSave: withBody('unsupported_trigger') });
+    const first = open({ capabilities: caps(['slack_notify']), onSave: withCode('unsupported_trigger') });
     await act(async () => save().click());
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Add to cart is not available for this watch.',
+      'Add to cart is not available for this watch. (unsupported_trigger · HTTP 422)',
     );
     first.unmount();
 
-    open({ capabilities: caps(['slack_notify']), onSave: withBody('invalid_trigger_config') });
+    open({ capabilities: caps(['slack_notify']), onSave: withCode('invalid_trigger_config') });
     await act(async () => save().click());
-    expect(screen.getByRole('alert')).toHaveTextContent('Check the trigger settings and try again.');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Check the trigger settings and try again. (invalid_trigger_config · HTTP 422)',
+    );
   });
 
   test('an aborted save reports nothing', async () => {

@@ -11,4 +11,5 @@ data class AvailabilityObservationBatch(
     val cacheBlock: AvailabilityCacheBlock,
     val scope: BookingProviderRef? = null,
     val campsiteId: Long? = null,
+    val unrecognizedStatuses: Map<String, Int> = emptyMap(),
 )

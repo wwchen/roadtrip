@@ -1,5 +1,12 @@
 import { expect, test, vi } from 'vitest';
-import { AUTH_UNAVAILABLE, EMAIL_NOT_VERIFIED, PASSWORD_TOO_SHORT, USER_ALREADY_EXISTS, USER_NOT_FOUND } from './authPort';
+import {
+  AUTH_UNAVAILABLE,
+  EMAIL_NOT_VERIFIED,
+  INVALID_CREDENTIALS,
+  PASSWORD_TOO_SHORT,
+  USER_ALREADY_EXISTS,
+  USER_NOT_FOUND,
+} from './authPort';
 import { causeOf, portCodeOf } from './neonAuth';
 
 const STATUS_FORBIDDEN = 403;
@@ -17,7 +24,9 @@ test.each([
   [{ code: 'unexpected_failure', status: 400 }, AUTH_UNAVAILABLE],
   [{ code: 'over_request_rate_limit', status: STATUS_UNAVAILABLE }, AUTH_UNAVAILABLE],
   [{ code: 'user_not_found', status: 404 }, USER_NOT_FOUND],
-  [{ code: 'invalid_credentials', status: 401 }, 'invalid_credentials'],
+  [{ code: 'invalid_credentials', status: 401 }, INVALID_CREDENTIALS],
+  [{ code: 'INVALID_EMAIL_OR_PASSWORD', status: 401 }, INVALID_CREDENTIALS],
+  [{ code: 'banned_user', status: 403 }, 'banned_user'],
   [{ status: 401 }, 'UNKNOWN'],
 ])('the SDK error %j reaches the port as %s', (error, expected) => {
   expect(portCodeOf(error)).toBe(expected);
@@ -38,7 +47,9 @@ test('a partial sign-in setup logs the error and leaves sign-in off', async () =
 });
 
 test('the cause names the status and code Neon Auth answered, and says when either is absent', () => {
-  expect(causeOf({ status: 500 })).toBe('status=500 code=none');
-  expect(causeOf({ code: 'weak_password', status: 422 })).toBe('status=422 code=weak_password');
-  expect(causeOf({})).toBe('status=none code=none');
+  expect(causeOf({ status: 500 })).toBe('status=500 code=none message=none');
+  expect(causeOf({ code: 'weak_password', status: 422, message: 'Password too short' })).toBe(
+    'status=422 code=weak_password message=Password too short',
+  );
+  expect(causeOf({})).toBe('status=none code=none message=none');
 });

@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import {
+  AvailabilityRequestError,
   classifyAvailabilityErrorCode,
   formatAvailabilityError,
   retryingHelps,
 } from './availability-errors';
 
 describe('formatting a provider fault', () => {
-  test('names each known code', () => {
+  test('names each known code and keeps the raw code beside it', () => {
     const cases: Array<[string, string]> = [
       ['rate_limited', 'Booking site rate-limited us — try again shortly'],
       ['upstream_blocked', 'Booking site blocked the request'],
@@ -14,25 +15,26 @@ describe('formatting a provider fault', () => {
       ['upstream_unreachable', 'Could not reach the booking site'],
       ['unsupported', 'Provider not supported'],
       ['provider_misconfigured', 'Provider misconfigured — we are on it'],
-      ['ip_throttled', 'Too many requests — slow down'],
+      ['ip_throttled', 'Too many requests from this network — slow down'],
       ['availability_unavailable', 'Availability is unavailable right now — try again shortly'],
-      // A stale shared link can ask past the horizon; the raw code is not an answer.
       ['beyond_booking_horizon', 'That date is past what this provider lets you book'],
       ['start_before_earliest', 'That date is before this campground takes bookings'],
     ];
     for (const [code, expected] of cases) {
-      expect(formatAvailabilityError({ error: code }, 503)).toBe(expected);
+      expect(formatAvailabilityError({ error: code }, 503)).toBe(`${expected} (${code} · HTTP 503)`);
     }
   });
 
-  test('appends the upstream status when there is one', () => {
-    expect(formatAvailabilityError({ error: 'upstream_blocked', upstream_status: 403 }, 502)).toBe(
-      'Booking site blocked the request (upstream HTTP 403)',
-    );
+  test('carries the detail and the upstream status', () => {
+    expect(
+      formatAvailabilityError({ error: 'upstream_blocked', detail: 'key rejected', upstream_status: 403 }, 502),
+    ).toBe('Booking site blocked the request (upstream_blocked: key rejected · HTTP 502 · upstream HTTP 403)');
   });
 
-  test('shows an unrecognised code verbatim', () => {
-    expect(formatAvailabilityError({ error: 'captcha_wall' }, 503)).toBe('captcha_wall');
+  test('shows an unrecognised code verbatim with its detail', () => {
+    expect(formatAvailabilityError({ error: 'captcha_wall', detail: 'cf challenge' }, 503)).toBe(
+      'captcha_wall: cf challenge · HTTP 503',
+    );
   });
 
   test('falls back to the HTTP status with no code', () => {
@@ -43,16 +45,16 @@ describe('formatting a provider fault', () => {
 
   test('ignores a non-numeric upstream status', () => {
     expect(formatAvailabilityError({ error: 'unsupported', upstream_status: 'bad' }, 500)).toBe(
-      'Provider not supported',
+      'Provider not supported (unsupported · HTTP 500)',
     );
   });
 });
 
-describe('which failure a code is', () => {
-  test('the three the provider throttles us with', () => {
-    for (const code of ['rate_limited', 'ip_throttled', 'upstream_blocked']) {
-      expect(classifyAvailabilityErrorCode(code)).toBe('throttled');
-    }
+describe('classifying a provider fault', () => {
+  test('only the vendor rate limit is a throttle', () => {
+    expect(classifyAvailabilityErrorCode('rate_limited')).toBe('throttled');
+    expect(classifyAvailabilityErrorCode('ip_throttled')).toBe('other');
+    expect(classifyAvailabilityErrorCode('upstream_blocked')).toBe('other');
   });
 
   test('their end failing, and their end being unreachable', () => {
@@ -67,13 +69,36 @@ describe('which failure a code is', () => {
 });
 
 describe('whether to offer a retry', () => {
-  test('not while the provider is holding us off', () => {
-    expect(retryingHelps('throttled')).toBe(false);
+  test('not for the three codes that mean stop asking', () => {
+    for (const code of ['rate_limited', 'ip_throttled', 'upstream_blocked']) {
+      expect(retryingHelps(code)).toBe(false);
+    }
   });
 
-  test('for every failure that is not that one', () => {
-    expect(retryingHelps('server_error')).toBe(true);
-    expect(retryingHelps('unreachable')).toBe(true);
-    expect(retryingHelps('other')).toBe(true);
+  test('for every other code, and when the server named none', () => {
+    expect(retryingHelps('upstream_5xx')).toBe(true);
+    expect(retryingHelps('upstream_unreachable')).toBe(true);
+    expect(retryingHelps('captcha_wall')).toBe(true);
+    expect(retryingHelps(null)).toBe(true);
+  });
+});
+
+describe('a refused availability request', () => {
+  test('reads its code and detail out of the body', () => {
+    const error = new AvailabilityRequestError(503, JSON.stringify({ error: 'rate_limited', detail: 'slow down' }));
+    expect(error.code).toBe('rate_limited');
+    expect(error.message).toBe('Booking site rate-limited us — try again shortly (rate_limited: slow down · HTTP 503)');
+  });
+
+  test('a body that is not JSON still reaches the screen as its own text', () => {
+    const error = new AvailabilityRequestError(502, '<html>Bad gateway</html>');
+    expect(error.code).toBeNull();
+    expect(error.message).toBe('<html>Bad gateway</html> · HTTP 502');
+  });
+
+  test('no body at all leaves the status to say it', () => {
+    const error = new AvailabilityRequestError(500);
+    expect(error.code).toBeNull();
+    expect(error.message).toBe('HTTP 500');
   });
 });

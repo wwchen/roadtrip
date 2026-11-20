@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Banner, Button, EmptyState, Link, Skeleton } from '@ui';
 import { signIn } from '@/api/auth-api';
 import type { Watch, WatchStatus } from '@/api/watches-api';
-import { HttpError } from '@/api/http';
+import { describeError } from '@/lib/error-report';
 import {
   isUnauthorized,
   useDeleteWatch,
@@ -32,8 +32,6 @@ type Editor =
   | { mode: 'edit'; watch: Watch };
 
 const CREATE_EDITOR: Editor = { mode: 'create', prefill: null };
-
-const SAVE_FALLBACK_MESSAGE = 'Could not save. Try again.';
 
 /**
  * The identity of what the form is currently seeded from.
@@ -115,8 +113,8 @@ function WatchesListPage() {
       try {
         setEditor({ mode: 'edit', watch: await loadWatchForEdit(id) });
         setFormError(null);
-      } catch {
-        setNotice({ status: 'error', message: 'Could not load watch for editing.' });
+      } catch (err) {
+        setNotice({ status: 'error', message: `Could not load watch for editing. (${describeError(err)})` });
       }
     },
     [loadWatchForEdit],
@@ -136,7 +134,7 @@ function WatchesListPage() {
         });
       } catch (err) {
         if (isUnauthorized(err) && !fromUrl) return;
-        setNotice({ status: 'error', message: 'Could not delete watch.' });
+        setNotice({ status: 'error', message: `Could not delete watch. (${describeError(err)})` });
       }
     },
     [deleteWatch],
@@ -187,11 +185,7 @@ function WatchesListPage() {
       resetForm();
     } catch (err) {
       if (isUnauthorized(err)) return;
-      // createWatch/updateWatch attach the response text as `.body`; it carries
-      // the backend's validation detail, which is more useful than the status
-      // line the message has.
-      const detail = err instanceof HttpError ? err.body : undefined;
-      setFormError(detail?.trim() || (err as Error)?.message || SAVE_FALLBACK_MESSAGE);
+      setFormError(describeError(err));
     }
   };
 
@@ -200,7 +194,7 @@ function WatchesListPage() {
       await setWatchStatus.mutateAsync({ id, status });
     } catch (err) {
       if (isUnauthorized(err)) return;
-      setNotice({ status: 'error', message: 'Could not update watch status.' });
+      setNotice({ status: 'error', message: `Could not update watch status. (${describeError(err)})` });
     }
   };
 
@@ -259,7 +253,7 @@ function WatchesListPage() {
                 </button>
               }
             >
-              Could not load watches.
+              {`Could not load watches. (${describeError(listError)})`}
             </Banner>
           ) : isPending ? (
             <Skeleton aria-label="Loading watches" />

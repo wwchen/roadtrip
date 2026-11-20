@@ -161,19 +161,19 @@ test('a relay timeout is 409 and says the cart may hold the site', async () => {
   expect(await run(BODY, ports({ gateway: { ...unconfiguredBookingGateway, hold } }))).toMatchObject({ status: 409, body: { error: 'relay_timeout' } });
 });
 
-test('an unreachable or unconfigured relay is 503 booking_unavailable', async () => {
+test('an unreachable or unconfigured relay is 503 and names which', async () => {
   const malformed = vi.fn().mockResolvedValue({ kind: 'unavailable', fault: 'malformed' });
   expect(await run(BODY, ports({ gateway: { ...unconfiguredBookingGateway, hold: malformed } }))).toMatchObject({
     status: 503,
-    body: { error: 'booking_unavailable' },
+    body: { error: 'relay_malformed' },
   });
-  expect(await run(BODY, ports({ gateway: unconfiguredBookingGateway }))).toMatchObject({ status: 503, body: { error: 'booking_unavailable' } });
+  expect(await run(BODY, ports({ gateway: unconfiguredBookingGateway }))).toMatchObject({ status: 503, body: { error: 'relay_not_configured' } });
 });
 
-test.each(FAULTS)('a hold result of unavailable for any fault is 503 booking_unavailable: %s', async (fault) => {
+test.each(FAULTS)('a hold result of unavailable answers 503 with its own fault as the code: %s', async (fault) => {
   const hold = vi.fn().mockResolvedValue({ kind: 'unavailable', fault });
   expect(await run(BODY, ports({ gateway: { ...unconfiguredBookingGateway, hold } }))).toEqual({
     status: 503,
-    body: { error: 'booking_unavailable', provider: 'recgov', provider_display: 'Recreation.gov' },
+    body: { error: `relay_${fault}`, provider: 'recgov', provider_display: 'Recreation.gov' },
   });
 });

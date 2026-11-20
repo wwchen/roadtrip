@@ -476,7 +476,7 @@ describe('the status line', () => {
     mount();
 
     await waitFor(() =>
-      expect(screen.getByText('Two adjacent stops are the same.')).toBeInTheDocument(),
+      expect(screen.getByText('Two adjacent stops are the same. (duplicate_adjacent · HTTP 400)')).toBeInTheDocument(),
     );
     expect(screen.getByRole('status').className).toContain('error');
   });

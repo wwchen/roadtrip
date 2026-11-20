@@ -8,7 +8,7 @@ data class ReserveCaliforniaPlace(
     val latitude: Double,
     val longitude: Double,
     val facilityIds: List<Long>,
-    val unitTypeByFacilityId: Map<Long, String>,
+    val unitTypeNamesByFacilityId: Map<Long, Map<Long, String>>,
     val imageUrl: String?,
     val description: String?,
     val amenities: List<String>,

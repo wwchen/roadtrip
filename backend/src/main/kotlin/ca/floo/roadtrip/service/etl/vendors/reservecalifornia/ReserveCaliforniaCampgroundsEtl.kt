@@ -157,19 +157,12 @@ internal fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
     val lon = selected["Longitude"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: return null
     val facilities = selected["Facilities"]?.jsonObject ?: JsonObject(emptyMap())
     val facilityIds = mutableListOf<Long>()
-    val unitTypes = linkedMapOf<Long, String>()
+    val unitTypes = linkedMapOf<Long, Map<Long, String>>()
     for ((key, rawFacility) in facilities) {
         val facility = rawFacility as? JsonObject ?: continue
         val facilityId = facility["FacilityId"]?.jsonPrimitive?.longOrNull ?: key.toLongOrNull() ?: continue
         facilityIds += facilityId
-        val unitTypeName =
-            facility["UnitTypes"]
-                ?.jsonObject
-                ?.values
-                ?.asSequence()
-                ?.mapNotNull { (it as? JsonObject)?.get("Name")?.jsonPrimitive?.contentOrNull }
-                ?.firstOrNull()
-        if (unitTypeName != null) unitTypes[facilityId] = unitTypeName
+        unitTypes[facilityId] = unitTypeNames(facility["UnitTypes"]?.jsonObject)
     }
     val highlights = parseHighlights(selected["Allhighlights"]?.jsonPrimitive?.contentOrNull)
     return ReserveCaliforniaPlace(
@@ -178,13 +171,24 @@ internal fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
         latitude = lat,
         longitude = lon,
         facilityIds = facilityIds.distinct().sorted(),
-        unitTypeByFacilityId = unitTypes,
+        unitTypeNamesByFacilityId = unitTypes,
         imageUrl = selected.stringValue("ImageUrl"),
         description = selected.stringValue("Description"),
         amenities = highlights.filterNot(::isActivityHighlight),
         activities = highlights.filter(::isActivityHighlight),
         raw = selected,
     )
+}
+
+private fun unitTypeNames(unitTypes: JsonObject?): Map<Long, String> {
+    val names = linkedMapOf<Long, String>()
+    for ((key, rawUnitType) in unitTypes.orEmpty()) {
+        val unitType = rawUnitType as? JsonObject ?: continue
+        val unitTypeId = unitType["UnitTypeId"]?.jsonPrimitive?.longOrNull ?: key.toLongOrNull() ?: continue
+        val name = unitType["Name"]?.jsonPrimitive?.contentOrNull ?: continue
+        names[unitTypeId] = name
+    }
+    return names
 }
 
 internal fun parseFacility(payload: JsonObject): ReserveCaliforniaFacility? {
@@ -215,6 +219,7 @@ internal fun parseGrid(payload: JsonObject): ReserveCaliforniaGridCatalog? {
                 ReserveCaliforniaUnit(
                     unitId = unitId,
                     name = unit["Name"]?.jsonPrimitive?.contentOrNull,
+                    unitTypeId = unit["UnitTypeId"]?.jsonPrimitive?.longOrNull,
                     raw = unit,
                 )
             },
@@ -253,12 +258,19 @@ private val amenityKeyByHighlight =
         "restrooms" to AmenityKey.TOILETS,
         "toilet, accessible" to AmenityKey.TOILETS,
         "comfort station" to AmenityKey.TOILETS,
+        "flush toilets" to AmenityKey.TOILETS,
         "showers" to AmenityKey.SHOWERS,
         "rinse showers" to AmenityKey.SHOWERS,
+        "solar showers" to AmenityKey.SHOWERS,
         "dump station" to AmenityKey.DUMP_STATION,
         "store-convenience" to AmenityKey.CAMP_STORE,
         "store - convenience" to AmenityKey.CAMP_STORE,
+        "convenience store" to AmenityKey.CAMP_STORE,
         "fire rings" to AmenityKey.FIRES_ALLOWED,
+        "fire pit" to AmenityKey.FIRES_ALLOWED,
+        "potable water" to AmenityKey.WATER,
+        "water" to AmenityKey.WATER,
+        "central water access" to AmenityKey.WATER,
     )
 
 internal val activityHints =

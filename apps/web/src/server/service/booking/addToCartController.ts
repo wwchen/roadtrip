@@ -22,6 +22,6 @@ export async function addToCart(user: ActiveUser, command: AddToCartCommand, por
         ? { kind: 'refused', refusal: result.refusal, providerDisplay }
         : { kind: 'refused', refusal: result.refusal, providerDisplay, cartUrl: result.cartUrl };
     case 'unavailable':
-      return { kind: 'unavailable', providerDisplay };
+      return { kind: 'unavailable', fault: result.fault, providerDisplay };
   }
 }

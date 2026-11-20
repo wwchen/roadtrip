@@ -1,6 +1,9 @@
 import { recgovAuthenticationFailure } from '../../cart.js'
 import { persistProfileCookies } from '../../browser.js'
 import {
+  LOGIN_ERROR_REASON,
+  MFA_INVALID_REASON,
+  MFA_REQUIRED_REASON,
   recgovLoginCredentialsFromInput,
 } from '../../recgovSession.js'
 import { renderLoginPage } from '../../templates.js'
@@ -46,6 +49,8 @@ const LOGIN_STATE_MFA_REQUIRED = 'mfa_required'
 export const ERROR_MFA_REQUIRED = 'mfa_required'
 export const ERROR_MFA_INVALID = 'mfa_invalid'
 export const ERROR_LOGIN_BACKOFF = 'login_backoff'
+const MFA_REJECTED_DETAIL = 'Recreation.gov rejected the code'
+const MFA_REJECTION_REASONS = new Set([MFA_INVALID_REASON, LOGIN_ERROR_REASON, MFA_REQUIRED_REASON])
 
 const UNATTENDED_FIELD = 'unattended'
 
@@ -312,8 +317,7 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
     // backoff here would lock the user out of retrying over a typo.
     respondAuthResult(req, res, HTTP_UNAUTHORIZED, withDiagnostics({
       ...authActionResponseBody(status, false),
-      error: ERROR_MFA_INVALID,
-      detail: outcome?.detail || outcome?.reason || 'Recreation.gov rejected the code',
+      ...mfaFailure(outcome, status),
     }, outcome?.trace_url))
   } catch (error) {
     runtime.logger('recgov auth mfa completion exception', `profile=${profileId}`, error.message)
@@ -336,8 +340,6 @@ function loginStatus (pool, profileId, outcome) {
     diagnostic: outcome?.diagnostic || null,
   }
   if (base.logged_in) return pool.setAuthStatus(profileId, base)
-  // `error` stays the documented, stable code. The internal blocker — which
-  // selector went missing, which challenge appeared — rides in `reason`.
   const failure = recgovAuthenticationFailure({ attemptedLogin: true, reason: outcome?.reason })
   return pool.setAuthStatus(profileId, {
     ...base,
@@ -358,6 +360,14 @@ function loginStatus (pool, profileId, outcome) {
 function withDiagnostics (body, traceUrl) {
   if (!traceUrl) return body
   return { ...body, diagnostics: { ...(body.diagnostics || {}), trace: traceUrl } }
+}
+
+function mfaFailure (outcome, status) {
+  if (!MFA_REJECTION_REASONS.has(outcome?.reason)) return { error: status.error, detail: status.detail }
+  return {
+    error: ERROR_MFA_INVALID,
+    detail: outcome.detail || `${MFA_REJECTED_DETAIL} (${outcome.reason})`,
+  }
 }
 
 function mfaChallengeDetail (error) {

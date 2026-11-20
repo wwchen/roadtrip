@@ -12,7 +12,9 @@ import type {
   AvailabilityWatchUpdateRequest,
   WatchStatus,
 } from './generated/api-types';
-import { HttpError, jsonGetOk, type RequestOptions } from './http';
+import { httpErrorFrom, jsonGetOk, type RequestOptions } from './http';
+
+const HTTP_NOT_FOUND = 404;
 
 const BASE = '/api/watches';
 const MODIFY_ACTION = 'modify';
@@ -107,12 +109,7 @@ export async function createWatch(
     body: JSON.stringify(body),
     signal,
   });
-  if (!r.ok) {
-    const text = await r.text().catch(() => '');
-    const err = new HttpError(BASE, r.status);
-    err.body = text;
-    throw err;
-  }
+  if (!r.ok) throw await httpErrorFrom(BASE, r);
   return r.json() as Promise<WatchResponse>;
 }
 
@@ -129,12 +126,7 @@ export async function updateWatch(
     body: JSON.stringify(body),
     signal,
   });
-  if (!r.ok) {
-    const text = await r.text().catch(() => '');
-    const err = new HttpError(url, r.status);
-    err.body = text;
-    throw err;
-  }
+  if (!r.ok) throw await httpErrorFrom(url, r);
   return r.json() as Promise<WatchResponse>;
 }
 
@@ -150,7 +142,5 @@ export async function deleteWatch(
 ): Promise<void> {
   const url = watchUrl(id, DELETE_ACTION, magicLinkToken);
   const r = await fetch(url, { method: 'POST', signal });
-  if (!r.ok && r.status !== 404) {
-    throw new HttpError(url, r.status);
-  }
+  if (!r.ok && r.status !== HTTP_NOT_FOUND) throw await httpErrorFrom(url, r);
 }

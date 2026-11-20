@@ -12,6 +12,7 @@ import type { ParseResult, TransformResult } from './source-etl.js';
 import { TransformCtx } from './transform-ctx.js';
 
 const ROW_ERROR_LOG_SAMPLE_LIMIT = 10;
+const WARNING_TALLY_LOG_LIMIT = 25;
 const STAGE_PARSE = 'parse';
 const STAGE_TRANSFORM = 'transform';
 
@@ -23,6 +24,7 @@ export interface EtlStats {
   transformed: number;
   upserted: number;
   skipped: number;
+  warned: number;
   dedupeCollisions: number;
 }
 
@@ -88,6 +90,8 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
   let upserted = 0;
   let repoSkipped = 0;
   let dedupeCollisions = 0;
+  let warned = 0;
+  const warningTally = new Map<string, number>();
   const seenKeys = new Set<string>();
 
   const logRowError = (
@@ -117,6 +121,11 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
           continue;
         }
         transformOk++;
+        const warnings = transformResult.warnings ?? [];
+        if (warnings.length > 0) {
+          warned++;
+          for (const warning of warnings) warningTally.set(warning, (warningTally.get(warning) ?? 0) + 1);
+        }
         const naturalKey = binding.naturalKeyOf(transformResult.record);
         if (seenKeys.has(naturalKey)) dedupeCollisions++;
         else seenKeys.add(naturalKey);
@@ -147,6 +156,12 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
         `${target.section} '${target.name}' terminal slug=${etl.etlSlug} skipped ${skipped} records (parseBad=${parseBad} transformBad=${transformBad} repoSkipped=${repoSkipped})`,
       );
     }
+    if (warned > 0) {
+      const label = `${target.section} '${target.name}' terminal slug=${etl.etlSlug}`;
+      log.warn(`${label} kept ${warned} records carrying ${warningTally.size} distinct warnings`);
+      const ranked = [...warningTally].sort(([, a], [, b]) => b - a).slice(0, WARNING_TALLY_LOG_LIMIT);
+      for (const [warning, count] of ranked) log.warn(`${label} warning x${count}: ${warning}`);
+    }
     return {
       name: target.name,
       etlSlug: etl.etlSlug,
@@ -155,6 +170,7 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
       transformed: transformOk,
       upserted,
       skipped,
+      warned,
       dedupeCollisions,
     };
   } catch (error) {

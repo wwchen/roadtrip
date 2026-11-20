@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.client.recgov
 
+import ca.floo.roadtrip.fixtures.mangledAvailabilityFixture
+import ca.floo.roadtrip.model.availability.AvailabilityPayloadException
 import ca.floo.roadtrip.support.RecGovException
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -9,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -89,6 +92,57 @@ class HttpRecgovAvailabilityClientTest {
             // limit fast to surface.
             assertEquals(SERVER_ERROR_ATTEMPTS, requests.get())
         }
+
+    @Test
+    fun `a month payload without its campsites object is unreadable, not empty`() {
+        val thrown =
+            assertFailsWith<AvailabilityPayloadException> {
+                parseCampsites(mangledAvailabilityFixture("recgov-month-renamed-campsites.json"))
+            }
+
+        assertEquals("recgov", thrown.provider)
+        assertTrue(thrown.message!!.contains("campsites"), thrown.message)
+    }
+
+    @Test
+    fun `a body that is not a JSON object is unreadable`() {
+        val thrown = assertFailsWith<AvailabilityPayloadException> { parseCampsites("[]") }
+
+        assertTrue(thrown.message!!.contains("[]"), thrown.message)
+    }
+
+    @Test
+    fun `a campsite without its availabilities is unreadable, not unobserved`() {
+        val thrown =
+            assertFailsWith<AvailabilityPayloadException> {
+                parseCampsites("""{"campsites":{"100":{"campsite_id":"100","site":"A1"}}}""")
+            }
+
+        assertTrue(thrown.message!!.contains("availabilities"), thrown.message)
+        assertTrue(thrown.message!!.contains("100"), thrown.message)
+    }
+
+    @Test
+    fun `an HTML page served as a 200 is unreadable`() {
+        val thrown = assertFailsWith<AvailabilityPayloadException> { parseCampsites("<html>maintenance</html>") }
+
+        assertTrue(thrown.message!!.contains("maintenance"), thrown.message)
+    }
+
+    @Test
+    fun `a null status is rec gov's own no-status value, left for the adapter to read as unknown`() {
+        val parsed =
+            parseCampsites(
+                """{"campsites":{"100":{"availabilities":{"2026-12-01T00:00:00Z":null,"2026-12-02T00:00:00Z":"Reserved"}}}}""",
+            )
+
+        assertEquals(mapOf("2026-12-02T00:00:00Z" to "Reserved"), parsed["100"]?.availabilities)
+    }
+
+    @Test
+    fun `a well-formed month with no campsites is empty`() {
+        assertEquals(emptyMap(), parseCampsites("""{"campsites":{}}"""))
+    }
 
     private fun client(): HttpRecgovAvailabilityClient = HttpRecgovAvailabilityClient(minGapMs = 0L, availBaseUrl = baseUrl)
 

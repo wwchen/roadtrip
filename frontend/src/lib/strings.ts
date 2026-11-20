@@ -219,10 +219,12 @@ export const placeCopy = {
   priceFrom: (amount: string) => `From ${amount}`,
   factsSeparator: ' · ',
   loadFailed: "This place didn't load",
-  loadFailedBody: 'We could not fetch its details. Everything else still works.',
+  loadFailedBody: (raw: string) =>
+    `We could not fetch its details. Everything else still works. (${raw})`,
   tryAgain: 'Try again',
   refreshFailed: "Couldn't refresh this place",
-  refreshFailedBody: 'These are the details we loaded earlier. They may be out of date.',
+  refreshFailedBody: (raw: string) =>
+    `These are the details we loaded earlier. They may be out of date. (${raw})`,
   noDetailView: 'No detail view for this place yet',
   category: (category: string) => `Category: ${category || 'unknown'}`,
 } as const;

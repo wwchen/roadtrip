@@ -58,7 +58,7 @@ export async function findCampgroundsOfPoi(db: Db, poiId: bigint): Promise<Camps
   `);
   return rows.map((row) => ({
     campgroundId: BigInt(row.id as string),
-    ...bookingIdentityOf(row, createColumnDecoder()),
+    ...bookingIdentityOf(row, createColumnDecoder(`campgrounds id=${String(row.id)}`)),
   }));
 }
 
@@ -76,7 +76,7 @@ export async function findCampsitesOfPoi(db: Db, poiId: bigint, kinds: readonly 
     ORDER BY c.loop_name NULLS LAST, c.name, c.id
   `);
   return rows.map((row) => {
-    const decoder = createColumnDecoder();
+    const decoder = createColumnDecoder(`campsites id=${String(row.id)}`);
     return {
       id: BigInt(row.id as string),
       campgroundId: BigInt(row.campground_id as string),
@@ -121,7 +121,7 @@ export async function findBookableCampsite(db: Db, campsiteId: bigint): Promise<
   `);
   const [row] = rows;
   if (row === undefined) return null;
-  const decoder = createColumnDecoder();
+  const decoder = createColumnDecoder(`campsites id=${String(row.id)}`);
   return {
     id: BigInt(row.id as string),
     dataProvider: row.data_provider as string,

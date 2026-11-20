@@ -194,7 +194,7 @@ export function decodeAction(exchange: RelayExchange): ActionResult {
 
 export function decodeHealth(exchange: RelayExchange): SessionHealth {
   const body = open<BookingRelayHealthDto>(exchange);
-  if (typeof body === 'string') return { kind: 'unavailable' };
+  if (typeof body === 'string') return unavailable(body);
   switch (body.session) {
     case HEALTH.active:
       return { kind: 'active' };
@@ -205,8 +205,9 @@ export function decodeHealth(exchange: RelayExchange): SessionHealth {
     case HEALTH.checkFailed:
       return { kind: 'check_failed', ...stringFields<BookingRelayHealthDto, 'code' | 'detail'>(body, 'code', 'detail') };
     case HEALTH.unavailable:
-    default:
       return { kind: 'unavailable', ...stringFields<BookingRelayHealthDto, 'code' | 'detail'>(body, 'code', 'detail') };
+    default:
+      return MALFORMED;
   }
 }
 

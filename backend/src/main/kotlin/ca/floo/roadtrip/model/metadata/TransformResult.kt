@@ -3,6 +3,7 @@ package ca.floo.roadtrip.model.metadata
 sealed interface TransformResult<out OUT> {
     data class Ok<OUT>(
         val record: OUT,
+        val warnings: List<String> = emptyList(),
     ) : TransformResult<OUT>
 
     data class Bad(

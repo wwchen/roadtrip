@@ -26,7 +26,7 @@ describe('rec.gov', () => {
       'GROUP STANDARD NONELECTRIC': CampsiteKind.GROUP,
       'GROUP TENT ONLY AREA NONELECTRIC': CampsiteKind.GROUP,
       'GROUP SHELTER NONELECTRIC': CampsiteKind.GROUP,
-      'GROUP PICNIC AREA': CampsiteKind.GROUP,
+      'GROUP PICNIC AREA': CampsiteKind.DAY_USE,
       'EQUESTRIAN NONELECTRIC': CampsiteKind.EQUESTRIAN,
       'CABIN NONELECTRIC': CampsiteKind.CABIN,
       'CABIN ELECTRIC': CampsiteKind.CABIN,
@@ -59,12 +59,24 @@ describe('rec.gov', () => {
   });
 
   test('repeated and edge spaces between tokens are ignored', () => {
-    expect(campsiteKindRecGov('TENT  ONLY NONELECTRIC')).toEqual({ kind: CampsiteKind.TENT, electric: false });
-    expect(campsiteKindRecGov('  GROUP   PICNIC  AREA ')).toEqual({ kind: CampsiteKind.GROUP, electric: null });
+    expect(campsiteKindRecGov('TENT  ONLY NONELECTRIC')).toEqual({
+      kind: CampsiteKind.TENT,
+      electric: false,
+      warning: null,
+    });
+    expect(campsiteKindRecGov('  GROUP   PICNIC  AREA ')).toEqual({
+      kind: CampsiteKind.DAY_USE,
+      electric: null,
+      warning: null,
+    });
   });
 
   test('mixed-case input matches the same as upper case', () => {
-    expect(campsiteKindRecGov('Tent Only Nonelectric')).toEqual({ kind: CampsiteKind.TENT, electric: false });
+    expect(campsiteKindRecGov('Tent Only Nonelectric')).toEqual({
+      kind: CampsiteKind.TENT,
+      electric: false,
+      warning: null,
+    });
   });
 
   test('electric hookups come off the trailing token', () => {
@@ -78,8 +90,26 @@ describe('rec.gov', () => {
   });
 
   test('an unclassifiable type still reports its trailing hookup token', () => {
-    expect(campsiteKindRecGov('SOMETHING NEW NONELECTRIC')).toEqual({ kind: CampsiteKind.OTHER, electric: false });
-    expect(campsiteKindRecGov('SOMETHING NEW ELECTRIC')).toEqual({ kind: CampsiteKind.OTHER, electric: true });
+    expect(campsiteKindRecGov('SOMETHING NEW NONELECTRIC')).toEqual({
+      kind: CampsiteKind.OTHER,
+      electric: false,
+      warning: "unlisted rec.gov campsite_type 'SOMETHING NEW NONELECTRIC'",
+    });
+    expect(campsiteKindRecGov('SOMETHING NEW ELECTRIC').electric).toBe(true);
+  });
+
+  test('the longest leading phrase wins, so a group picnic area is day use and other group types stay group', () => {
+    expect(campsiteKindRecGov('GROUP PICNIC AREA').kind).toBe(CampsiteKind.DAY_USE);
+    expect(campsiteKindRecGov('GROUP PICNIC').kind).toBe(CampsiteKind.DAY_USE);
+    expect(campsiteKindRecGov('GROUP STANDARD AREA ELECTRIC').kind).toBe(CampsiteKind.GROUP);
+    expect(campsiteKindRecGov('GROUP SHELTER ELECTRIC').kind).toBe(CampsiteKind.GROUP);
+  });
+
+  test('an unlisted type is named verbatim in a warning, and a missing one says so', () => {
+    expect(campsiteKindRecGov(' BALL FIELD ').warning).toBe("unlisted rec.gov campsite_type 'BALL FIELD'");
+    expect(campsiteKindRecGov('   ').warning).toBe('no rec.gov campsite_type');
+    expect(campsiteKindRecGov(null).warning).toBe('no rec.gov campsite_type');
+    expect(campsiteKindRecGov('STANDARD ELECTRIC').warning).toBeNull();
   });
 });
 
@@ -96,16 +126,24 @@ describe('campflare', () => {
       equestrian: CampsiteKind.EQUESTRIAN,
       management: CampsiteKind.OTHER,
     };
-    expect(classify(expected, campsiteKindCampflare)).toEqual(expected);
+    expect(classify(expected, (input) => campsiteKindCampflare(input).kind)).toEqual(expected);
   });
 
   test('unknown kinds fall back to other, including names Object.prototype owns', () => {
     const unclassifiable = [null, undefined, '', 'STANDARD', 'houseboat', 'constructor', 'toString', '__proto__'];
-    expect(unclassifiable.map(campsiteKindCampflare)).toEqual(unclassifiable.map(() => CampsiteKind.OTHER));
+    expect(unclassifiable.map((input) => campsiteKindCampflare(input).kind)).toEqual(
+      unclassifiable.map(() => CampsiteKind.OTHER),
+    );
   });
 
   test('surrounding whitespace is trimmed before the lookup', () => {
-    expect(campsiteKindCampflare('  tent-only ')).toBe(CampsiteKind.TENT);
+    expect(campsiteKindCampflare('  tent-only ').kind).toBe(CampsiteKind.TENT);
+  });
+
+  test('an unlisted kind is named in a warning, while the listed management kind is other without one', () => {
+    expect(campsiteKindCampflare('houseboat').warning).toBe("unlisted Campflare kind 'houseboat'");
+    expect(campsiteKindCampflare(null).warning).toBe('no Campflare kind');
+    expect(campsiteKindCampflare('management')).toEqual({ kind: CampsiteKind.OTHER, electric: null, warning: null });
   });
 });
 
@@ -146,22 +184,46 @@ describe('aspira', () => {
       'Guided Event': CampsiteKind.DAY_USE,
       'Hiking Trip': CampsiteKind.DAY_USE,
       Ferry: CampsiteKind.DAY_USE,
+      'Backcountry Yurt': CampsiteKind.CABIN,
+      'Cama Beach Cabin': CampsiteKind.CABIN,
+      'Cama Beach Cabin Category': CampsiteKind.CABIN,
+      'Elfin Lakes Shelter': CampsiteKind.CABIN,
+      'Boat In': CampsiteKind.BOAT_IN,
+      'Group Picnic Area': CampsiteKind.DAY_USE,
+      Parking: CampsiteKind.DAY_USE,
+      Shuttle: CampsiteKind.DAY_USE,
+      'Guided Hike': CampsiteKind.DAY_USE,
+      'Learn-to Activity': CampsiteKind.DAY_USE,
+      'Day Runner Hike': CampsiteKind.DAY_USE,
+      'Backpacking Trip': CampsiteKind.BACKCOUNTRY,
+      'Access Point': CampsiteKind.BACKCOUNTRY,
     };
-    expect(classify(expected, campsiteKindAspira)).toEqual(expected);
+    expect(classify(expected, (input) => campsiteKindAspira(input).kind)).toEqual(expected);
   });
 
   test('Backcountry Cabin stays a cabin because exact names are checked before prefixes', () => {
-    expect(campsiteKindAspira('Backcountry Cabin')).toBe(CampsiteKind.CABIN);
-    expect(campsiteKindAspira('Backcountry Cabins')).toBe(CampsiteKind.BACKCOUNTRY);
+    expect(campsiteKindAspira('Backcountry Cabin').kind).toBe(CampsiteKind.CABIN);
+    expect(campsiteKindAspira('Backcountry Cabins').kind).toBe(CampsiteKind.BACKCOUNTRY);
   });
 
   test('names outside the table fall back to other', () => {
     const unclassifiable = [null, undefined, '', '   ', 'Boat Launch', 'campsite', 'constructor', 'toString'];
-    expect(unclassifiable.map(campsiteKindAspira)).toEqual(unclassifiable.map(() => CampsiteKind.OTHER));
+    expect(unclassifiable.map((input) => campsiteKindAspira(input).kind)).toEqual(
+      unclassifiable.map(() => CampsiteKind.OTHER),
+    );
   });
 
   test('surrounding whitespace is trimmed before the lookup', () => {
-    expect(campsiteKindAspira(' Backcountry Cabin ')).toBe(CampsiteKind.CABIN);
+    expect(campsiteKindAspira(' Backcountry Cabin ').kind).toBe(CampsiteKind.CABIN);
+  });
+
+  test('a tenant name outside the table is named verbatim in a warning', () => {
+    expect(campsiteKindAspira('ELC').warning).toBe("unlisted Aspira resource category 'ELC'");
+    expect(campsiteKindAspira(' Departure Date - Group Booking ').warning).toBe(
+      "unlisted Aspira resource category 'Departure Date - Group Booking'",
+    );
+    expect(campsiteKindAspira(null).warning).toBe('no Aspira resource category');
+    expect(campsiteKindAspira('Group Camp').warning).toBeNull();
   });
 });
 
@@ -201,6 +263,8 @@ describe('reserve california', () => {
       'Premium Hook Up (E/W) Campsite': CampsiteKind.RV,
       'Tent Site': CampsiteKind.TENT,
       'Day Use': CampsiteKind.DAY_USE,
+      'Dorm (2 ppl)': CampsiteKind.CABIN,
+      'Beach Dorm (4 ppl)': CampsiteKind.CABIN,
       site: CampsiteKind.OTHER,
       'RV Site': CampsiteKind.OTHER,
       '': CampsiteKind.OTHER,
@@ -253,5 +317,11 @@ describe('reserve california', () => {
     expect(campsiteKindReserveCalifornia('Tent Campsite').electric).toBeNull();
     expect(campsiteKindReserveCalifornia('Tent (E) Campsite').electric).toBeNull();
     expect(campsiteKindReserveCalifornia(null).electric).toBeNull();
+  });
+
+  test('an unlisted unit type is named verbatim in a warning', () => {
+    expect(campsiteKindReserveCalifornia('RV Site').warning).toBe("unlisted ReserveCalifornia unit type 'RV Site'");
+    expect(campsiteKindReserveCalifornia('').warning).toBe('no ReserveCalifornia unit type');
+    expect(campsiteKindReserveCalifornia('Tent Campsite').warning).toBeNull();
   });
 });

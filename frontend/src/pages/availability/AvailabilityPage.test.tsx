@@ -382,7 +382,7 @@ describe('check now', () => {
     expect(screen.queryByText(/^error/)).not.toBeInTheDocument();
   });
 
-  test('another failure shows its status', async () => {
+  test('another failure shows its code and status', async () => {
     stubApi(
       pollerList(poller({ id: 7 })),
       forceRoute(() => json({ error: 'boom' }, 500)),
@@ -392,7 +392,7 @@ describe('check now', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'check now' }));
 
-    expect(await screen.findByText('error (500)')).toBeInTheDocument();
+    expect(await screen.findByText('error: boom · HTTP 500')).toBeInTheDocument();
   });
 
   test('the queued message clears once the refreshed list arrives', async () => {
@@ -429,6 +429,15 @@ describe('check now', () => {
 });
 
 describe('runs tab', () => {
+  test('a failed load shows the server code and detail', async () => {
+    stubApi(startsWith('/api/availability/runs', () => json({ error: 'query_failed', detail: 'statement timeout' }, 500)));
+    renderPage('?tab=runs');
+
+    expect(
+      await screen.findByText('Error: query_failed: statement timeout · HTTP 500'),
+    ).toBeInTheDocument();
+  });
+
   test('renders a run row', async () => {
     stubApi(runList(run({ id: 100, poller_id: 7, duration_ms: 850 })));
     renderPage('?tab=runs');

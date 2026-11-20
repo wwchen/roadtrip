@@ -127,7 +127,7 @@ export class AspiraCampsitesEtl implements SourceEtl<AspiraCampsitesDto, Campsit
           leaf ??
           (inv.resourceLocationId === null ? null : (leavesByResourceLocationId.get(inv.resourceLocationId) ?? null));
         if (inv.firstMapId !== null && leaf === null) unmatchedLeaf += 1;
-        yield { ok: true, record: this.campsiteRecord(resourceIdLong, inv, leaf, parentLeaf, dto.dictionaries) };
+        yield this.campsiteRecord(resourceIdLong, inv, leaf, parentLeaf, dto.dictionaries);
         emitted += 1;
       }
     }
@@ -152,18 +152,23 @@ export class AspiraCampsitesEtl implements SourceEtl<AspiraCampsitesDto, Campsit
     leaf: AspiraLeaf | null,
     parentLeaf: AspiraLeaf | null,
     dictionaries: AspiraDictionaries,
-  ): CampsiteUpsertCandidate {
+  ): TransformResult<CampsiteUpsertCandidate> {
     const categoryName =
       inv.resourceCategoryId === null ? undefined : dictionaries.resourceCategories.get(inv.resourceCategoryId);
     const description = inv.description === null ? null : nonBlank(stripTags(inv.description));
-    return {
+    const siteKind = campsiteKindAspira(categoryName);
+    const kindWarning =
+      inv.resourceCategoryId !== null && categoryName === undefined
+        ? `Aspira resource category id ${inv.resourceCategoryId} not in the tenant dictionary`
+        : siteKind.warning;
+    const record: CampsiteUpsertCandidate = {
       dataProviderRef: DataProviderRef.aspiraCampsite(this.aspiraTenant, resourceId),
       bookingProvider: BookingProvider.ASPIRA,
       bookingProviderRef: leafBookingRef(this.aspiraTenant, inv, leaf, parentLeaf),
       parentDataProviderRef: this.parentRef(leaf ?? parentLeaf),
       name: inv.name ?? inv.resourceId,
       loopName: leaf?.name ?? parentLeaf?.name ?? null,
-      kind: campsiteKindAspira(categoryName),
+      kind: siteKind.kind,
       kindListed: categoryName ?? null,
       equipment: allowedEquipmentNames(inv.allowedEquipment, dictionaries),
       maxPeople: inv.maxCapacity,
@@ -173,6 +178,7 @@ export class AspiraCampsitesEtl implements SourceEtl<AspiraCampsitesDto, Campsit
       photos: inv.photos,
       sourcePayload: serializeOpaquePayload(buildResourceRaw(inv, leaf, parentLeaf, dictionaries)),
     };
+    return { ok: true, record, warnings: kindWarning === null ? [] : [kindWarning] };
   }
 
   private parentRef(parent: AspiraLeaf | null) {

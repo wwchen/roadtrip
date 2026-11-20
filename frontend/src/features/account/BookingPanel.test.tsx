@@ -253,14 +253,14 @@ describe('test login', () => {
   test('a captcha is explained rather than shown as a generic failure', async () => {
     renderPanel(settings(CONFIGURED), {
       status: activeStatus,
-      onLogin: async () => ({ status: 'failed', error: 'captcha_required' }),
+      onLogin: async () => ({ status: 'failed', error: 'captcha_required', detail: 'hcaptcha frame' }),
     });
 
     await userEvent.click(testLogin());
 
     expect(
       await screen.findByText(
-        'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
+        'Recreation.gov showed a challenge we cannot solve. Try again in a moment. (captcha_required: hcaptcha frame)',
       ),
     ).toBeInTheDocument();
   });
@@ -276,7 +276,7 @@ describe('test login', () => {
     await userEvent.click(testLogin());
 
     expect(
-      await screen.findByText("The booking service isn't reachable right now."),
+      await screen.findByText("The booking service isn't reachable right now. (companion_unavailable)"),
     ).toBeInTheDocument();
   });
 });
@@ -401,7 +401,7 @@ describe('the MFA step', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Submit code' }));
 
     expect(
-      await screen.findByText('That code was rejected. Start the login again for a new one.'),
+      await screen.findByText('That code was rejected. Start the login again for a new one. (mfa_invalid)'),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument();
   });
@@ -419,14 +419,27 @@ describe('verify session', () => {
   test('reports the mapped failure code', async () => {
     renderPanel(settings(CONFIGURED), {
       status: activeStatus,
-      onVerify: async () => ({ ok: false, error: 'recgov_not_authenticated' }),
+      onVerify: async () => ({ ok: false, error: 'recgov_not_authenticated', detail: 'cart answered 401' }),
     });
 
     await userEvent.click(verify());
 
     expect(
-      await screen.findByText('The Recreation.gov session has expired. Test login again.'),
+      await screen.findByText(
+        'The Recreation.gov session has expired. Test login again. (recgov_not_authenticated: cart answered 401)',
+      ),
     ).toBeInTheDocument();
+  });
+
+  test('a code with no copy renders verbatim with its detail', async () => {
+    renderPanel(settings(CONFIGURED), {
+      status: activeStatus,
+      onVerify: async () => ({ ok: false, error: 'recgov_brand_new', detail: 'the companion said so' }),
+    });
+
+    await userEvent.click(verify());
+
+    expect(await screen.findByText('recgov_brand_new: the companion said so')).toBeInTheDocument();
   });
 
   test('is disabled with nothing stored', () => {

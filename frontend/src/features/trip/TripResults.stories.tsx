@@ -231,5 +231,6 @@ export const InViewChecked = inViewStory(
     running: false,
     observedAt: new Date().toISOString(),
     failure: null,
+    failureDetail: null,
   },
 );

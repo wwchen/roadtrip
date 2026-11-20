@@ -6,7 +6,7 @@ export interface ReserveCaliforniaPlace {
   latitude: number;
   longitude: number;
   facilityIds: bigint[];
-  unitTypeByFacilityId: ReadonlyMap<bigint, string>;
+  unitTypeNamesByFacilityId: ReadonlyMap<bigint, ReadonlyMap<bigint, string>>;
   imageUrl: string | null;
   description: string | null;
   amenities: string[];

@@ -1,5 +1,12 @@
 import type { AddToCartResponseDto } from '../../contract';
-import { RECGOV_PROVIDER, stayWindow, type AddToCartCommand, type AddToCartOutcome, type RefusalCategory } from '../../service/booking/model';
+import {
+  RECGOV_PROVIDER,
+  stayWindow,
+  type AddToCartCommand,
+  type AddToCartOutcome,
+  type GatewayFault,
+  type RefusalCategory,
+} from '../../service/booking/model';
 import {
   errorAnswer,
   invalidBody,
@@ -19,7 +26,16 @@ const INVALID_WINDOW = 'invalid_window';
 const UNSUPPORTED_TARGET = 'unsupported_target';
 const CREDENTIALS_REQUIRED = 'credentials_required';
 const NOT_AVAILABLE = 'not_available';
-const BOOKING_UNAVAILABLE = 'booking_unavailable';
+const RELAY_FAULT_CODES: Readonly<Record<GatewayFault, string>> = {
+  not_configured: 'relay_not_configured',
+  unanswered: 'relay_unanswered',
+  unreachable: 'relay_unreachable',
+  unauthorized: 'relay_unauthorized',
+  redirected: 'relay_redirected',
+  malformed: 'relay_malformed',
+  rejected: 'relay_rejected',
+  version_mismatch: 'relay_version_mismatch',
+};
 const COMPLETED = 'completed';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DIGITS = /^\d+$/;
@@ -75,6 +91,6 @@ export function addToCartAnswer(outcome: AddToCartOutcome): HttpAnswer<AddToCart
         outcome.cartUrl,
       );
     case 'unavailable':
-      return providerError(STATUS_SERVICE_UNAVAILABLE, BOOKING_UNAVAILABLE, outcome.providerDisplay);
+      return providerError(STATUS_SERVICE_UNAVAILABLE, RELAY_FAULT_CODES[outcome.fault], outcome.providerDisplay);
   }
 }

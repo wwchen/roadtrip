@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { FeatureCollection, LineString } from 'geojson';
 import { requestRoute, type RouteStop } from '@/api/directions-api';
+import { httpErrorFrom } from '@/api/http';
 import { queryKeys } from '@/queries/keys';
 import { useTripStore, type TripStop } from '@/stores/tripStore';
 import { routeLine } from '@/lib/trip-corridor';
@@ -52,21 +53,7 @@ const NO_STOPS_KEY = queryKeys.route([]);
 const coordsOf = (stops: readonly StopSlot[]): RouteStop[] =>
   stops.filter(isLocated).map((stop: TripStop) => ({ lng: stop.lng, lat: stop.lat }));
 
-/**
- * The `error` field of a routing refusal, if it has one.
- *
- * The body is read defensively because a 502 from a proxy in front of the routing
- * service is HTML, not JSON — and a parse failure there must still produce the
- * status-named fallback rather than a thrown SyntaxError.
- */
-async function routeErrorCode(response: Response): Promise<string | null> {
-  try {
-    const body = (await response.json()) as { error?: unknown };
-    return typeof body?.error === 'string' ? body.error : null;
-  } catch {
-    return null;
-  }
-}
+const ROUTE_PATH = '/api/route';
 
 export function useRoute(): TripRoute {
   const stops = useTripStore((s) => s.stops);
@@ -82,17 +69,8 @@ export function useRoute(): TripRoute {
       // The radius rides along because the response carries the server's own
       // corridor polygon for it, which is the one /api/pois/on-route filters by.
       // It is not part of the key — see `queryKeys.route`.
-      let response: Response;
-      try {
-        response = await requestRoute({ stops: coords, radiusMiles: corridorMiles, signal });
-      } catch (caught) {
-        // An abort is Query cancelling us, not a failure to report.
-        if ((caught as Error)?.name === 'AbortError') throw caught;
-        throw new Error(routeErrorMessage(null));
-      }
-      if (!response.ok) {
-        throw new Error(routeErrorMessage(await routeErrorCode(response), response.status));
-      }
+      const response = await requestRoute({ stops: coords, radiusMiles: corridorMiles, signal });
+      if (!response.ok) throw await httpErrorFrom(ROUTE_PATH, response);
       return (await response.json()) as RouteCollection;
     },
     enabled: complete,
@@ -126,7 +104,7 @@ export function useRoute(): TripRoute {
     line: routeLine(data),
     summary: routeSummary(properties),
     legs: routeLegLines(properties, stops),
-    error: query.error ? query.error.message : null,
+    error: query.error ? routeErrorMessage(query.error) : null,
     isFetching: query.isFetching,
   };
 }

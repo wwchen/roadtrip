@@ -170,7 +170,8 @@
     "status": 200,
     "body": {
       "session": "check_failed",
-      "code": "recgov_auth_check_exception"
+      "code": "recgov_auth_check_exception",
+      "detail": "what the companion said"
     }
   },
   "health_unavailable": {

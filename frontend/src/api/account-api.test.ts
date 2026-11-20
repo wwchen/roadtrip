@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   clearSlack,
   fetchSettings,
+  removeRecgov,
   sendEmailTest,
   sendSlackTest,
   updateNotifications,
@@ -153,6 +154,7 @@ describe('error code surfacing', () => {
       name: 'HttpError',
       status: 422,
       code: 'invalid_field',
+      detail: 'bad input',
     });
   });
 
@@ -163,5 +165,27 @@ describe('error code surfacing', () => {
 
     expect(error).toMatchObject({ name: 'HttpError', status: 500 });
     expect((error as { code?: string }).code).toBeUndefined();
+    expect(error).toMatchObject({ body: '<html>500</html>', detail: '<html>500</html>' });
+  });
+});
+
+describe('removeRecgov', () => {
+  test('returns the server\'s answer', async () => {
+    const answer = { removed: true, stranded_atc_watches: 2, companion_signed_out: true, profile_destroyed: true };
+    stubFetch(jsonResponse(answer));
+
+    await expect(removeRecgov()).resolves.toEqual(answer);
+  });
+
+  test('an answer with no body is an error, not an invented removal', async () => {
+    stubFetch(noContentResponse());
+
+    await expect(removeRecgov()).rejects.toThrow(/204/);
+  });
+
+  test('an unparseable body is an error, not an invented removal', async () => {
+    stubFetch(textResponse('not json', 200));
+
+    await expect(removeRecgov()).rejects.toBeInstanceOf(SyntaxError);
   });
 });

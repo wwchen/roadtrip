@@ -91,6 +91,41 @@ class GeometryIndexTest {
     }
 
     @Test
+    fun `a name one source places more than a fifth of a degree apart is unindexed, warned about, and open to a later source`() {
+        var index: Map<String, GeometryPoint> = emptyMap()
+        val events =
+            eventsFrom { logger ->
+                index =
+                    GeometryIndex.build(
+                        listOf(
+                            "apca-accommodation" to
+                                GeoJsonFeaturesSource(
+                                    listOf(
+                                        geoJson("Two Jack Lakeside", -115.49, 51.22),
+                                        geoJson("Two Jack Lakeside Campground", -115.49, 51.43),
+                                        geoJson("Tunnel Mountain", -115.52, 51.19),
+                                        geoJson("Tunnel Mountain Village", -115.53, 51.2),
+                                    ),
+                                ),
+                            "apca-places" to GeoJsonFeaturesSource(listOf(geoJson("Two Jack Lakeside", -115.6, 51.3))),
+                        ),
+                        logger,
+                        ETL_SLUG,
+                    )
+            }
+
+        assertEquals(GeometryPoint(51.3, -115.6, "apca-places"), index[normalize("Two Jack Lakeside")])
+        assertEquals(GeometryPoint(51.19, -115.52, "apca-accommodation"), index[normalize("Tunnel Mountain")])
+        assertEquals(
+            listOf(
+                "$ETL_SLUG: geometry input slug=apca-accommodation left 1 names unindexed because points sharing them lie " +
+                    "more than 0.2 degrees apart: two jack lakeside <- [Two Jack Lakeside, Two Jack Lakeside Campground]",
+            ),
+            events.filter { it.level == Level.WARN }.map { it.formattedMessage },
+        )
+    }
+
+    @Test
     fun `a name only the later source carries is still indexed, tagged with that source`() {
         val index =
             GeometryIndex.build(

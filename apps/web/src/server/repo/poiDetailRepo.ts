@@ -135,7 +135,7 @@ export async function findCampgroundDetail(db: Db, poiId: bigint, providers: rea
   `);
   const row = rows[0];
   if (row === undefined) return null;
-  const decoder = createColumnDecoder();
+  const decoder = createColumnDecoder(`campgrounds ${String(row.data_provider)}:${String(row.data_provider_ref)}`);
   return {
     source: row.data_provider as string,
     sourceId: row.data_provider_ref as string,

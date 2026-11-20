@@ -143,7 +143,7 @@ describe('loading', () => {
     renderSettingsModal();
 
     expect(
-      await screen.findByText("Secret storage isn't configured on the server."),
+      await screen.findByText("Secret storage isn't configured on the server. (encryption_unavailable · HTTP 500)"),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText('Display name')).not.toBeInTheDocument();
   });
@@ -213,14 +213,16 @@ describe('save', () => {
   });
 
   test('a failed save maps the code to a message and leaves Save reachable', async () => {
-    onPut = () => json({ error: 'invalid_field' }, 400);
+    onPut = () => json({ error: 'invalid_field', detail: 'display_name must not be blank' }, 400);
     renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     await userEvent.type(screen.getByLabelText('Display name'), 'x');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('Please check the highlighted fields.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('A field was refused. (invalid_field: display_name must not be blank · HTTP 400)'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
 
@@ -373,8 +375,20 @@ describe('the Booking tab', () => {
 
     expect(await screen.findByLabelText('Recreation.gov email')).toBeInTheDocument();
     expect(
-      await screen.findByText('Booking service unavailable \u2014 status unknown'),
+      await screen.findByText('Booking service unavailable \u2014 status unknown (connection refused)'),
     ).toBeInTheDocument();
+  });
+
+  test('a session state this build has never heard of is shown as itself', async () => {
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    getRecgovStatus = () => json({ configured: true, username: 'ada@example.test', session: 'quarantined', mfa_pending: false });
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+
+    expect(await screen.findByText('Session state: quarantined')).toBeInTheDocument();
+    expect(screen.queryByText(/status unknown/)).toBeNull();
   });
 });
 

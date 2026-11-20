@@ -14,6 +14,7 @@ env:
   GH_TOKEN: ${{ github.token }}
   PROBE_NAME: Mahood Lake
   PROBE_BBOX: -120.2,52.1,-120.0,52.3
+  APP_PROJECT: roadtrip-web
 
 jobs:
   preview:
@@ -24,9 +25,10 @@ jobs:
         id: target
         run: |
           event=$GITHUB_EVENT_PATH
-          jq -e '.client_payload | .environment and .url and .git.sha' "$event" >/dev/null \
+          jq -e '.client_payload | .environment and .url and .git.sha and .project.name' "$event" >/dev/null \
             || { echo "unexpected Vercel event; client_payload has: $(jq -c '.client_payload | keys? // .' "$event")"; exit 1; }
           if [ "$(jq -r .client_payload.environment "$event")" != preview ]; then echo skip=true >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$(jq -r .client_payload.project.name "$event")" != "$APP_PROJECT" ]; then echo skip=true >> "$GITHUB_OUTPUT"; exit 0; fi
           url=$(jq -r .client_payload.url "$event")
           case "$url" in https://*) ;; *) url="https://$url" ;; esac
           { echo skip=false; echo "url=$url"; echo "sha=$(jq -r .client_payload.git.sha "$event")"; } >> "$GITHUB_OUTPUT"

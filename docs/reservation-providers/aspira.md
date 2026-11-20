@@ -184,14 +184,37 @@ Status codes are **one family** across `mapAvailabilities`,
 `mapLinkAvailabilities`, and `resourceAvailabilities` — and across tenants.
 **Zero is the bookable code** (see `AspiraStatus.kt`):
 
-| Code | Meaning |
-|---|---|
-| 0 | available / bookable |
-| 1 | not bookable for the requested date + equipment search |
-| 2 | closed — outside the operating season or the booking window |
-| 5 | not bookable under the requested equipment/booking category (WA yurts, group sites, picnic shelters answer this in every window) |
-| other nonzero | not bookable (unrecognized reason) |
-| missing | unknown (internal `Int.MIN_VALUE` sentinel) |
+| Code | Meaning | Internal |
+|---|---|---|
+| 0 | available / bookable | `AVAILABLE` |
+| 1 | not bookable for the requested date + equipment search | `RESERVED` |
+| 2 | closed — outside the operating season or the booking window | `CLOSED` |
+| 3 | non-reservable: first come, first served | `FIRST_COME` |
+| 4 | this site closed on these dates (host sites, single-site closures) | `CLOSED` |
+| 5 | not bookable under the requested equipment/booking category (WA yurts, group sites, picnic shelters, backcountry answer this in every window) | `UNKNOWN` |
+| missing | unknown (internal `Int.MIN_VALUE` sentinel) | `UNKNOWN` |
+| any other | unrecognized | `UNKNOWN`, counted |
+
+Codes 3, 4 and 5 were read from the `data/raw/aspira-resources-*` captures
+(2026-06-12 and 06-16) joined to the `aspira-inventory-*` site catalog:
+
+- **3** — of the 603 sites that answer only `3`, 545 describe themselves as
+  "first-come, first-served" in their own catalog text (BC: "This is a
+  first-come, first-served campsite. Site availability can only be confirmed
+  in-person"). Takakkaw Falls, a known walk-in-only campground, answers `3`
+  on every site.
+- **4** — answered by host sites ("This is a host site") on every day, and by
+  ordinary sites on some days and `0`/`1` on others, so it is a per-site,
+  per-day closure rather than a season. `CLOSED` because the site is not
+  open to anyone on that day; it is not watchable, unlike `1`.
+- **5** — the site exists but is not sold under `bookingCategoryId=0`, so its
+  real availability is not visible to this search. `UNKNOWN`, because neither
+  `RESERVED` (watchable) nor `CLOSED` (renders as shut for the season) is
+  true.
+
+Resource-row counts across the captures: `0` 3,126, `1` 6,664, `2` 1,184,
+`3` 2,470, `4` 238, `5` 1,906. `6` appears only in the `mapAvailabilities` /
+`mapLinkAvailabilities` rollups, which the adapter does not classify.
 
 Verified live on 2026-08-21 against both tenants:
 
@@ -305,8 +328,11 @@ GET https://{host}/api/occupancy
 `availability` uses the same zero-is-bookable family as the map endpoint, but
 carries less information: it answers `2` for a booked site and a closed one
 alike (Alice Lake returned `2` on all 109 rows for a sold-out summer date and
-for a winter date), so `AspiraStatus.classifyOccupancy` maps everything
-nonzero to `reserved` rather than guessing `closed`.
+for a winter date), so `AspiraStatus.classifyOccupancy` maps `1` and `2` to
+`reserved` rather than guessing `closed`. The map endpoint's meanings for `3`,
+`4` and `5` were established from map captures only, so on this endpoint they
+are unrecognized (`unknown`, and counted) until a capture shows what occupancy
+sends there.
 
 Used for: opt-in stay-level checks only. Normal catalog availability uses
 `/api/availability/map` so callers get independent per-day observations.

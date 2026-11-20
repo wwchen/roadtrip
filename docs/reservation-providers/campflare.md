@@ -41,7 +41,8 @@ Status mapping:
 | `closed` | `CLOSED` |
 | `first-come-first-serve` | `FIRST_COME` |
 | `not-yet-released` | `UNKNOWN` |
-| `unknown` | `UNKNOWN` |
+| `unknown`, missing | `UNKNOWN` |
+| anything else | `UNKNOWN`, counted |
 
 Operational config:
 

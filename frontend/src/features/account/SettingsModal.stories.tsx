@@ -33,21 +33,32 @@ const SETTINGS: SettingsResponse = {
 
 /** Serves the settings document and accepts every write, so the catalog entry
  *  is interactive — switching sections and picking a theme both work. */
-function useStubbedApi(theme: ThemeChoice) {
+interface StubbedFailure {
+  url: string;
+  status: number;
+  body: { error: string; detail?: string };
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+function useStubbedApi(theme: ThemeChoice, failure?: StubbedFailure) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     const doc: SettingsResponse = { ...SETTINGS, profile: { ...SETTINGS.profile, theme } };
     const original = window.fetch;
     window.fetch = (async (input: unknown) => {
       const url = String(input);
+      if (failure && url === failure.url) {
+        return new Response(JSON.stringify(failure.body), { status: failure.status, headers: JSON_HEADERS });
+      }
       const body = JSON.stringify(url === '/api/settings' ? doc : { ok: true });
-      return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(body, { status: 200, headers: JSON_HEADERS });
     }) as typeof window.fetch;
     setReady(true);
     return () => {
       window.fetch = original;
     };
-  }, [theme]);
+  }, [theme, failure]);
   return ready;
 }
 
@@ -57,8 +68,8 @@ function useStubbedApi(theme: ThemeChoice) {
  * A fresh `QueryClient` per story keeps one entry's edits out of the next, and
  * retries are off so the stub's first answer is the one rendered.
  */
-function Demo({ dark, theme = 'system' }: { dark?: boolean; theme?: ThemeChoice }) {
-  const ready = useStubbedApi(theme);
+function Demo({ dark, theme = 'system', failure }: { dark?: boolean; theme?: ThemeChoice; failure?: StubbedFailure }) {
+  const ready = useStubbedApi(theme, failure);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -113,4 +124,38 @@ export const InDarkMode: Story = { render: () => <Demo dark theme="dark" /> };
 export const Narrow: Story = {
   parameters: { viewport: { defaultViewport: 'mobile1' } },
   render: () => <Demo />,
+};
+
+const LOAD_FAILURE: StubbedFailure = {
+  url: '/api/settings',
+  status: 503,
+  body: { error: 'encryption_unavailable', detail: 'roadtrip.booking.credential-key is not set' },
+};
+
+const SAVE_FAILURE: StubbedFailure = {
+  url: '/api/settings/profile',
+  status: 400,
+  body: { error: 'invalid_field', detail: 'display_name must not be blank' },
+};
+
+export const LoadFailed: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story: "The settings document did not load: the known code's sentence, then the raw code, detail and HTTP status.",
+      },
+    },
+  },
+  render: () => <Demo failure={LOAD_FAILURE} />,
+};
+
+export const SaveRefused: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story: 'Clear the display name and click Save. The refusal names the field the server rejected.',
+      },
+    },
+  },
+  render: () => <Demo failure={SAVE_FAILURE} />,
 };

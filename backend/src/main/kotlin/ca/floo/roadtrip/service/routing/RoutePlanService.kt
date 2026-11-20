@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.routing
 
 import ca.floo.roadtrip.model.routing.RoutePlan
 import ca.floo.roadtrip.support.RoutingException
+import ca.floo.roadtrip.support.RoutingFailure
 import kotlinx.serialization.json.Json
 
 /** What planning a route came to. The route maps each arm to a status. */
@@ -16,6 +17,7 @@ internal sealed interface RoutePlanResult {
     ) : RoutePlanResult
 
     data class DirectionsUnavailable(
+        val failure: RoutingFailure,
         val detail: String,
     ) : RoutePlanResult
 
@@ -45,7 +47,7 @@ internal class RoutePlanService(
             try {
                 routeCache.directions(waypoints)
             } catch (e: RoutingException) {
-                return RoutePlanResult.DirectionsUnavailable(e.message.orEmpty())
+                return RoutePlanResult.DirectionsUnavailable(e.failure, e.message ?: e::class.java.name)
             }
 
         val corridor =
@@ -58,7 +60,7 @@ internal class RoutePlanService(
                         ),
                     )
                 } catch (e: RoutingException) {
-                    return RoutePlanResult.CorridorUnavailable(e.message.orEmpty())
+                    return RoutePlanResult.CorridorUnavailable(e.message ?: e::class.java.name)
                 }
             }
 

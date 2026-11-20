@@ -1,66 +1,92 @@
 package ca.floo.roadtrip.client.campflare
 
+import ca.floo.roadtrip.client.AvailabilityPayloadReads
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.UnrecognizedStatusTally
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampsiteAvailability
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
-import java.time.LocalDate
 
 object CampflareAvailabilityParser {
+    private val reads = AvailabilityPayloadReads("campflare")
+
     fun parse(
         payload: JsonObject,
         observedAt: Instant,
     ): CampflareAvailability {
+        val unrecognized = UnrecognizedStatusTally()
         val campgrounds =
-            payload["campgrounds"]
-                ?.jsonArray
-                ?.mapNotNull { it as? JsonObject }
-                .orEmpty()
-                .mapNotNull(::parseCampground)
+            reads
+                .array(payload["campgrounds"], "campgrounds")
+                .mapIndexed { index, raw -> parseCampground(reads.obj(raw, "campgrounds[$index]"), index, unrecognized) }
                 .associateBy { it.campgroundId }
-        return CampflareAvailability(campgrounds = campgrounds, observedAt = observedAt)
+        return CampflareAvailability(
+            campgrounds = campgrounds,
+            observedAt = observedAt,
+            unrecognizedStatuses = unrecognized.counts(),
+        )
     }
 
-    private fun parseCampground(raw: JsonObject): CampflareCampgroundAvailability? {
-        val campgroundId = raw["campground_id"]?.jsonPrimitive?.contentOrNull ?: return null
+    private fun parseCampground(
+        raw: JsonObject,
+        index: Int,
+        unrecognized: UnrecognizedStatusTally,
+    ): CampflareCampgroundAvailability {
+        val campgroundId = reads.string(raw["campground_id"], "campgrounds[$index].campground_id")
         val campsiteAvailability =
-            raw["campsite_availability"]
-                ?.jsonArray
-                ?.mapNotNull { it as? JsonObject }
-                .orEmpty()
-                .mapNotNull(::parseCampsite)
+            reads
+                .array(raw["campsite_availability"], "campground $campgroundId campsite_availability")
+                .mapIndexed { siteIndex, site ->
+                    parseCampsite(
+                        reads.obj(site, "campground $campgroundId campsite_availability[$siteIndex]"),
+                        campgroundId,
+                        siteIndex,
+                        unrecognized,
+                    )
+                }
         return CampflareCampgroundAvailability(
             campgroundId = campgroundId,
             campsiteAvailability = campsiteAvailability,
         )
     }
 
-    private fun parseCampsite(raw: JsonObject): CampflareCampsiteAvailability? {
-        val campsiteId = raw["campsite_id"]?.jsonPrimitive?.contentOrNull ?: return null
+    private fun parseCampsite(
+        raw: JsonObject,
+        campgroundId: String,
+        siteIndex: Int,
+        unrecognized: UnrecognizedStatusTally,
+    ): CampflareCampsiteAvailability {
+        val campsiteId = reads.string(raw["campsite_id"], "campground $campgroundId campsite_availability[$siteIndex].campsite_id")
         val availability =
-            raw["availability"]
-                ?.jsonObject
-                ?.mapNotNull { (date, status) ->
-                    val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull() ?: return@mapNotNull null
-                    parsedDate to classify(status.jsonPrimitive.contentOrNull)
-                }.orEmpty()
-                .toMap()
+            reads
+                .obj(raw["availability"], "campsite $campsiteId availability")
+                .entries
+                .associate { (date, status) ->
+                    reads.isoDate(date, "campsite $campsiteId availability date") to classify(campsiteId, date, status, unrecognized)
+                }
         return CampflareCampsiteAvailability(campsiteId = campsiteId, availability = availability)
     }
 
-    private fun classify(raw: String?): AvailabilityStatus =
-        when (raw?.trim()?.lowercase()) {
+    private fun classify(
+        campsiteId: String,
+        date: String,
+        status: JsonElement,
+        unrecognized: UnrecognizedStatusTally,
+    ): AvailabilityStatus {
+        val raw = reads.string(status, "campsite $campsiteId status on $date")
+        return unrecognized.orUnknown(raw, statusOf(raw))
+    }
+
+    private fun statusOf(raw: String): AvailabilityStatus? =
+        when (raw.trim().lowercase()) {
             "available" -> AvailabilityStatus.AVAILABLE
             "reserved" -> AvailabilityStatus.RESERVED
             "closed" -> AvailabilityStatus.CLOSED
             "first-come-first-serve", "first_come", "first come first serve" -> AvailabilityStatus.FIRST_COME
-            "not-yet-released", "unknown" -> AvailabilityStatus.UNKNOWN
-            else -> AvailabilityStatus.UNKNOWN
+            "", "not-yet-released", "unknown" -> AvailabilityStatus.UNKNOWN
+            else -> null
         }
 }

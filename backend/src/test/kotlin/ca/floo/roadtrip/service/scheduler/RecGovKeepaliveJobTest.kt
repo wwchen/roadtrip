@@ -2,10 +2,7 @@ package ca.floo.roadtrip.service.scheduler
 
 import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.auth.UserId
-import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.observability.AtcOutcome
 import ca.floo.roadtrip.observability.KeepaliveOutcome
-import ca.floo.roadtrip.observability.PollSkipReason
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
@@ -308,45 +305,11 @@ class RecGovKeepaliveJobTest {
         override suspend fun health(profileId: String): CompanionSessionHealth = CompanionSessionHealth.Active
     }
 
-    private class RecordingMetrics : RoadtripMetrics {
+    private class RecordingMetrics : RoadtripMetrics by RoadtripMetrics.NoOp {
         val keepalives = mutableListOf<KeepaliveOutcome>()
 
         override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) {
             keepalives += outcome
         }
-
-        override fun atcFired(
-            provider: BookingProvider?,
-            outcome: AtcOutcome,
-            error: String?,
-            durationMs: Int?,
-        ) = Unit
-
-        override fun availabilityFetchCompleted(
-            provider: BookingProvider,
-            outcome: String,
-            durationMs: Int?,
-        ) = Unit
-
-        override fun availabilityRunFinished(
-            status: String,
-            durationMs: Int,
-        ) = Unit
-
-        override fun availabilityPollSkipped(
-            provider: BookingProvider,
-            reason: PollSkipReason,
-        ) = Unit
-
-        override fun watchTriggerFired(
-            kinds: Set<String>,
-            delivered: Boolean,
-        ) = Unit
-
-        override fun ingestRunFinished(
-            target: String,
-            kind: String,
-            status: String,
-        ) = Unit
     }
 }

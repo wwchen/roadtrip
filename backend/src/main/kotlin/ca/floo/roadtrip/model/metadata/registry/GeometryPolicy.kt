@@ -21,9 +21,10 @@ data class GeometryPolicy(
 )
 
 /**
- * One geometry feed. [state] is honoured only by [GeometryFormat.USCAMPGROUNDS_CSV]
- * and [nameProperty] only by [GeometryFormat.GEOJSON_POINTS]; declaring either
- * elsewhere is a boot error rather than a silently dropped filter.
+ * One geometry feed. [state] and [types] are honoured only by
+ * [GeometryFormat.USCAMPGROUNDS_CSV] and [nameProperty] only by
+ * [GeometryFormat.GEOJSON_POINTS]; declaring one elsewhere is a boot error
+ * rather than a silently dropped filter.
  */
 @Serializable
 data class GeometrySourceSpec(
@@ -31,6 +32,7 @@ data class GeometrySourceSpec(
     val format: GeometryFormat,
     @SerialName("name_property") val nameProperty: String? = null,
     val state: String? = null,
+    val types: List<String>? = null,
 )
 
 /** One member, one parser class. [wire] is the spelling the YAML uses. */

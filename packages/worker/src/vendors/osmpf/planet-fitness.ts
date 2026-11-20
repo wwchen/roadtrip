@@ -11,14 +11,21 @@ import {
   requiredString,
   type JsonObject,
 } from '../../etl/json-decode.js';
-import { nonBlank } from '../../etl/kotlin-text.js';
+import { kotlinTrim, nonBlank } from '../../etl/kotlin-text.js';
 import { serializeOpaquePayload, type OpaquePayloadJson } from '../../etl/envelope.js';
 import type { ParseResult, SourceEtl, TransformResult } from '../../etl/source-etl.js';
 import type { PlanetFitnessLocationUpsertCandidate } from '../../model/planet-fitness-candidate.js';
 
 const ETL_SLUG = 'planet-fitness';
 const DEFAULT_NAME = 'Planet Fitness';
-const COUNTRY = 'US';
+const CANADA = 'CA';
+const UNITED_STATES = 'US';
+const NO_COUNTRY = 'no country in the OSM address tags';
+const CANADIAN_POSTCODE = /^[A-Za-z][0-9][A-Za-z] ?[0-9][A-Za-z][0-9]$/;
+const US_ZIP = /^[0-9]{5}(-[0-9]{4})?$/;
+const CANADIAN_PROVINCE_CODES: ReadonlySet<string> = new Set([
+  'AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT',
+]);
 const SOURCE_ID_SEPARATOR = '-';
 const ADDRESS_SEPARATOR = ' ';
 const NO_ELEMENTS = 'no elements in payload';
@@ -30,6 +37,8 @@ const TAG = {
   street: 'addr:street',
   city: 'addr:city',
   state: 'addr:state',
+  province: 'addr:province',
+  country: 'addr:country',
   postcode: 'addr:postcode',
   phone: 'phone',
   website: 'website',
@@ -81,17 +90,39 @@ function tagOf(tags: Tags, key: string): string | undefined {
   return Object.hasOwn(tags, key) ? tags[key] : undefined;
 }
 
-function buildAddress(tags: Tags): Address | null {
+function regionOf(tags: Tags): string | null {
+  return nonBlank(tagOf(tags, TAG.state)) ?? nonBlank(tagOf(tags, TAG.province));
+}
+
+function trimmedTag(tags: Tags, key: string): string {
+  const value = tagOf(tags, key);
+  return value === undefined ? '' : kotlinTrim(value);
+}
+
+function countryOf(tags: Tags): string | null {
+  const listed = trimmedTag(tags, TAG.country);
+  if (listed !== '') return listed;
+  const postcode = trimmedTag(tags, TAG.postcode);
+  const state = trimmedTag(tags, TAG.state);
+  const province = trimmedTag(tags, TAG.province);
+  if (CANADIAN_POSTCODE.test(postcode) || province !== '' || CANADIAN_PROVINCE_CODES.has(state.toUpperCase())) {
+    return CANADA;
+  }
+  if (US_ZIP.test(postcode) || state !== '') return UNITED_STATES;
+  return null;
+}
+
+function buildAddress(tags: Tags, country: string | null): Address | null {
   const street = nonBlank(
     [tagOf(tags, TAG.housenumber), tagOf(tags, TAG.street)]
       .filter((part): part is string => part !== undefined && nonBlank(part) !== null)
       .join(ADDRESS_SEPARATOR),
   );
   const city = nonBlank(tagOf(tags, TAG.city));
-  const state = nonBlank(tagOf(tags, TAG.state));
+  const state = regionOf(tags);
   const postcode = nonBlank(tagOf(tags, TAG.postcode));
   if (street === null && city === null && state === null && postcode === null) return null;
-  return { street, city, state, postcode, country: COUNTRY };
+  return { street, city, state, postcode, country };
 }
 
 function elementExtras(element: OverpassElement): OpaquePayloadJson {
@@ -108,15 +139,16 @@ function transformElement(element: OverpassElement): PlanetFitnessLocationUpsert
   const longitude = element.lon ?? element.center?.lon ?? null;
   if (latitude === null || longitude === null) return null;
   const tags: Tags = element.tags ?? {};
+  const country = countryOf(tags);
   return {
     locationId: sourceIdOf(element),
     name: tagOf(tags, TAG.name) ?? DEFAULT_NAME,
     latitude,
     longitude,
-    region: nonBlank(tagOf(tags, TAG.state)),
-    country: COUNTRY,
+    region: regionOf(tags),
+    country,
     phone: nonBlank(tagOf(tags, TAG.phone)),
-    address: addressJson(buildAddress(tags)),
+    address: addressJson(buildAddress(tags, country)),
     infoUrl: nonBlank(tagOf(tags, TAG.website)),
     openingHours: nonBlank(tagOf(tags, TAG.openingHours)),
     payload: elementExtras(element),
@@ -137,7 +169,7 @@ export class PlanetFitnessEtl implements SourceEtl<PlanetFitnessRawDto, PlanetFi
       const record = transformElement(element);
       yield record === null
         ? { ok: false, sourceId: sourceIdOf(element), errors: [MISSING_COORDINATES] }
-        : { ok: true, record };
+        : { ok: true, record, warnings: record.country === null ? [NO_COUNTRY] : [] };
     }
   }
 }

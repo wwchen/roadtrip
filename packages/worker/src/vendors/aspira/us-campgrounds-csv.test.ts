@@ -26,8 +26,8 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function row(longitude: string, latitude: string, name: string, state: string): string {
-  return [longitude, latitude, '', '', name, '', '', '', '', '', '', '', state].join(',');
+function row(longitude: string, latitude: string, name: string, state: string, type = 'SP'): string {
+  return [longitude, latitude, '', '', name, type, '', '', '', '', '', '', state].join(',');
 }
 
 const CSV = [
@@ -47,9 +47,13 @@ function envelopeOf(payloadJson: string): Envelope {
   return parseEnvelope(file);
 }
 
-function indexOf(stateFilter: string | null, csv: string = CSV): Map<string, GeometryPoint> {
+function indexOf(
+  stateFilter: string | null,
+  csv: string = CSV,
+  typeFilter: string[] | null = null,
+): Map<string, GeometryPoint> {
   return buildGeometryIndex(
-    [[SLUG, new UsCampgroundsCsvSource([envelopeOf(JSON.stringify(csv))], stateFilter)]],
+    [[SLUG, new UsCampgroundsCsvSource([envelopeOf(JSON.stringify(csv))], stateFilter, typeFilter)]],
     SILENT,
     ETL_SLUG,
   );
@@ -70,9 +74,9 @@ describe('the nationwide CSV, where a state filter is what stops a name collisio
     expect(byName.get(normalize('Manchester'))).toBeUndefined();
   });
 
-  test('no state filter indexes every state, the first row winning', () => {
+  test('no state filter indexes every state, and a name two states share is pinned to neither', () => {
     const byName = indexOf(null);
-    expect(byName.get(normalize('Brooks Memorial'))).toEqual({ latitude: 43.177, longitude: -101.732, source: SLUG });
+    expect(byName.get(normalize('Brooks Memorial'))).toBeUndefined();
     expect(byName.get(normalize('Manchester'))).toEqual({ latitude: 47.548, longitude: -122.545, source: SLUG });
   });
 
@@ -82,11 +86,24 @@ describe('the nationwide CSV, where a state filter is what stops a name collisio
   });
 
   test('a blank filter indexes every state rather than matching nothing', () => {
-    expect(indexOf('   ').get(normalize('Brooks Memorial'))).toEqual({
-      latitude: 43.177,
-      longitude: -101.732,
+    expect(indexOf('   ').get(normalize('Manchester'))).toEqual({
+      latitude: 47.548,
+      longitude: -122.545,
       source: SLUG,
     });
+    expect(indexOf('   ').size).toBe(1);
+  });
+
+  test('a type filter keeps only the listed agency types, compared trimmed and case-insensitively', () => {
+    const csv = [
+      row('-123.165', '47.737', 'Dosewallips', 'WA', 'NP'),
+      row('-122.902', '47.689', 'Dosewallips State Park', 'WA', ' sp '),
+      row('-120.0', '47.0', 'Beebe Bridge', 'WA', 'CP'),
+    ].join('\n');
+    const byName = indexOf('WA', csv, ['SP', 'cp']);
+    expect(byName.get(normalize('Dosewallips'))).toEqual({ latitude: 47.689, longitude: -122.902, source: SLUG });
+    expect(byName.get(normalize('Beebe Bridge'))).toBeDefined();
+    expect(indexOf('WA', csv).get(normalize('Dosewallips'))).toBeUndefined();
   });
 
   test('a short row, a blank line and an unparseable coordinate are skipped, not fatal', () => {

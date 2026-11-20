@@ -462,6 +462,19 @@ class PoiRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `poi search with a non-numeric limit is 400 naming limit`() =
+        testApplication {
+            application { routeTestApplication { poiRoutes(poiService()) } }
+
+            val resp = client.get("/api/pois/search?q=tunnel&limit=many")
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("invalid_query", body["error"]!!.jsonPrimitive.content)
+            assertEquals("limit must be an integer, got 'many'", body["detail"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `poi search categories filter narrows results`() =
         testApplication {
             seed(

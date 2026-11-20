@@ -864,6 +864,41 @@ class PoiRegistryValidatorTest {
         )
     }
 
+    @Test
+    fun `types on a format that cannot honour it fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: geojson_points
+                      types: [SP]
+                """,
+            )
+        assertTrue(
+            message.contains("geometry source 'uscampgrounds' declares 'types', which only 'uscampgrounds_csv' honours"),
+            message,
+        )
+    }
+
+    @Test
+    fun `an empty types list or a blank type fails`() {
+        for (types in listOf("[]", "[SP, \"\"]")) {
+            val message =
+                waError(
+                    """
+                    geometry:
+                      sources:
+                        - input: uscampgrounds
+                          format: uscampgrounds_csv
+                          types: $types
+                    """,
+                )
+            assertTrue(message.contains("geometry source 'uscampgrounds' declares a blank 'types'"), message)
+        }
+    }
+
     /** A blank filter matches nothing, so it would empty the join instead of narrowing it. */
     @Test
     fun `a blank state fails`() {
@@ -1159,7 +1194,15 @@ class PoiRegistryValidatorTest {
 
         assertEquals(
             GeometryPolicy(
-                sources = listOf(GeometrySourceSpec("uscampgrounds", GeometryFormat.USCAMPGROUNDS_CSV, state = "WA")),
+                sources =
+                    listOf(
+                        GeometrySourceSpec(
+                            "uscampgrounds",
+                            GeometryFormat.USCAMPGROUNDS_CSV,
+                            state = "WA",
+                            types = listOf("SP", "CP", "SF"),
+                        ),
+                    ),
                 match = MatchPolicy(parentFallback = true),
             ),
             bySlug.getValue("aspira-wa-campgrounds").geometry,

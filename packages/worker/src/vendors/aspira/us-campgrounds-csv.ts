@@ -8,6 +8,7 @@ import type { NamedPoint } from './named-point.js';
 const LONGITUDE_COL = 0;
 const LATITUDE_COL = 1;
 const NAME_COL = 4;
+const TYPE_COL = 5;
 const STATE_COL = 12;
 const MIN_COLS = STATE_COL + 1;
 const QUOTE = '"';
@@ -34,11 +35,14 @@ export class UsCampgroundsCsvSource implements GeometrySource {
   constructor(
     private readonly envelopes: readonly Envelope[],
     private readonly stateFilter: string | null = null,
+    private readonly typeFilter: readonly string[] | null = null,
   ) {}
 
   *points(): Iterable<NamedPoint> {
     const trimmed = this.stateFilter === null ? null : kotlinTrim(this.stateFilter).toUpperCase();
     const wantedState = trimmed === EMPTY ? null : trimmed;
+    const wantedTypes =
+      this.typeFilter === null ? null : new Set(this.typeFilter.map((type) => kotlinTrim(type).toUpperCase()));
     for (const envelope of this.envelopes) {
       const text = contentOrNull(envelope.payload);
       if (text === null) continue;
@@ -47,6 +51,7 @@ export class UsCampgroundsCsvSource implements GeometrySource {
         const cols = csvSplit(line);
         if (cols.length < MIN_COLS) continue;
         if (wantedState !== null && kotlinTrim(cols[STATE_COL] as string).toUpperCase() !== wantedState) continue;
+        if (wantedTypes !== null && !wantedTypes.has(kotlinTrim(cols[TYPE_COL] as string).toUpperCase())) continue;
         const longitude = kotlinDoubleFromText(cols[LONGITUDE_COL] as string);
         if (longitude === null) continue;
         const latitude = kotlinDoubleFromText(cols[LATITUDE_COL] as string);

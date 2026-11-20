@@ -6,6 +6,7 @@ import { poiPageFor } from '@/domain/poi/types/registry';
 import type { PoiPageVariant } from '@/domain/poi/PoiPageShell';
 import type { FlatPoiFeature } from '@/lib/poi';
 import { clearPoiFromUrl, showPoiInUrl } from '@/lib/poi-url';
+import { describeError } from '@/lib/error-report';
 import { alertCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
 import { usePoiDetail } from '@/queries/poi-detail';
 import { useMapStore } from '@/stores/mapStore';
@@ -78,7 +79,7 @@ export function PlaceSurface({ poiId, arrival, onClose }: PlaceSurfaceProps) {
             </Button>
           }
         >
-          <p>{placeCopy.loadFailedBody}</p>
+          <p>{placeCopy.loadFailedBody(describeError(query.error))}</p>
         </Banner>
       </PlaceChrome>
     );
@@ -94,7 +95,9 @@ export function PlaceSurface({ poiId, arrival, onClose }: PlaceSurfaceProps) {
     );
   }
 
-  const stale = query.isError ? <RefreshFailed onRetry={() => void query.refetch()} /> : null;
+  const stale = query.isError ? (
+    <RefreshFailed error={query.error} onRetry={() => void query.refetch()} />
+  ) : null;
 
   return id !== null && availabilitySupported(feature.properties) ? (
     <StayPlace key={id} feature={feature} poiId={id} Poi={Poi} arrival={arrival} stale={stale} onClose={onClose} />
@@ -103,7 +106,7 @@ export function PlaceSurface({ poiId, arrival, onClose }: PlaceSurfaceProps) {
   );
 }
 
-function RefreshFailed({ onRetry }: { onRetry: () => void }) {
+function RefreshFailed({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   return (
     <Banner
       status="warning"
@@ -114,7 +117,7 @@ function RefreshFailed({ onRetry }: { onRetry: () => void }) {
         </Button>
       }
     >
-      <p>{placeCopy.refreshFailedBody}</p>
+      <p>{placeCopy.refreshFailedBody(describeError(error))}</p>
     </Banner>
   );
 }

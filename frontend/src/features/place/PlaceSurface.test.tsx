@@ -141,10 +141,12 @@ const refetchDetail = (client: ReturnType<typeof mount>['client']) =>
   act(() => client.refetchQueries({ queryKey: queryKeys.pois.detail(POI_ID) }));
 
 const SERVER_ERROR = 500;
+
+const STATED_FAILURE = `boom · HTTP ${SERVER_ERROR}`;
 const TOO_MANY_REQUESTS = 429;
 const BAD_GATEWAY = 502;
-const RATE_LIMITED_REASON = 'Booking site rate-limited us — try again shortly';
-const UPSTREAM_FAILED_REASON = `Booking site returned an error (upstream HTTP ${SERVER_ERROR})`;
+const RATE_LIMITED_REASON = `Booking site rate-limited us — try again shortly (rate_limited · HTTP ${TOO_MANY_REQUESTS})`;
+const UPSTREAM_FAILED_REASON = `Booking site returned an error (upstream_5xx · HTTP ${BAD_GATEWAY} · upstream HTTP ${SERVER_ERROR})`;
 const GYM_CATEGORY = 'planet_fitness_location';
 const GYM_NAME = 'Planet Fitness Fresno';
 const DROPPED_PIN_CATEGORY = 'dropped-pin';
@@ -217,11 +219,11 @@ describe('PlaceSurface', () => {
     await screen.findByText(SUBTITLE);
     expect(screen.queryByText(placeCopy.refreshFailed)).not.toBeInTheDocument();
 
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, SERVER_ERROR)));
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'boom' }, SERVER_ERROR)));
     await refetchDetail(client);
 
     expect(await screen.findByText(placeCopy.refreshFailed)).toBeInTheDocument();
-    expect(screen.getByText(placeCopy.refreshFailedBody)).toBeInTheDocument();
+    expect(screen.getByText(placeCopy.refreshFailedBody(STATED_FAILURE))).toBeInTheDocument();
     expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
     expect(screen.queryByText(placeCopy.loadFailed)).not.toBeInTheDocument();
   });
@@ -441,7 +443,7 @@ describe('PlaceSurface, before there is a place to show', () => {
     mount();
 
     expect(await screen.findByText(placeCopy.loadFailed)).toBeInTheDocument();
-    expect(screen.getByText(placeCopy.loadFailedBody)).toBeInTheDocument();
+    expect(screen.getByText(placeCopy.loadFailedBody(STATED_FAILURE))).toBeInTheDocument();
     expect(screen.queryByTestId(SHEET_TESTID)).not.toBeInTheDocument();
     expect(screen.queryByText(placeCopy.refreshFailed)).not.toBeInTheDocument();
 
