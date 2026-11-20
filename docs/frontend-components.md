@@ -39,6 +39,12 @@ earlier preview URL live. Preview deployments sit behind Vercel Authentication, 
 app's. Its deployments dispatch the same `vercel.deployment.success` event as the app's, so
 `.github/workflows/preview-check.yml` skips any project but `roadtrip-web`.
 
+The project's own settings repeat the install, build, output and ignore commands from
+`frontend/vercel.json`. A branch cut before that file existed builds with the project
+settings; without them it gets Vercel's defaults, which run the frontend's own `vite build`
+into `dist/` and serve a 404. Where a branch has the file, the file wins. Change both
+together.
+
 ## Two layers
 
 ### Primitives (`@ui`)
