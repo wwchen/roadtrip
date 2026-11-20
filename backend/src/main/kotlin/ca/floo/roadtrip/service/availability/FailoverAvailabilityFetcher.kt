@@ -7,14 +7,19 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import org.slf4j.LoggerFactory
 import java.time.Instant
+
+private val log = LoggerFactory.getLogger(FailoverAvailabilityFetcher::class.java)
 
 internal open class FailoverAvailabilityFetcher(
     private val cooldowns: ProviderCooldownTracker,
     private val clock: () -> Instant = Instant::now,
+    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
 ) {
     data class AttemptRecord(
         val provider: BookingProvider,
@@ -64,6 +69,7 @@ internal open class FailoverAvailabilityFetcher(
             when (attempt.outcome) {
                 FetchOutcome.OK -> {
                     cooldowns.recordSuccess(provider.id)
+                    attempt.batch?.let { reportUnrecognized(provider.id, it) }
                     return FailoverResult(batch = attempt.batch, servedBy = provider.id, attempts = attempts)
                 }
                 FetchOutcome.RATE_LIMITED,
@@ -78,6 +84,19 @@ internal open class FailoverAvailabilityFetcher(
             }
         }
         return FailoverResult(batch = null, servedBy = null, attempts = attempts)
+    }
+
+    private fun reportUnrecognized(
+        provider: BookingProvider,
+        batch: AvailabilityObservationBatch,
+    ) {
+        if (batch.unrecognizedStatuses.isEmpty()) return
+        log.warn(
+            "{} sent availability statuses with no classification, shown as unknown: {}",
+            provider.id,
+            batch.unrecognizedStatuses,
+        )
+        metrics.availabilityStatusUnrecognized(provider, batch.unrecognizedStatuses.values.sum())
     }
 
     private data class Attempt(

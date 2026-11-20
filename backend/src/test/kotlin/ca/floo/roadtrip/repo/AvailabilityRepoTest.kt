@@ -196,6 +196,53 @@ class AvailabilityRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `a transition carries the status the cell held before it`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t1 = Instant.parse("2026-06-18T10:00:00Z")
+        val t2 = Instant.parse("2026-06-18T10:05:00Z")
+        val first = repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, t1)))
+        val second = repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t2)))
+
+        assertNull(first.single().lastKnownStatus)
+        assertEquals(AvailabilityStatus.RESERVED, second.single().lastKnownStatus)
+    }
+
+    @Test
+    fun `a transition out of unknown carries the last status the cell was known to hold`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t0 = Instant.parse("2026-06-18T10:00:00Z")
+        listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.UNKNOWN).forEachIndexed { i, status ->
+            repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, status, t0.plusSeconds(i * 60L))))
+        }
+        val back =
+            repo.recordObservations(
+                null,
+                listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t0.plusSeconds(120))),
+            )
+
+        assertEquals(AvailabilityStatus.AVAILABLE, back.single().lastKnownStatus)
+        assertFalse(back.single().opensSite)
+    }
+
+    @Test
+    fun `a cell never known before it was unknown has no last known status`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t0 = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.UNKNOWN, t0)))
+        val known =
+            repo.recordObservations(
+                null,
+                listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t0.plusSeconds(60))),
+            )
+
+        assertNull(known.single().lastKnownStatus)
+        assertTrue(known.single().opensSite)
+    }
+
+    @Test
     fun `a cell named twice in one call is one observation, the latest`() {
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)

@@ -7,10 +7,14 @@ import java.time.LocalDate
  * `(campsiteId, targetDate)` changed to [status]. Produced by the poller when
  * it writes the cube (a transition = a status change from the prior stored
  * value) and consumed by [ca.floo.roadtrip.service.availability.WatchAlertDispatcher],
- * which alerts on the subset whose [status] `isOnlineBookable`.
+ * which alerts on the subset that [opensSite].
  */
 data class CellTransition(
     val campsiteId: Long,
     val targetDate: LocalDate,
     val status: AvailabilityStatus,
-)
+    val lastKnownStatus: AvailabilityStatus?,
+) {
+    val opensSite: Boolean
+        get() = status.isOnlineBookable && lastKnownStatus?.isOnlineBookable != true
+}

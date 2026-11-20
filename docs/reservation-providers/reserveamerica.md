@@ -77,6 +77,24 @@ HTML. Each site is a `siteListLabel` row:
   a pagination bucket ("Sites 036-049"), not a real loop, and site type is only
   present as brittle per-cell attribute markup. Both ship null.
 
+Status cells are `<div class='td status {code} …'>{label}</div>`, classified
+by `ReserveAmericaAvailabilityParser` from the code or the label. The page's
+own legend reads "A Available, P Call the Park, W First Come, First Served,
+X Not avail., R Reserved".
+
+| Cell | Internal |
+|---|---|
+| `a` | `AVAILABLE` |
+| `r` | `RESERVED` |
+| `w` | `FIRST_COME` |
+| `x`, `u` | `CLOSED` |
+| `p` (call the park) | `UNKNOWN`: not bookable online, and the page does not say whether the site is free |
+| anything else | `UNKNOWN`, counted as `{class}/{label}` |
+
+Counts across the `data/raw/reserveamerica-*` captures (1,036,168 cells):
+`a` 491,906, `r` 487,506, `x` 50,004, `w` 6,549, `p` 203. `p` appears only on
+ABPP group sites, on the first two days of a window.
+
 ### Dead developer API
 
 `api.amp.active.com/camping/{campgrounds,campgrounds/details,campsites}`

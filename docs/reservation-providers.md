@@ -263,6 +263,14 @@ Two guards keep one opening from alerting twice:
   mutex) and re-reads the watch first, so a `stopWhenTriggered` watch that
   one path just marked `DONE` is not fired again by another.
 
+An opening is a transition to a bookable status from a cell that was not
+already bookable. Each `CellTransition` carries `lastKnownStatus`, the cell's
+most recent status other than `unknown` before the change (null when it was
+never known), and the dispatcher alerts, and fires holds, only on transitions
+whose `opensSite` is true. So `available → unknown → available` (a fetch that
+lost the cell, then found it again) is not an opening, while
+`reserved → unknown → available` is.
+
 **Adding a new alert provider is one file** under
 `service/availability/alert/providers/<vendor>/` plus one registry entry.
 `AlertProviderRegistry.forWatch` v1 always returns the internal poller;
@@ -925,7 +933,17 @@ Adapters do not own history queries. The lingua franca is one
 campsite/date/status observation with the shared status enum:
 `first_come | reserved | available | closed | unknown`. `first_come` is
 visible to users but does not count as online availability; missing provider
-data is `unknown`, not `closed`. Provider-specific richness (equipment-type
+data is `unknown`, not `closed`.
+
+Each adapter classifies the vendor values it has seen with an explicit table
+(listed per vendor in `reservation-providers/`). A value not in the table is
+never folded into a plausible status: the cell is `unknown`, and the batch
+carries the verbatim value and its cell count in
+`AvailabilityObservationBatch.unrecognizedStatuses`. `FailoverAvailabilityFetcher`
+logs those values at WARN and counts the cells on
+`roadtrip.availability.status.unrecognized` (by provider; the raw value stays
+out of the metric's labels because the vendor controls it). A new vendor value
+therefore shows up as a log line and a counter, not as a silently wrong cell. Provider-specific richness (equipment-type
 breakdowns, upstream map structure) is *not* captured; that
 fidelity lives in the live availability call. The interval rows are the
 long-tail summary, not a replay log.

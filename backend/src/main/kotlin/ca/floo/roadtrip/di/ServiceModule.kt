@@ -364,7 +364,7 @@ val serviceModule =
             val config: AppConfig = get()
             ProviderCooldownTracker(cooldown = config.availability.providerCooldown)
         }
-        single { FailoverAvailabilityFetcher(cooldowns = get<ProviderCooldownTracker>()) }
+        single { FailoverAvailabilityFetcher(cooldowns = get<ProviderCooldownTracker>(), metrics = get<RoadtripMetrics>()) }
         single {
             VendorRateLimiter(get<AppConfig>().vendorRateLimit, get<DataSource>())
         }

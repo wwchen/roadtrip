@@ -45,7 +45,13 @@ class WatchAlertDispatcherFiringTest : SharedDbTest() {
     private val night: LocalDate = LocalDate.now().plusDays(30)
     private var campsiteId = 0L
     private var ownerId = 0L
-    private val opened get() = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE)
+    private val opened get() =
+        CellTransition(
+            campsiteId,
+            night,
+            AvailabilityStatus.AVAILABLE,
+            lastKnownStatus = AvailabilityStatus.RESERVED,
+        )
 
     private val countingHandler =
         object : TriggerActionHandler {
@@ -178,8 +184,38 @@ class WatchAlertDispatcherFiringTest : SharedDbTest() {
     fun `reader transitions with nothing bookable fire nothing`() {
         watch(stopWhenTriggered = false)
         runBlocking {
-            dispatcher().dispatchCovering(listOf(CellTransition(campsiteId, night, AvailabilityStatus.RESERVED)), Instant.now())
+            dispatcher().dispatchCovering(
+                listOf(CellTransition(campsiteId, night, AvailabilityStatus.RESERVED, lastKnownStatus = AvailabilityStatus.AVAILABLE)),
+                Instant.now(),
+            )
         }
         assertEquals(emptyList(), fired.toList())
+    }
+
+    @Test
+    fun `a cell back from unknown that was already bookable before it is not an opening`() {
+        val watch = watch(stopWhenTriggered = false)
+        val returned = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE, lastKnownStatus = AvailabilityStatus.AVAILABLE)
+        runBlocking {
+            dispatcher().dispatchCovering(listOf(returned), Instant.now())
+            dispatcher().dispatch(listOf(watch), listOf(returned))
+        }
+        assertEquals(emptyList(), fired.toList())
+    }
+
+    @Test
+    fun `a cell back from unknown that was taken before it is an opening`() {
+        val watch = watch(stopWhenTriggered = false)
+        val opening = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE, lastKnownStatus = AvailabilityStatus.RESERVED)
+        runBlocking { dispatcher().dispatch(listOf(watch), listOf(opening)) }
+        assertEquals(listOf(watch.id), fired.toList())
+    }
+
+    @Test
+    fun `a cell first seen bookable is an opening`() {
+        val watch = watch(stopWhenTriggered = false)
+        val firstSeen = CellTransition(campsiteId, night, AvailabilityStatus.AVAILABLE, lastKnownStatus = null)
+        runBlocking { dispatcher().dispatch(listOf(watch), listOf(firstSeen)) }
+        assertEquals(listOf(watch.id), fired.toList())
     }
 }

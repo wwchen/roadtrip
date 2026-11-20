@@ -215,19 +215,19 @@ class AspiraObservationsTest {
                                 mapOf(
                                     "1" to listOf(0),
                                     "2" to listOf(1),
-                                    "3" to listOf(4),
+                                    "3" to listOf(2),
+                                    "4" to listOf(3),
+                                    "5" to listOf(4),
+                                    "6" to listOf(5),
+                                    "7" to listOf(99),
+                                    "8" to listOf(99),
                                 ),
                         )
                     },
                 )
 
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
-            val campsites =
-                listOf(
-                    aspiraCampsite(1, "1"),
-                    aspiraCampsite(2, "2"),
-                    aspiraCampsite(3, "3"),
-                )
+            val campsites = (1L..8L).map { aspiraCampsite(it, it.toString()) }
             val batch =
                 provider.availability(
                     campground = aspiraCampground("pc", -999),
@@ -241,10 +241,16 @@ class AspiraObservationsTest {
                 mapOf(
                     1L to AvailabilityStatus.AVAILABLE,
                     2L to AvailabilityStatus.RESERVED,
-                    3L to AvailabilityStatus.RESERVED,
+                    3L to AvailabilityStatus.CLOSED,
+                    4L to AvailabilityStatus.FIRST_COME,
+                    5L to AvailabilityStatus.CLOSED,
+                    6L to AvailabilityStatus.UNKNOWN,
+                    7L to AvailabilityStatus.UNKNOWN,
+                    8L to AvailabilityStatus.UNKNOWN,
                 ),
                 batch.statusesOn(0),
             )
+            assertEquals(mapOf("99" to 2), batch.unrecognizedStatuses)
         }
 
     @Test

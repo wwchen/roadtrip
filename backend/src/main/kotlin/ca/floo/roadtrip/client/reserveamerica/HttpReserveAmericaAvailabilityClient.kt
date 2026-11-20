@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.UnrecognizedStatusTally
 import ca.floo.roadtrip.support.ReserveAmericaException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,10 +36,11 @@ class HttpReserveAmericaAvailabilityClient(
         primeSession(host)
         val observedAt = Instant.now()
         val statuses = linkedMapOf<String, MutableMap<LocalDate, AvailabilityStatus>>()
+        val unrecognized = UnrecognizedStatusTally()
         var cursor = startDate
         while (cursor.isBefore(endDate)) {
             val pageEnd = minOf(cursor.plusDays(MATRIX_DAYS.toLong()), endDate)
-            fetchWindow(host, contractCode, parkId, cursor, pageEnd, statuses)
+            fetchWindow(host, contractCode, parkId, cursor, pageEnd, statuses, unrecognized)
             cursor = pageEnd
         }
         return ReserveAmericaAvailability(
@@ -48,6 +50,7 @@ class HttpReserveAmericaAvailabilityClient(
             endDate = endDate,
             observedAt = observedAt,
             statuses = statuses.mapValues { (_, byDate) -> byDate.toMap() },
+            unrecognizedStatuses = unrecognized.counts(),
         )
     }
 
@@ -58,6 +61,7 @@ class HttpReserveAmericaAvailabilityClient(
         startDate: LocalDate,
         endDate: LocalDate,
         out: MutableMap<String, MutableMap<LocalDate, AvailabilityStatus>>,
+        unrecognized: UnrecognizedStatusTally,
     ) {
         var startIdx = 0
         var totalSites: Int? = null
@@ -74,6 +78,7 @@ class HttpReserveAmericaAvailabilityClient(
             val html = get(host, matrixUrl(host, contractCode, parkId, startDate, startIdx))
             val page = ReserveAmericaAvailabilityParser.parse(html, startDate, endDate)
             merge(out, page.statuses)
+            unrecognized.addAll(page.unrecognizedStatuses)
             if (totalSites == null) {
                 totalSites = page.totalSites ?: page.statuses.size
             }

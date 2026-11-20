@@ -77,6 +77,7 @@ class AvailabilityRepo(
     private data class CurrentStatusRun(
         val id: Long,
         val status: AvailabilityStatus,
+        val lastKnownStatus: AvailabilityStatus?,
     )
 
     private fun Observation.cell(): Pair<Long, LocalDate> = campsiteId to targetDate
@@ -113,13 +114,26 @@ class AvailabilityRepo(
         txn
             .resultQuery(
                 """
-                SELECT DISTINCT ON (a.campsite_id, a.target_date)
-                    a.id, a.campsite_id, a.target_date, a.status
-                FROM availability a
-                JOIN unnest(?::bigint[], ?::date[]) AS cell(campsite_id, target_date)
-                  ON a.campsite_id = cell.campsite_id AND a.target_date = cell.target_date
-                ORDER BY a.campsite_id, a.target_date, a.last_observed_at DESC, a.id DESC
+                SELECT cur.id, cur.campsite_id, cur.target_date, cur.status,
+                    (
+                        SELECT k.status
+                        FROM availability k
+                        WHERE k.campsite_id = cur.campsite_id
+                          AND k.target_date = cur.target_date
+                          AND k.status <> ?::availability_status
+                        ORDER BY k.last_observed_at DESC, k.id DESC
+                        LIMIT 1
+                    ) AS last_known_status
+                FROM (
+                    SELECT DISTINCT ON (a.campsite_id, a.target_date)
+                        a.id, a.campsite_id, a.target_date, a.status
+                    FROM availability a
+                    JOIN unnest(?::bigint[], ?::date[]) AS cell(campsite_id, target_date)
+                      ON a.campsite_id = cell.campsite_id AND a.target_date = cell.target_date
+                    ORDER BY a.campsite_id, a.target_date, a.last_observed_at DESC, a.id DESC
+                ) cur
                 """.trimIndent(),
+                AvailabilityStatus.UNKNOWN.toDb().literal,
                 observations.map { it.campsiteId }.toTypedArray(),
                 observations.map { it.targetDate }.toTypedArray(),
             ).fetch { r ->
@@ -127,6 +141,7 @@ class AvailabilityRepo(
                     CurrentStatusRun(
                         id = r.get("id", Long::class.java),
                         status = AvailabilityStatus.parse(r.get("status", String::class.java)),
+                        lastKnownStatus = r.get("last_known_status", String::class.java)?.let(AvailabilityStatus::parse),
                     )
             }.toMap()
 
@@ -173,10 +188,12 @@ class AvailabilityRepo(
                 changed.map { utc(it.observedAt) }.toTypedArray(),
                 changed.map { current[it.cell()]?.id }.toTypedArray(),
             ).fetch { r ->
+                val cell = r.get("campsite_id", Long::class.java) to r.get("target_date", LocalDate::class.java)
                 CellTransition(
-                    r.get("campsite_id", Long::class.java),
-                    r.get("target_date", LocalDate::class.java),
-                    AvailabilityStatus.parse(r.get("status", String::class.java)),
+                    campsiteId = cell.first,
+                    targetDate = cell.second,
+                    status = AvailabilityStatus.parse(r.get("status", String::class.java)),
+                    lastKnownStatus = current[cell]?.lastKnownStatus,
                 )
             }
     }

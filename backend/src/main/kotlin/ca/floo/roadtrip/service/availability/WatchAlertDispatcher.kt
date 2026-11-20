@@ -76,7 +76,7 @@ internal class WatchAlertDispatcher(
         transitions: List<CellTransition>,
         recordedAt: Instant,
     ) {
-        val bookable = transitions.filter { it.status.isOnlineBookable }
+        val bookable = transitions.filter { it.opensSite }
         if (bookable.isEmpty()) return
         val watches =
             watchRepo
@@ -89,7 +89,7 @@ internal class WatchAlertDispatcher(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
     ) {
-        val bookable = transitions.filter { it.status.isOnlineBookable }
+        val bookable = transitions.filter { it.opensSite }
         if (bookable.isEmpty()) return
 
         for (watch in liveWatches) {
@@ -150,7 +150,7 @@ internal class WatchAlertDispatcher(
         val cells = availabilityRepo.readCurrent(campsites.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
-            val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
+            val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status, lastKnownStatus = null) }
             postOpenings(watch, covered, campsitesById, handlers)
         } else if (notificationTargets.isNotEmpty()) {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED

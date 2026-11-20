@@ -345,7 +345,10 @@ class AvailabilityLoaderTest : SharedDbTest() {
             }
         }
 
-        assertEquals(listOf(CellTransition(siteA, windowStart, AvailabilityStatus.AVAILABLE)), received)
+        assertEquals(
+            listOf(CellTransition(siteA, windowStart, AvailabilityStatus.AVAILABLE, lastKnownStatus = AvailabilityStatus.RESERVED)),
+            received,
+        )
     }
 
     @Test
