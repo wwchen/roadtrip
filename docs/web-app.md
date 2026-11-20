@@ -511,7 +511,7 @@ reachable over HTTP.
 The catalog is built by the project's own importer, never copied from production, in two hops that
 touch no production tooling:
 
-1. A throwaway local Postgres (`postgis/postgis:16-3.4`) and the Kotlin backend from this
+1. A throwaway local Postgres (`postgis/postgis:18-3.6`) and the Kotlin backend from this
    worktree, run with `ROADTRIP_PROFILE=local` on a spare port. The backend's working directory
    is `backend/`, so `data/raw` is reached through a temporary `backend/data -> ../data` symlink.
    `make data-import TARGET=<name> ADMIN_BASE=http://127.0.0.1:<port>` for `Campflare Campgrounds`,
