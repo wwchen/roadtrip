@@ -24,6 +24,21 @@ the components they document. Run `npm run storybook` for local development and
 `@ui/styles.css` theme boundary as production. Add a representative story when a new shared
 primitive or reusable Roadtrip UI pattern is introduced.
 
+Every pull request also gets a Storybook preview: the Vercel project `roadtrip-storybook`,
+beside `roadtrip-web` on the same repository, adds its own row to the comment the Vercel bot
+posts. Its Root Directory is `frontend`, and `frontend/vercel.json` holds the rest of its
+settings, so the app's dashboard-configured project is untouched. From `frontend/` it runs
+`npm ci` at the repo root, builds the workspace packages the frontend depends on
+(`npm run build -- roadtrip-frontend`), runs `build-storybook`, and serves
+`frontend/storybook-static` with no framework preset. It has no environment variables:
+stories render from fixtures. Its `ignoreCommand` skips a build when nothing under
+`frontend/`, `packages/`, or the root `package.json` / `package-lock.json` changed since the
+branch's last Storybook deployment (`VERCEL_GIT_PREVIOUS_SHA`, or the previous commit on a
+branch's first push); if git cannot tell, it builds. A skipped build keeps the branch's
+earlier preview URL live. Preview deployments sit behind Vercel Authentication, like the
+app's. Its deployments dispatch the same `vercel.deployment.success` event as the app's, so
+`.github/workflows/preview-check.yml` skips any project but `roadtrip-web`.
+
 ## Two layers
 
 ### Primitives (`@ui`)
