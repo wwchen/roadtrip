@@ -5,6 +5,7 @@
 // seconds are noise, and showing them invites the user to trust them.
 import { SECONDS_PER_MINUTE } from '@/lib/format';
 import { stopLabel, type StopSlot } from '@/domain/trip/stops';
+import { describeError } from '@/lib/error-report';
 
 const METRES_PER_KM = 1000;
 const MINUTES_PER_HOUR = 60;
@@ -107,23 +108,17 @@ const ROUTE_ERROR_MESSAGES = new Map<string, string>([
   ['duplicate_adjacent', 'Two adjacent stops are the same.'],
   ['too_few_points', 'Need at least 2 stops.'],
   ['too_many_points', 'Too many stops.'],
-  ['routing_unavailable', 'Routing temporarily unavailable.'],
+  ['route_not_found', 'No drivable route connects these stops.'],
+  ['route_no_segment', 'A stop is too far from any road.'],
+  ['route_invalid_input', 'The routing service refused these stops.'],
+  ['routing_not_configured', 'Routing is not configured on this server.'],
+  ['routing_auth_failed', 'The routing service rejected our credentials.'],
+  ['routing_rate_limited', 'The routing service is limiting us — try again shortly.'],
+  ['routing_unreachable', "We can't reach the routing service."],
+  ['routing_unavailable', 'The routing service returned an error.'],
+  ['corridor_unavailable', 'Could not build the corridor around this route.'],
 ]);
 
-/**
- * Turn a routing failure into a sentence.
- *
- * A `Map`, not an object literal: a code naming an `Object.prototype` member
- * would otherwise resolve up the prototype chain and return a function — the same
- * defect the settings-error port fixed in Phase 3.
- *
- * The fallback names the HTTP status, because a routing failure with no code we
- * recognise is usually infrastructural and the number is the only actionable
- * detail. With no status at all it was a transport failure, which is a different
- * sentence.
- */
-export function routeErrorMessage(code: string | null | undefined, status?: number): string {
-  const known = code ? ROUTE_ERROR_MESSAGES.get(code) : undefined;
-  if (known) return known;
-  return status ? `Routing error (${status})` : 'Network error';
+export function routeErrorMessage(error: unknown): string {
+  return describeError(error, (code) => ROUTE_ERROR_MESSAGES.get(code));
 }

@@ -16,6 +16,9 @@ import ca.floo.roadtrip.route.common.optionalOffsetDateTimeQuery
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.respondInvalidQuery
+import ca.floo.roadtrip.route.common.value
+import ca.floo.roadtrip.route.common.valueOrNull
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardResult
 import ca.floo.roadtrip.service.availability.ForcePollerResult
@@ -47,8 +50,20 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                                 )
                             is OptionalQuery.Parsed -> activeQuery.value
                         }
-                    val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
-                    val offset = call.intQueryAtLeast("offset", ListPaging.DEFAULT_OFFSET, ListPaging.MIN_OFFSET)
+                    val limit =
+                        call
+                            .boundedIntQuery(
+                                "limit",
+                                ListPaging.DEFAULT_LIMIT,
+                                ListPaging.limitRange,
+                            ).value { return@get call.respondInvalidQuery(it) }
+                    val offset =
+                        call
+                            .intQueryAtLeast(
+                                "offset",
+                                ListPaging.DEFAULT_OFFSET,
+                                ListPaging.MIN_OFFSET,
+                            ).value { return@get call.respondInvalidQuery(it) }
                     call.respondEncodedJson(
                         dashboard.listPollers(active = active, limit = limit, offset = offset),
                     )
@@ -67,7 +82,13 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         val id =
                             call.longPath("id")
                                 ?: return@get call.respondApiError("invalid_id", HttpStatusCode.BadRequest)
-                        val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
+                        val limit =
+                            call
+                                .boundedIntQuery(
+                                    "limit",
+                                    ListPaging.DEFAULT_LIMIT,
+                                    ListPaging.limitRange,
+                                ).value { return@get call.respondInvalidQuery(it) }
                         call.respondEncodedJson(dashboard.listRunsForPoller(id, limit = limit))
                     }.describeApi("availability", "Runs for one poller, newest first")
                         .access(RouteAccess.Anonymous)
@@ -91,9 +112,15 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
             route("/runs") {
                 get {
                     val status = call.queryParam("status")
-                    val pollerId = call.optionalLongQuery("poller_id")
-                    val since = call.optionalOffsetDateTimeQuery("since")
-                    val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
+                    val pollerId = call.optionalLongQuery("poller_id").valueOrNull { return@get call.respondInvalidQuery(it) }
+                    val since = call.optionalOffsetDateTimeQuery("since").valueOrNull { return@get call.respondInvalidQuery(it) }
+                    val limit =
+                        call
+                            .boundedIntQuery(
+                                "limit",
+                                ListPaging.DEFAULT_LIMIT,
+                                ListPaging.limitRange,
+                            ).value { return@get call.respondInvalidQuery(it) }
                     call.respondEncodedJson(dashboard.listRuns(status = status, pollerId = pollerId, since = since, limit = limit))
                 }.describeApi("availability", "Recent runs across all pollers")
                     .access(RouteAccess.Anonymous)
@@ -101,10 +128,16 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
 
             route("/changes") {
                 get {
-                    val campsiteId = call.optionalLongQuery("campsite_id")
-                    val poiId = call.optionalLongQuery("poi_id")
-                    val targetDate = call.optionalDateQuery("target_date")
-                    val limit = call.boundedIntQuery("limit", SNAPSHOT_DEFAULT_LIMIT, snapshotLimitRange)
+                    val campsiteId = call.optionalLongQuery("campsite_id").valueOrNull { return@get call.respondInvalidQuery(it) }
+                    val poiId = call.optionalLongQuery("poi_id").valueOrNull { return@get call.respondInvalidQuery(it) }
+                    val targetDate = call.optionalDateQuery("target_date").valueOrNull { return@get call.respondInvalidQuery(it) }
+                    val limit =
+                        call
+                            .boundedIntQuery(
+                                "limit",
+                                SNAPSHOT_DEFAULT_LIMIT,
+                                snapshotLimitRange,
+                            ).value { return@get call.respondInvalidQuery(it) }
                     when (
                         val result =
                             dashboard.listChanges(
@@ -125,8 +158,8 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                     .access(RouteAccess.Anonymous)
 
                 get("/summary") {
-                    val poiId = call.optionalLongQuery("poi_id")
-                    val explicitDates = call.dateQueryValues("dates")
+                    val poiId = call.optionalLongQuery("poi_id").valueOrNull { return@get call.respondInvalidQuery(it) }
+                    val explicitDates = call.dateQueryValues("dates").valueOrNull { return@get call.respondInvalidQuery(it) }.orEmpty()
                     when (
                         val result =
                             dashboard.changeSummary(

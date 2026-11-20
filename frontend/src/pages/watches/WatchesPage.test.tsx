@@ -235,7 +235,7 @@ describe('signed out', () => {
     stubApi(watchListFails(500, { error: 'boom' }));
     renderPage();
 
-    expect(await screen.findByText('Could not load watches.')).toBeInTheDocument();
+    expect(await screen.findByText(/^Could not load watches\. \(boom · HTTP 500\)$/)).toBeInTheDocument();
     expect(screen.queryByText('Sign in to manage your alerts')).not.toBeInTheDocument();
   });
 });
@@ -319,7 +319,7 @@ describe('create', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
-    expect(await screen.findByText('start_date must be before end_date')).toBeInTheDocument();
+    expect(await screen.findByText('start_date must be before end_date · HTTP 400')).toBeInTheDocument();
   });
 
 });
@@ -426,7 +426,7 @@ describe('edit', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
 
-    expect(await screen.findByText('Could not load watch for editing.')).toBeInTheDocument();
+    expect(await screen.findByText('Could not load watch for editing. (boom · HTTP 500)')).toBeInTheDocument();
     expect(screen.getByText('Create Watch')).toBeInTheDocument();
   });
 });
@@ -513,7 +513,7 @@ describe('pause and delete', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
 
-    expect(await screen.findByText('Could not delete watch.')).toBeInTheDocument();
+    expect(await screen.findByText('Could not delete watch. (boom · HTTP 500)')).toBeInTheDocument();
   });
 
   test('deleting the watch under edit falls back to create', async () => {
@@ -574,7 +574,7 @@ describe('deep links', () => {
     stubApi(watchListFails(500, { error: 'boom' }), route(DELETE_WATCH_7, 'POST', noContent));
     renderPage();
 
-    await screen.findByText('Could not load watches.');
+    await screen.findByText(/^Could not load watches\. \(boom · HTTP 500\)$/);
     expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
   });
 
@@ -592,7 +592,7 @@ describe('deep links', () => {
       route(DELETE_WATCH_7, 'POST', noContent),
     );
     renderPage();
-    await screen.findByText('Could not load watches.');
+    await screen.findByText(/^Could not load watches\. \(boom · HTTP 500\)$/);
 
     failing = false;
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -793,22 +793,25 @@ describe('magic link', () => {
     expect(screen.queryByText(/Watch stopped/)).not.toBeInTheDocument();
   });
 
-  test('explains a dead link rather than showing an error', async () => {
+  test('a refused token does not claim the alert was stopped, and shows the raw refusal', async () => {
     renderManagePage(manageRoute(() => json({ error: 'unauthenticated' }, 401)));
 
-    expect(await screen.findByText('This alert has been stopped')).toBeInTheDocument();
+    expect(await screen.findByText('This link did not open an alert')).toBeInTheDocument();
+    expect(screen.queryByText(/has been stopped/)).toBeNull();
+    expect(screen.getByText(/\(unauthenticated · HTTP 401\)/)).toBeInTheDocument();
   });
 
-  test('treats a watch that is already gone the same way', async () => {
+  test('a watch the signed-in account cannot see reads differently from a refused token', async () => {
     renderManagePage(manageRoute(() => json({ error: 'not_found' }, 404)));
 
-    expect(await screen.findByText('This alert has been stopped')).toBeInTheDocument();
+    expect(await screen.findByText('This alert is not on your account')).toBeInTheDocument();
+    expect(screen.getByText(/\(not_found · HTTP 404\)/)).toBeInTheDocument();
   });
 
-  test('offers a retry when the server fails for some other reason', async () => {
-    renderManagePage(manageRoute(() => json({ error: 'boom' }, 500)));
+  test('offers a retry when the server fails for some other reason, naming it', async () => {
+    renderManagePage(manageRoute(() => json({ error: 'boom', detail: 'db down' }, 500)));
 
-    expect(await screen.findByText('Could not load this alert.')).toBeInTheDocument();
+    expect(await screen.findByText('Could not load this alert. (boom: db down · HTTP 500)')).toBeInTheDocument();
   });
 
   test('falls through to the normal page when the URL has an id but no token', async () => {

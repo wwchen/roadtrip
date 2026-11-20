@@ -6,6 +6,7 @@ import { Drawer } from './Drawer';
 import { clearPoiFromUrl, showPoiInUrl } from '@/lib/poi-url';
 import { poiPageFor } from '@/domain/poi/types/registry';
 import { usePoiDetail } from '@/queries/poi-detail';
+import { describeError } from '@/lib/error-report';
 
 /**
  * The drawer for whatever pin is selected.
@@ -70,7 +71,7 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
           <EmptyState
             icon="close-circle-fill"
             title="This place didn't load"
-            body="We couldn't fetch its details. The map and everything else on it still work."
+            body={`We couldn't fetch its details. The map and everything else on it still work. (${describeError(query.error)})`}
             actions={
               <>
                 <Button variant="secondary" size="sm" iconStart="refresh" onClick={() => void query.refetch()}>
@@ -99,7 +100,7 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
               </Button>
             }
           >
-            <p>These are the details we loaded earlier. They may be out of date.</p>
+            <p>These are the details we loaded earlier. They may be out of date. ({describeError(query.error)})</p>
           </Banner>
         </div>
       ) : null}

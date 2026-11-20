@@ -4,6 +4,7 @@ import { ConfigError, config, type SignInConfig } from '@/server/config';
 import {
   AUTH_UNAVAILABLE,
   EMAIL_NOT_VERIFIED,
+  INVALID_CREDENTIALS,
   PASSWORD_TOO_SHORT,
   UNKNOWN_FAILURE,
   USER_ALREADY_EXISTS,
@@ -19,6 +20,7 @@ type NeonAuth = ReturnType<typeof createNeonAuth>;
 export interface SdkError {
   code?: string;
   status?: number;
+  message?: string;
 }
 
 interface ApiOutcome {
@@ -44,6 +46,8 @@ const SDK_CODES: Readonly<Record<string, string>> = {
   email_exists: USER_ALREADY_EXISTS,
   user_not_found: USER_NOT_FOUND,
   weak_password: PASSWORD_TOO_SHORT,
+  invalid_credentials: INVALID_CREDENTIALS,
+  INVALID_EMAIL_OR_PASSWORD: INVALID_CREDENTIALS,
   internal_error: AUTH_UNAVAILABLE,
   unexpected_failure: AUTH_UNAVAILABLE,
 };
@@ -53,7 +57,7 @@ export function portCodeOf(error: SdkError): string {
   if (code?.startsWith(NETWORK_CODE_PREFIX)) return AUTH_UNAVAILABLE;
   if (error.status !== undefined && error.status >= FIRST_SERVER_ERROR_STATUS) return AUTH_UNAVAILABLE;
   if (code === undefined) return UNKNOWN_FAILURE;
-  return SDK_CODES[code] ?? code;
+  return (Object.hasOwn(SDK_CODES, code) ? SDK_CODES[code] : undefined) ?? code;
 }
 
 let cached: NeonAuth | null | undefined;
@@ -82,7 +86,7 @@ export function neonAuth(): NeonAuth | null {
 }
 
 export function causeOf(error: SdkError): string {
-  return `status=${error.status ?? ABSENT} code=${error.code ?? ABSENT}`;
+  return `status=${error.status ?? ABSENT} code=${error.code ?? ABSENT} message=${error.message || ABSENT}`;
 }
 
 function resultOf(outcome: ApiOutcome): AuthResult {

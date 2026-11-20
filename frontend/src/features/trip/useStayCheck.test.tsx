@@ -119,6 +119,24 @@ describe('useStayCheck', () => {
     expect(Object.keys(useStayCheckStore.getState().results)).toEqual(['21', '22']);
   });
 
+  test('a refused check keeps the refusal\'s code, detail and status', async () => {
+    stubStream(() =>
+      new Response(JSON.stringify({ state: 'error', error: 'stays_unavailable', detail: 'db pool exhausted' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const { result } = renderHook(() => useStayCheck(ASKED));
+
+    await act(async () => {
+      result.current.check();
+      await vi.waitFor(() => expect(useStayCheckStore.getState().running).toBe(false));
+    });
+
+    expect(useStayCheckStore.getState().failure).toBe('failed');
+    expect(useStayCheckStore.getState().failureDetail).toBe('stays_unavailable: db pool exhausted · HTTP 503');
+  });
+
   test('dates the check by the instant the server says its oldest answer was observed', async () => {
     stubStream(() =>
       eventStreamResponse([

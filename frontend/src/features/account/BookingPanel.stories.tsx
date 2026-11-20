@@ -141,3 +141,63 @@ export const CompanionDown: Story = {
     />
   ),
 };
+
+const ERROR_STORY = (story: string) => ({ docs: { description: { story } } });
+
+const UNREPORTED_SESSION_STATE = 'paused_by_vendor' as RecgovStatus['session'];
+
+export const LoginNeverSignedIn: Story = {
+  parameters: ERROR_STORY(
+    'Click Test login. A code with no wording of its own renders verbatim with its detail, ' +
+      'so a timeout never reads as a rejected password.',
+  ),
+  render: () => (
+    <Demo
+      onLogin={async () => ({
+        status: 'failed',
+        error: 'recaccount_not_observed',
+        detail: 'Recreation.gov did not show a signed-in account before the wait ran out',
+      })}
+    />
+  ),
+};
+
+export const LoginCredentialsRejected: Story = {
+  parameters: ERROR_STORY(
+    "Click Test login. A known code gets its sentence, and the companion's raw code and " +
+      "Recreation.gov's own text follow it in brackets.",
+  ),
+  render: () => (
+    <Demo
+      onLogin={async () => ({
+        status: 'failed',
+        error: 'login_failed',
+        detail: 'login_error: The email or password you entered is incorrect.',
+      })}
+    />
+  ),
+};
+
+export const VerifyCartRefused: Story = {
+  parameters: ERROR_STORY(
+    "Click Verify session. A cart check the vendor refused names its reason and HTTP status instead of 'someone took it'.",
+  ),
+  render: () => (
+    <Demo
+      onVerify={async () => ({
+        ok: false,
+        error: 'cart_http_error',
+        detail: 'cart verification failed: reason=cart_http_error status=401 reservations=0',
+      })}
+    />
+  ),
+};
+
+export const UnreportedSessionState: Story = {
+  parameters: ERROR_STORY(
+    'A session state this build has no row for shows its raw value and detail, not "unavailable".',
+  ),
+  render: () => (
+    <Demo status={{ ...activeStatus, session: UNREPORTED_SESSION_STATE, detail: 'store_corrupt: profile store failed its checksum' }} />
+  ),
+};

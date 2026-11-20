@@ -23,6 +23,7 @@ import {
   type TriggerPayload,
 } from '@/lib/watch-triggers';
 import { queryKeys } from '@/queries/keys';
+import { describeError } from '@/lib/error-report';
 import { useMapStore } from '@/stores/mapStore';
 import {
   FOCUS_HIGHLIGHT_MS,
@@ -260,7 +261,9 @@ function AlertEditorRow({ watchId, onClose }: { watchId: number; onClose: () => 
   if (query.error || !query.data?.watch) {
     return (
       <div className="tb-alerts-editor-row">
-        <div className="tb-alerts-editor-error">Could not load this watch.</div>
+        <div className="tb-alerts-editor-error">
+          {query.error ? `Could not load this watch. (${describeError(query.error)})` : 'Could not load this watch.'}
+        </div>
       </div>
     );
   }

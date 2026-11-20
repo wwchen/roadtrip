@@ -11,6 +11,8 @@ export const CREDENTIALS: RequestCredentials = 'same-origin';
 /** What a streaming route answers: its events, or the JSON refusal it sends before any. */
 const EVENT_STREAM_ACCEPT = 'text/event-stream, application/json';
 
+const HTTP_NO_CONTENT = 204;
+
 export interface RequestOptions {
   signal?: AbortSignal;
 }
@@ -25,6 +27,7 @@ export class HttpError extends Error {
   /** That adapter's booking site as a person reads it. */
   providerDisplay?: string;
   cartUrl?: string;
+  detail?: string;
   /** Raw response text, attached by some clients (e.g. watches create/update). */
   body?: string;
 
@@ -51,16 +54,29 @@ function postJson(url: string, body: unknown, { signal }: RequestOptions, accept
   });
 }
 
+export function httpErrorFrom(url: string, response: Response): Promise<HttpError> {
+  return attachErrorCode(new HttpError(url, response.status), response);
+}
+
 async function attachErrorCode(err: HttpError, response: Response): Promise<HttpError> {
+  const text = await response.text().catch(() => '');
+  let body: Record<string, unknown> | null = null;
   try {
-    const body = await response.json();
-    if (body && typeof body.error === 'string') err.code = body.error;
-    if (body && typeof body.provider === 'string') err.provider = body.provider;
-    if (body && typeof body.provider_display === 'string') err.providerDisplay = body.provider_display;
-    if (body && typeof body.cart_url === 'string') err.cartUrl = body.cart_url;
+    const parsed: unknown = text === '' ? null : JSON.parse(text);
+    body = parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
   } catch {
-    // Non-JSON or empty body — leave err.code undefined.
+    body = null;
   }
+  if (text !== '') err.body = text;
+  if (body === null) {
+    if (text !== '') err.detail = text;
+    return err;
+  }
+  if (typeof body.error === 'string') err.code = body.error;
+  if (typeof body.detail === 'string') err.detail = body.detail;
+  if (typeof body.provider === 'string') err.provider = body.provider;
+  if (typeof body.provider_display === 'string') err.providerDisplay = body.provider_display;
+  if (typeof body.cart_url === 'string') err.cartUrl = body.cart_url;
   return err;
 }
 
@@ -123,6 +139,13 @@ export async function jsonDeleteOk<T = unknown>(
 ): Promise<T | null> {
   const response = await fetch(url, { method: 'DELETE', credentials: CREDENTIALS, signal });
   if (!response.ok) throw await attachErrorCode(new HttpError(url, response.status), response);
-  if (response.status === 204) return null;
+  if (response.status === HTTP_NO_CONTENT) return null;
   return response.json().catch(() => null) as Promise<T | null>;
+}
+
+export async function jsonDeleteBodyOk<T>(url: string, { signal }: RequestOptions = {}): Promise<T> {
+  const response = await fetch(url, { method: 'DELETE', credentials: CREDENTIALS, signal });
+  if (!response.ok) throw await attachErrorCode(new HttpError(url, response.status), response);
+  if (response.status === HTTP_NO_CONTENT) throw new Error(`${url}: HTTP ${response.status} carried no body`);
+  return response.json() as Promise<T>;
 }

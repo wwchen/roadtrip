@@ -49,7 +49,7 @@ export async function findCampgroundSummaries(
   for (const row of rows) {
     const poiId = BigInt(row.poi_id as string);
     if (byPoi.has(poiId)) continue;
-    const decoder = createColumnDecoder();
+    const decoder = createColumnDecoder(`campgrounds id=${String(row.campground_id)} poi_id=${String(row.poi_id)}`);
     byPoi.set(poiId, {
       poiId,
       campgroundId: BigInt(row.campground_id as string),

@@ -20,7 +20,10 @@ import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.respondInvalidQuery
 import ca.floo.roadtrip.route.common.siteTypeFilterError
+import ca.floo.roadtrip.route.common.value
+import ca.floo.roadtrip.route.common.valueOrNull
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchControllerResult
 import io.ktor.http.HttpStatusCode
@@ -52,10 +55,22 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                                 "status must be active, paused, or done",
                             )
                     }
-                val poiId = call.optionalLongQuery("poi_id")
-                val campsiteId = call.optionalLongQuery("campsite_id")
-                val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
-                val offset = call.intQueryAtLeast("offset", ListPaging.DEFAULT_OFFSET, ListPaging.MIN_OFFSET)
+                val poiId = call.optionalLongQuery("poi_id").valueOrNull { return@get call.respondInvalidQuery(it) }
+                val campsiteId = call.optionalLongQuery("campsite_id").valueOrNull { return@get call.respondInvalidQuery(it) }
+                val limit =
+                    call
+                        .boundedIntQuery(
+                            "limit",
+                            ListPaging.DEFAULT_LIMIT,
+                            ListPaging.limitRange,
+                        ).value { return@get call.respondInvalidQuery(it) }
+                val offset =
+                    call
+                        .intQueryAtLeast(
+                            "offset",
+                            ListPaging.DEFAULT_OFFSET,
+                            ListPaging.MIN_OFFSET,
+                        ).value { return@get call.respondInvalidQuery(it) }
                 call.respondEncodedJson(
                     watches.list(user, status, poiId, campsiteId, limit, offset),
                 )

@@ -19,7 +19,7 @@ import type {
   UpdateProfileRequest,
   UpdateRecgovRequest,
 } from './generated/api-types';
-import { jsonDeleteOk, jsonGetOk, jsonPostOk, jsonPutOk, type RequestOptions } from './http';
+import { jsonDeleteBodyOk, jsonDeleteOk, jsonGetOk, jsonPostOk, jsonPutOk, type RequestOptions } from './http';
 
 const SETTINGS_URL = '/api/settings';
 const PROFILE_URL = '/api/settings/profile';
@@ -148,18 +148,8 @@ export function updateBooking(
   return jsonPutOk<BookingSettings>(RECGOV_URL, body, options);
 }
 
-/**
- * Remove the stored rec.gov credentials. Reports the active atc watches it strands.
- *
- * The count defaults to zero if the body is somehow absent: the caller shows it
- * in a confirmation, and "0" reads better there than a crash on a successful
- * delete.
- */
-export async function removeRecgov(
-  options: RequestOptions = {},
-): Promise<RecgovRemovedResponse> {
-  const body = await jsonDeleteOk<RecgovRemovedResponse>(RECGOV_URL, options);
-  return body ?? { removed: true, stranded_atc_watches: 0, companion_signed_out: false, profile_destroyed: false };
+export function removeRecgov(options: RequestOptions = {}): Promise<RecgovRemovedResponse> {
+  return jsonDeleteBodyOk<RecgovRemovedResponse>(RECGOV_URL, options);
 }
 
 /**

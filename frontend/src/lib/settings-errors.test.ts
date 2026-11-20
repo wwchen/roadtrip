@@ -1,59 +1,58 @@
 import { describe, expect, test } from 'vitest';
-import { settingsErrorMessage } from './settings-errors';
+import { settingsErrorCopy, settingsErrorMessage } from './settings-errors';
 
-const DEFAULT = 'Something went wrong. Please try again.';
 
 describe('settingsErrorMessage', () => {
   test('maps each known backend code', () => {
-    expect(settingsErrorMessage('invalid_field')).toBe('Please check the highlighted fields.');
-    expect(settingsErrorMessage('slack_invalid_auth')).toBe('Slack rejected this token.');
-    expect(settingsErrorMessage('slack_not_configured')).toBe('No Slack token is set.');
-    expect(settingsErrorMessage('slack_send_failed')).toBe("Couldn't send to Slack.");
-    expect(settingsErrorMessage('encryption_unavailable')).toBe(
+    expect(settingsErrorCopy('invalid_field')).toBe('A field was refused.');
+    expect(settingsErrorCopy('slack_invalid_auth')).toBe('Slack rejected this token.');
+    expect(settingsErrorCopy('slack_not_configured')).toBe('No Slack token is set.');
+    expect(settingsErrorCopy('slack_send_failed')).toBe("Couldn't send to Slack.");
+    expect(settingsErrorCopy('encryption_unavailable')).toBe(
       "Secret storage isn't configured on the server.",
     );
-    expect(settingsErrorMessage('email_send_failed')).toBe("Couldn't send the test email.");
+    expect(settingsErrorCopy('email_send_failed')).toBe("Couldn't send the test email.");
   });
 
   test('maps the Recreation.gov booking codes', () => {
-    expect(settingsErrorMessage('login_failed')).toBe(
+    expect(settingsErrorCopy('login_failed')).toBe(
       'Recreation.gov rejected these credentials.',
     );
-    expect(settingsErrorMessage('mfa_invalid')).toBe(
+    expect(settingsErrorCopy('mfa_invalid')).toBe(
       'That code was rejected. Start the login again for a new one.',
     );
-    expect(settingsErrorMessage('captcha_required')).toBe(
+    expect(settingsErrorCopy('captcha_required')).toBe(
       'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
     );
-    expect(settingsErrorMessage('companion_unavailable')).toBe(
+    expect(settingsErrorCopy('companion_unavailable')).toBe(
       "The booking service isn't reachable right now.",
     );
   });
 
   test('a login page the booking service could not drive does not blame the credentials', () => {
-    const message = settingsErrorMessage('login_page_changed');
+    const message = settingsErrorCopy('login_page_changed');
 
     expect(message).toBe(
       "Recreation.gov's sign-in page has changed, so the sign-in could not finish. Your credentials were not rejected — the booking service needs attention.",
     );
-    expect(message).not.toBe(settingsErrorMessage('login_failed'));
+    expect(message).not.toBe(settingsErrorCopy('login_failed'));
   });
 
   test('the add-to-cart codes the web app answers have their own copy', () => {
-    expect(settingsErrorMessage('booking_unavailable')).toBe(
+    expect(settingsErrorCopy('booking_unavailable')).toBe(
       "Booking isn't available right now — try again shortly.",
     );
-    expect(settingsErrorMessage('relay_timeout')).toBe(
+    expect(settingsErrorCopy('relay_timeout')).toBe(
       'The booking service took too long to answer. If you were adding a site, check your cart before trying again.',
     );
-    expect(settingsErrorMessage('invalid_window')).toBe('Check-out must be after check-in.');
+    expect(settingsErrorCopy('invalid_window')).toBe('Check-out must be after check-in.');
   });
 
   test('the transient companion codes read as "try again", not as failures', () => {
-    expect(settingsErrorMessage('profile_busy')).toBe(
+    expect(settingsErrorCopy('profile_busy')).toBe(
       'Your Recreation.gov session is busy, often with a sign-in still waiting for its verification code. Enter that code, or try again in a few minutes.',
     );
-    expect(settingsErrorMessage('browser_cap_reached')).toBe(
+    expect(settingsErrorCopy('browser_cap_reached')).toBe(
       'The booking service is at capacity — try again shortly.',
     );
   });
@@ -64,8 +63,8 @@ describe('settingsErrorMessage', () => {
     // and the code field is gone. They are worded apart on purpose: `expired`
     // is the user having been slow, so the deadline is worth naming; `unknown`
     // is a challenge that was never ours, where a deadline would confuse.
-    const expired = settingsErrorMessage('mfa_challenge_expired');
-    const unknown = settingsErrorMessage('mfa_challenge_unknown');
+    const expired = settingsErrorCopy('mfa_challenge_expired');
+    const unknown = settingsErrorCopy('mfa_challenge_unknown');
 
     expect(expired).toBe(
       'That code expired before it was entered. Start the login again, and enter the new code within a few minutes.',
@@ -85,25 +84,25 @@ describe('settingsErrorMessage', () => {
     // would have, so they must not read differently from it.
     const expected = 'Your Recreation.gov session expired — test login in Settings.';
 
-    expect(settingsErrorMessage('recgov_session_expired')).toBe(expected);
-    expect(settingsErrorMessage('recgov_spa_logged_out')).toBe(expected);
-    expect(settingsErrorMessage('recgov_refresh_failed')).toBe(expected);
+    expect(settingsErrorCopy('recgov_session_expired')).toBe(expected);
+    expect(settingsErrorCopy('recgov_spa_logged_out')).toBe(expected);
+    expect(settingsErrorCopy('recgov_refresh_failed')).toBe(expected);
   });
 
   test('a refused automated sign-in points at the credentials, not at the session', () => {
     // Distinct from the two above: here we *did* sign in again with the saved
     // credentials and Recreation.gov refused, so a changed password is on the table.
-    const message = settingsErrorMessage('recgov_login_failed');
+    const message = settingsErrorCopy('recgov_login_failed');
 
     expect(message).toBe(
       'Recreation.gov would not sign you back in — check your credentials in Settings.',
     );
-    expect(message).not.toBe(settingsErrorMessage('recgov_spa_logged_out'));
+    expect(message).not.toBe(settingsErrorCopy('recgov_spa_logged_out'));
   });
 
   test('an unreadable cart is not reported as a signed-out session', () => {
     // "Test login again" would send the user in circles: the session is fine.
-    const message = settingsErrorMessage('recgov_cart_unreachable');
+    const message = settingsErrorCopy('recgov_cart_unreachable');
 
     expect(message).toBe(
       "You're signed in, but Recreation.gov's cart could not be read — try again shortly.",
@@ -111,17 +110,9 @@ describe('settingsErrorMessage', () => {
     expect(message).not.toMatch(/test login/i);
   });
 
-  test('an unknown code is named in the fallback', () => {
-    // Still vague about meaning — we do not know it — but "something went
-    // wrong" alone gave the user nothing to report and support nothing to act on.
-    expect(settingsErrorMessage('brand_new_code')).toBe(
-      'Something went wrong (brand_new_code). Please try again.',
-    );
-  });
-
   test('the booking service internal errors read as its problem, not the user\'s', () => {
     for (const code of ['recgov_login_exception', 'recgov_verify_exception', 'recgov_auth_check_exception']) {
-      expect(settingsErrorMessage(code)).toBe('The booking service hit an internal error — check its logs.');
+      expect(settingsErrorCopy(code)).toBe('The booking service hit an internal error — check its logs.');
     }
   });
 
@@ -129,9 +120,9 @@ describe('settingsErrorMessage', () => {
     // They all used to be "cart_not_added — someone else likely took it",
     // which is wrong advice for two of them: if Recreation.gov never offered the
     // dates or the button, retrying cannot help.
-    const dates = settingsErrorMessage('recgov_dates_not_offered');
-    const button = settingsErrorMessage('recgov_no_reserve_button');
-    const raced = settingsErrorMessage('cart_not_added');
+    const dates = settingsErrorCopy('recgov_dates_not_offered');
+    const button = settingsErrorCopy('recgov_no_reserve_button');
+    const raced = settingsErrorCopy('cart_not_added');
 
     expect(dates).toMatch(/does not offer those dates/i);
     expect(button).toMatch(/no way to book/i);
@@ -144,34 +135,52 @@ describe('settingsErrorMessage', () => {
   test('the generic add-to-cart codes name the campground’s own provider, not Recreation.gov', () => {
     // `BookingActionService` returns these for any provider's cart, so they
     // must not hardcode Recreation.gov — Campflare's failure should say Campflare.
-    expect(settingsErrorMessage('cart_not_added', 'Campflare')).toBe(
+    expect(settingsErrorCopy('cart_not_added', 'Campflare')).toBe(
       'Campflare would not add it — someone else likely took it. Try again.',
     );
-    expect(settingsErrorMessage('credentials_required', 'Campflare')).toBe(
+    expect(settingsErrorCopy('credentials_required', 'Campflare')).toBe(
       'Add your Campflare credentials in Settings first.',
     );
   });
 
   test('the generic add-to-cart codes read neutrally when no provider is known', () => {
-    expect(settingsErrorMessage('cart_not_added')).toBe(
+    expect(settingsErrorCopy('cart_not_added')).toBe(
       'Could not add it to your cart — someone else likely took it. Try again.',
     );
-    expect(settingsErrorMessage('credentials_required')).toBe(
+    expect(settingsErrorCopy('credentials_required')).toBe(
       'Add your booking credentials in Settings first.',
     );
-    expect(settingsErrorMessage('cart_not_added')).not.toMatch(/Recreation\.gov/i);
-    expect(settingsErrorMessage('credentials_required')).not.toMatch(/Recreation\.gov/i);
+    expect(settingsErrorCopy('cart_not_added')).not.toMatch(/Recreation\.gov/i);
+    expect(settingsErrorCopy('credentials_required')).not.toMatch(/Recreation\.gov/i);
   });
 
-  test('falls back for a missing code', () => {
-    expect(settingsErrorMessage(undefined)).toBe(DEFAULT);
-    expect(settingsErrorMessage(null)).toBe(DEFAULT);
-    expect(settingsErrorMessage('')).toBe(DEFAULT);
+  test('an unknown code renders verbatim with its detail, never a generic sentence', () => {
+    expect(settingsErrorMessage({ code: 'brand_new_code', detail: 'it broke', status: 502 })).toBe(
+      'brand_new_code: it broke · HTTP 502',
+    );
+    expect(settingsErrorMessage({ error: 'brand_new_code' })).toBe('brand_new_code');
   });
 
-  test('a prototype-shadowing code still yields the fallback', () => {
+  test('a known code keeps its raw code and detail beside the sentence', () => {
+    expect(settingsErrorMessage({ code: 'invalid_field', detail: 'slack_channel must start with #', status: 400 })).toBe(
+      'A field was refused. (invalid_field: slack_channel must start with # · HTTP 400)',
+    );
+  });
+
+  test('a failure with no code keeps the exception class and message', () => {
+    expect(settingsErrorMessage(new TypeError('Failed to fetch'))).toBe('TypeError: Failed to fetch');
+  });
+
+  test('a missing code has no copy of its own', () => {
+    expect(settingsErrorCopy(undefined)).toBeUndefined();
+    expect(settingsErrorCopy(null)).toBeUndefined();
+    expect(settingsErrorCopy('')).toBeUndefined();
+  });
+
+  test('a prototype-shadowing code has no copy and renders verbatim', () => {
     for (const code of ['toString', 'constructor', 'hasOwnProperty', '__proto__']) {
-      expect(settingsErrorMessage(code)).toBe(`Something went wrong (${code}). Please try again.`);
+      expect(settingsErrorCopy(code)).toBeUndefined();
+      expect(settingsErrorMessage({ error: code })).toBe(code);
     }
   });
 });

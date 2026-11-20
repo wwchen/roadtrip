@@ -4,7 +4,9 @@ import type { Watch } from '@/api/watches-api';
 import { useWatchPoiNames } from '@/domain/watch/queries';
 import { formatWatchDate, watchFallbackName } from '@/lib/watch-format';
 import type { MagicLink } from './magicLink';
+import { describeError } from '@/lib/error-report';
 import {
+  type LinkRefusal,
   useManagedWatch,
   useSetManagedWatchStatus,
   useStopManagedWatch,
@@ -22,9 +24,16 @@ const STATUS_HUE: Record<Watch['status'], 'green' | 'yellow' | 'gray'> = {
   done: 'gray',
 };
 
-const DEAD_LINK_TITLE = 'This alert has been stopped';
-const DEAD_LINK_BODY =
-  'The link in your email manages a single alert, and that one is no longer running. Sign in to see the rest of your alerts.';
+const LINK_REFUSAL_COPY: Record<LinkRefusal, { title: string; body: string }> = {
+  token_refused: {
+    title: 'This link did not open an alert',
+    body: 'The alert may have been stopped, or the link may be incomplete. Sign in to see your alerts.',
+  },
+  not_on_account: {
+    title: 'This alert is not on your account',
+    body: 'You are signed in, and this alert is not one of yours — or it has been stopped.',
+  },
+};
 
 export interface ManageWatchCardProps {
   link: MagicLink;
@@ -43,7 +52,7 @@ export interface ManageWatchCardProps {
  * so the reader can see which watch they just stopped.
  */
 export function ManageWatchCard({ link }: ManageWatchCardProps) {
-  const { watch, isPending, isLinkDead, error, refetch } = useManagedWatch(link);
+  const { watch, isPending, linkRefusal, error, refetch, rawError } = useManagedWatch(link);
   const setStatus = useSetManagedWatchStatus(link);
   const stopWatch = useStopManagedWatch(link);
   const [stopped, setStopped] = useState(false);
@@ -56,8 +65,8 @@ export function ManageWatchCard({ link }: ManageWatchCardProps) {
     try {
       await stopWatch.mutateAsync();
       setStopped(true);
-    } catch {
-      setActionError('Could not stop this watch. Try again.');
+    } catch (err) {
+      setActionError(`Could not stop this watch. Try again. (${describeError(err)})`);
     }
   }, [stopWatch]);
 
@@ -71,12 +80,13 @@ export function ManageWatchCard({ link }: ManageWatchCardProps) {
     void stopNow();
   }, [link.stopOnArrival, watch, stopNow]);
 
-  if (isLinkDead && !stopped) {
+  if (linkRefusal && !stopped) {
+    const copy = LINK_REFUSAL_COPY[linkRefusal];
     return (
       <EmptyState
         icon="bell-off"
-        title={DEAD_LINK_TITLE}
-        body={DEAD_LINK_BODY}
+        title={copy.title}
+        body={`${copy.body} (${rawError})`}
         actions={<Link href="/watches">Go to your alerts</Link>}
       />
     );
@@ -92,7 +102,7 @@ export function ManageWatchCard({ link }: ManageWatchCardProps) {
           </button>
         }
       >
-        Could not load this alert.
+        {`Could not load this alert. (${rawError})`}
       </Banner>
     );
   }
@@ -109,8 +119,8 @@ export function ManageWatchCard({ link }: ManageWatchCardProps) {
     setActionError(null);
     try {
       await setStatus.mutateAsync(isActive ? 'paused' : 'active');
-    } catch {
-      setActionError('Could not update this alert. Try again.');
+    } catch (err) {
+      setActionError(`Could not update this alert. Try again. (${describeError(err)})`);
     }
   };
 

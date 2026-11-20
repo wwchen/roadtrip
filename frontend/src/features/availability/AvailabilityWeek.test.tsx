@@ -488,17 +488,18 @@ describe('the week"s states', () => {
   });
 
   test('a rate limit offers to watch instead, with no stale data to show', async () => {
-    stubs.availability = () => json({ error: 'rate_limited', upstream_status: 429 }, 503);
+    stubs.availability = () => json({ error: 'rate_limited', detail: 'ridb answered 429', upstream_status: 429 }, 503);
     render(
       <AppProviders client={testClient()}>
-        <AvailabilityWeek feature={feature()} />
+        <AvailabilityWeek feature={feature({ booking_system: 'Recreation.gov' })} />
       </AppProviders>,
     );
 
     await waitFor(() =>
       expect(screen.getByText('Recreation.gov is limiting our checks')).toBeInTheDocument(),
     );
-    expect(screen.getByText("They've throttled us, so we're holding off.")).toBeInTheDocument();
+    expect(screen.getByText(/They've throttled us, so we're holding off\./)).toBeInTheDocument();
+    expect(screen.getByText(/rate_limited: ridb answered 429 · HTTP 503 · upstream HTTP 429/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show what we last saw' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Watch these dates instead' })).toBeInTheDocument();
   });
@@ -507,7 +508,7 @@ describe('the week"s states', () => {
     stubs.availability = () => json({ error: 'upstream_5xx' }, 502);
     render(
       <AppProviders client={testClient()}>
-        <AvailabilityWeek feature={feature()} />
+        <AvailabilityWeek feature={feature({ booking_system: 'Recreation.gov' })} />
       </AppProviders>,
     );
 
@@ -547,7 +548,7 @@ describe('the week"s states', () => {
     stubs.availability = () => json({ error: 'upstream_unreachable' }, 504);
     render(
       <AppProviders client={testClient()}>
-        <AvailabilityWeek feature={feature()} />
+        <AvailabilityWeek feature={feature({ booking_system: 'Recreation.gov' })} />
       </AppProviders>,
     );
 
@@ -568,6 +569,72 @@ describe('the week"s states', () => {
       expect(screen.getByText(/Provider misconfigured — we are on it/)).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  test('the banner names the campground\'s own booking site, not Recreation.gov', async () => {
+    stubs.availability = () => json({ error: 'upstream_5xx' }, 502);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature({ booking_system: 'Campflare' })} />
+      </AppProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText('Campflare returned an error')).toBeInTheDocument());
+    expect(screen.queryByText(/Recreation\.gov/)).toBeNull();
+  });
+
+  test('the error body\'s provider_display outranks the campground\'s booking site', async () => {
+    stubs.availability = () => json({ error: 'upstream_unreachable', provider_display: 'ReserveCalifornia' }, 504);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature({ booking_system: 'Campflare' })} />
+      </AppProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText("We can't reach ReserveCalifornia")).toBeInTheDocument());
+  });
+
+  test('our own per-IP limit is not blamed on the booking site', async () => {
+    stubs.availability = () => json({ error: 'ip_throttled', detail: '60 per minute' }, 429);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature({ booking_system: 'Recreation.gov' })} />
+      </AppProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/ip_throttled: 60 per minute · HTTP 429/)).toBeInTheDocument());
+    expect(screen.queryByText(/limiting our checks/)).toBeNull();
+    expect(screen.queryByText(/throttled us/)).toBeNull();
+  });
+
+  test('a blocked request shows the block and its detail, not a rate limit', async () => {
+    stubs.availability = () =>
+      json({ error: 'upstream_blocked', detail: 'campflare api key rejected', upstream_status: 401 }, 502);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature({ booking_system: 'Campflare' })} />
+      </AppProviders>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/upstream_blocked: campflare api key rejected · HTTP 502 · upstream HTTP 401/),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/limiting our checks/)).toBeNull();
+  });
+
+  test('a body that is not JSON shows the parse failure, not a timeout', async () => {
+    stubs.availability = () => new Response('<html>oops</html>', { status: 200 });
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature({ booking_system: 'Recreation.gov' })} />
+      </AppProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/SyntaxError/)).toBeInTheDocument());
+    expect(screen.queryByText(/can't reach/)).toBeNull();
+    expect(screen.queryByText(/timed out/)).toBeNull();
   });
 });
 
@@ -746,7 +813,7 @@ describe('paging weeks', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText('That date is past what this provider lets you book'),
+        screen.getByText('That date is past what this provider lets you book (beyond_booking_horizon · HTTP 400)'),
       ).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument();
@@ -1450,7 +1517,9 @@ describe('holding a site straight from the grid', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
-    expect(await screen.findByText('Could not hold the site — it is no longer available.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Could not hold the site — it is no longer available. (not_available · HTTP 409)'),
+    ).toBeInTheDocument();
     // Back to a plain, clickable available cell.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: new RegExp(`^Site 1 ${WEEK[0]}:`) })).toBeInTheDocument(),
@@ -1508,7 +1577,9 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
     expect(
-      await screen.findByText('Could not add it to your cart — someone else likely took it. Try again.'),
+      await screen.findByText(
+        'Could not add it to your cart — someone else likely took it. Try again. (cart_not_added · HTTP 409)',
+      ),
     ).toBeInTheDocument();
   });
 
@@ -1588,7 +1659,7 @@ describe('holding a site straight from the grid', () => {
     expect(await screen.findByText('Add your booking login in Settings')).toBeInTheDocument();
   });
 
-  test('a session that dies mid-hold names the expiry, not the raw code', async () => {
+  test('a session that dies mid-hold names the expiry and keeps the raw code', async () => {
     // 502 with the companion's own code passed through: the preflight found the
     // session healthy and it lapsed before the click. Note the wire shape —
     // `{ error }`, which `http.ts` maps onto `err.code`. A `{ code }` mock here
@@ -1602,8 +1673,9 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
     expect(
-      await screen.findByText('Your Recreation.gov session expired — test login in Settings.'),
+      await screen.findByText(
+        'Your Recreation.gov session expired — test login in Settings. (recgov_spa_logged_out · HTTP 502)',
+      ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/recgov_spa_logged_out/)).toBeNull();
   });
 });

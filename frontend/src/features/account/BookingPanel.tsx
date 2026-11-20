@@ -9,6 +9,7 @@ import type {
 } from '@/api/account-api';
 import { VENDOR, accountCopy } from '@/lib/strings';
 import { settingsErrorMessage } from '@/lib/settings-errors';
+import { entryOf } from '@/lib/entry-of';
 import { AccountStatusText, type StatusTone } from './AccountStatusText';
 import {
   IDLE,
@@ -66,7 +67,14 @@ const SESSION_ROW: Record<RecgovStatus['session'], { tone: StatusTone; text: str
 };
 
 const CHECKING_ROW = { tone: 'muted' as StatusTone, text: 'Checking session…' };
-const UNKNOWN_ROW = SESSION_ROW.companion_unavailable;
+const NO_STATUS_ROW = { tone: 'warn' as StatusTone, text: 'Session status not reported' };
+
+export function sessionRowOf(status: RecgovStatus | undefined): { tone: StatusTone; text: string } {
+  if (!status) return NO_STATUS_ROW;
+  const known = entryOf(SESSION_ROW, status.session);
+  const base = known ?? { tone: 'warn' as StatusTone, text: `Session state: ${String(status.session)}` };
+  return status.detail ? { tone: base.tone, text: `${base.text} (${status.detail})` } : base;
+}
 
 const PROFILE_BUSY_CODE = 'profile_busy';
 
@@ -140,15 +148,13 @@ export function BookingPanel({
 
   // An unrecognised state reads as "unknown" rather than blanking the row: a
   // server that grows a state must not leave the user with no session line.
-  const sessionRow = statusPending
-    ? CHECKING_ROW
-    : (status && SESSION_ROW[status.session]) || UNKNOWN_ROW;
+  const sessionRow = statusPending ? CHECKING_ROW : sessionRowOf(status);
 
   /** Applies a login answer to the machine and to the one status slot. */
   const applyLogin = (answer: RecgovLoginResponse, from: BookingLoginState) => {
     if (answer.status === 'mfa_required' && answer.challenge_id) {
       setLogin(nextLoginState(from, { type: 'mfa_required', challengeId: answer.challenge_id }));
-      setResult({ tone: 'warn', message: settingsErrorMessage('mfa_required') });
+      setResult({ tone: 'warn', message: accountCopy.mfaSent });
       return;
     }
     if (answer.status === 'ok') {
@@ -163,17 +169,17 @@ export function BookingPanel({
     // without this the user was locked out for the rest of the TTL.
     if (answer.error === PROFILE_BUSY_CODE && serverHasChallenge) {
       setLogin(nextLoginState(from, { type: 'mfa_required', challengeId: null }));
-      setResult({ tone: 'warn', message: settingsErrorMessage('mfa_required') });
+      setResult({ tone: 'warn', message: accountCopy.mfaSent });
       return;
     }
     setLogin(nextLoginState(from, { type: 'failed', code: answer.error ?? '' }));
-    setResult({ tone: 'error', message: settingsErrorMessage(answer.error) });
+    setResult({ tone: 'error', message: settingsErrorMessage(answer) });
   };
 
   const failFrom = (from: BookingLoginState, err: unknown) => {
     const code = (err as { code?: string } | null)?.code;
     setLogin(nextLoginState(from, { type: 'failed', code: code ?? '' }));
-    setResult({ tone: 'error', message: settingsErrorMessage(code) });
+    setResult({ tone: 'error', message: settingsErrorMessage(err) });
   };
 
   const startLogin = async () => {
@@ -210,10 +216,10 @@ export function BookingPanel({
       setResult(
         answer.ok
           ? { tone: 'ok', message: 'Session verified.' }
-          : { tone: 'error', message: settingsErrorMessage(answer.error) },
+          : { tone: 'error', message: settingsErrorMessage(answer) },
       );
     } catch (err) {
-      setResult({ tone: 'error', message: settingsErrorMessage((err as { code?: string } | null)?.code) });
+      setResult({ tone: 'error', message: settingsErrorMessage(err) });
     } finally {
       setVerifying(false);
     }

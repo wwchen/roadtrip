@@ -1,6 +1,6 @@
 import {
-  AUTH_UNAVAILABLE,
   EMAIL_NOT_VERIFIED,
+  INVALID_CREDENTIALS,
   PASSWORD_TOO_SHORT,
   UNKNOWN_FAILURE,
   USER_ALREADY_EXISTS,
@@ -43,6 +43,7 @@ export const RESET_PARAM = 'reset';
 export const RESET_DONE = 'done';
 
 const AUTH_LOG = 'auth:';
+const SIGN_IN_NOT_CONFIGURED = 'sign_in_not_configured';
 const ACTION = {
   PASSWORD_SIGN_IN: 'password_sign_in',
   GOOGLE_SIGN_IN: 'google_sign_in',
@@ -69,20 +70,23 @@ const returnToOf = (form: FormData): string => safeReturnTo(field(form, RETURN_T
 
 const absolute = (origin: string, path: string): string => new URL(path, origin).toString();
 
-const isUnavailable = (code: string): boolean => code === AUTH_UNAVAILABLE;
+const rawOf = (failed: AuthFailure): string => (failed.cause === undefined ? failed.code : `${failed.code}: ${failed.cause}`);
 
-function codeOf(error: unknown): string {
+const failedWith = (failed: AuthFailure): ActionOutcome => message(`${RETRY} (${rawOf(failed)})`);
+
+function thrownFailure(error: unknown): AuthFailure {
   const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === 'string' ? code : UNKNOWN_FAILURE;
+  const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return { ok: false, code: typeof code === 'string' ? code : UNKNOWN_FAILURE, cause };
 }
 
-type Failure = (result: AuthResult | RedirectResult) => string | null;
+type Failure = (result: AuthResult | RedirectResult) => AuthFailure | null;
 type Work = (port: AuthPort, form: FormData, origin: string, failure: Failure) => Promise<ActionOutcome>;
 
-function loggerFor(action: string): (failed: AuthFailure) => string {
-  return (failed) => {
-    console.warn(AUTH_LOG, action, failed.code, ...(failed.cause === undefined ? [] : [failed.cause]));
-    return failed.code;
+function loggerFor(action: string): (failed: AuthFailure, ...extra: unknown[]) => AuthFailure {
+  return (failed, ...extra) => {
+    console.warn(AUTH_LOG, action, failed.code, ...(failed.cause === undefined ? [] : [failed.cause]), ...extra);
+    return failed;
   };
 }
 
@@ -90,23 +94,23 @@ function guarded(action: string, work: Work): AuthAction {
   const logged = loggerFor(action);
   const failure: Failure = (result) => (result.ok ? null : logged(result));
   return async (port, form, origin) => {
-    if (port === null) return message(RETRY);
+    if (port === null) return failedWith({ ok: false, code: SIGN_IN_NOT_CONFIGURED });
     try {
       return await work(port, form, origin, failure);
     } catch (error) {
-      logged({ ok: false, code: codeOf(error) });
-      return message(RETRY);
+      return failedWith(logged(thrownFailure(error), error));
     }
   };
 }
 
-const sentOrUnknown = (code: string | null): boolean => code === null || code === USER_NOT_FOUND;
+const sentOrUnknown = (failed: AuthFailure | null): boolean => failed === null || failed.code === USER_NOT_FOUND;
 
 export const signInWithPasswordAction = guarded(ACTION.PASSWORD_SIGN_IN, async (port, form, _origin, failure) => {
-  const code = failure(await port.signInWithPassword(field(form, EMAIL_FIELD), field(form, PASSWORD_FIELD)));
-  if (code === null) return redirectTo(returnToOf(form));
-  if (code === EMAIL_NOT_VERIFIED) return message(VERIFY_EMAIL, true);
-  return message(isUnavailable(code) ? RETRY : WRONG_PASSWORD);
+  const failed = failure(await port.signInWithPassword(field(form, EMAIL_FIELD), field(form, PASSWORD_FIELD)));
+  if (failed === null) return redirectTo(returnToOf(form));
+  if (failed.code === EMAIL_NOT_VERIFIED) return message(VERIFY_EMAIL, true);
+  if (failed.code === INVALID_CREDENTIALS) return message(WRONG_PASSWORD);
+  return failedWith(failed);
 });
 
 export const signInWithGoogleAction = guarded(ACTION.GOOGLE_SIGN_IN, async (port, form, origin, failure) => {
@@ -114,17 +118,16 @@ export const signInWithGoogleAction = guarded(ACTION.GOOGLE_SIGN_IN, async (port
   const errorCallback = `${withReturnTo(SIGN_IN_PATH, returnTo)}&${ERROR_PARAM}=${ERROR_RETRY}`;
   const result = await port.signInWithGoogle(absolute(origin, returnTo), absolute(origin, errorCallback));
   if (result.ok) return redirectTo(result.url);
-  failure(result);
-  return message(RETRY);
+  return failedWith(failure(result) ?? result);
 });
 
 export const sendMagicLinkAction = guarded(ACTION.MAGIC_LINK, async (port, form, origin, failure) => {
-  const code = failure(await port.sendMagicLink(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
-  return message(sentOrUnknown(code) ? MAGIC_LINK_SENT : RETRY);
+  const failed = failure(await port.sendMagicLink(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
+  return failed === null || sentOrUnknown(failed) ? message(MAGIC_LINK_SENT) : failedWith(failed);
 });
 
 export const signUpAction = guarded(ACTION.SIGN_UP, async (port, form, origin, failure) => {
-  const code = failure(
+  const failed = failure(
     await port.signUp(
       field(form, EMAIL_FIELD),
       field(form, PASSWORD_FIELD),
@@ -132,26 +135,26 @@ export const signUpAction = guarded(ACTION.SIGN_UP, async (port, form, origin, f
       absolute(origin, returnToOf(form)),
     ),
   );
-  if (code === null || code === USER_ALREADY_EXISTS) return message(VERIFY_EMAIL);
-  if (code === PASSWORD_TOO_SHORT) return message(PASSWORD_TOO_SHORT_MESSAGE);
-  return message(RETRY);
+  if (failed === null || failed.code === USER_ALREADY_EXISTS) return message(VERIFY_EMAIL);
+  if (failed.code === PASSWORD_TOO_SHORT) return message(PASSWORD_TOO_SHORT_MESSAGE);
+  return failedWith(failed);
 });
 
 export const resendVerificationAction = guarded(ACTION.RESEND_VERIFICATION, async (port, form, origin, failure) => {
-  const code = failure(await port.resendVerification(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
-  return message(sentOrUnknown(code) ? VERIFY_EMAIL : RETRY);
+  const failed = failure(await port.resendVerification(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
+  return failed === null || sentOrUnknown(failed) ? message(VERIFY_EMAIL) : failedWith(failed);
 });
 
 export const requestPasswordResetAction = guarded(ACTION.PASSWORD_RESET_REQUEST, async (port, form, origin, failure) => {
-  const code = failure(
+  const failed = failure(
     await port.requestPasswordReset(field(form, EMAIL_FIELD), absolute(origin, withReturnTo(RESET_PATH, returnToOf(form)))),
   );
-  return message(sentOrUnknown(code) ? RESET_LINK_SENT : RETRY);
+  return failed === null || sentOrUnknown(failed) ? message(RESET_LINK_SENT) : failedWith(failed);
 });
 
 export const resetPasswordAction = guarded(ACTION.PASSWORD_RESET, async (port, form, _origin, failure) => {
-  const code = failure(await port.resetPassword(field(form, TOKEN_FIELD), field(form, PASSWORD_FIELD)));
-  if (code !== null) return message(RETRY);
+  const failed = failure(await port.resetPassword(field(form, TOKEN_FIELD), field(form, PASSWORD_FIELD)));
+  if (failed !== null) return failedWith(failed);
   return redirectTo(`${withReturnTo(SIGN_IN_PATH, returnToOf(form))}&${RESET_PARAM}=${RESET_DONE}`);
 });
 

@@ -154,13 +154,27 @@ describe('proximity bias', () => {
 });
 
 describe('when a source fails', () => {
-  test('still shows the POI hits when geocoding fails', async () => {
+  test('still shows the POI hits when geocoding fails, and says it failed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     geocodeStatus = 500;
     const { result } = renderHook(() => useSearchResults('upper pines'), { wrapper });
 
     await waitFor(() => expect(result.current.results).toHaveLength(1));
     expect(result.current.results[0]!.source).toBe('poi');
     expect(result.current.isEmpty).toBe(false);
+    await waitFor(() => expect(result.current.errors).toEqual(['Place search failed: boom · HTTP 500']));
+    warn.mockRestore();
+  });
+
+  test('a failed source is not reported as an empty answer', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    poiStatus = 503;
+    geocodeStatus = 503;
+    const { result } = renderHook(() => useSearchResults('upper pines'), { wrapper });
+
+    await waitFor(() => expect(result.current.errors).toHaveLength(2));
+    expect(result.current.isEmpty).toBe(false);
+    warn.mockRestore();
   });
 
   test('still shows places when the POI index fails', async () => {

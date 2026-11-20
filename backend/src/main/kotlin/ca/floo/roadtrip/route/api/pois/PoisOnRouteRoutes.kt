@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.poi.PoiRow
+import ca.floo.roadtrip.route.api.route.answer
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
@@ -66,10 +67,11 @@ internal fun Route.poisOnRouteRoutes(
                             categories = req.categories,
                         )
                     } catch (e: RoutingException) {
-                        onRouteLog.warn("on-route lookup failed: {}", e.message)
+                        val answer = e.failure.answer()
+                        onRouteLog.warn("on-route lookup failed: {}", answer.error, e)
                         call.respondEncodedJson(
-                            ApiErrorSchema(error = "routing_unavailable"),
-                            HttpStatusCode.ServiceUnavailable,
+                            ApiErrorSchema(error = answer.error, detail = e.message ?: e::class.java.name),
+                            answer.status,
                         )
                         return@post
                     }

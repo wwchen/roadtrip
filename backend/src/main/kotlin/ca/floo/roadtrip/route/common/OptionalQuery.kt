@@ -9,5 +9,6 @@ internal sealed interface OptionalQuery<out T> {
 
     data class Invalid(
         val rawValue: String,
+        val detail: String? = null,
     ) : OptionalQuery<Nothing>
 }

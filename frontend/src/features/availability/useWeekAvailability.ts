@@ -10,7 +10,7 @@ import { requestAvailabilityRefresh, requestPoiCampsitesAvailability } from '@/a
 import type { AvailabilityCache, PoiCampsitesAvailabilityResponse } from '@/api/availability-api';
 import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
 import { queryKeys } from '@/queries/keys';
-import { formatAvailabilityError } from './availability-errors';
+import { formatAvailabilityError, rawAvailabilityError, type AvailabilityErrorBody } from './availability-errors';
 import {
   NO_WATCH_CAPABILITIES,
   normalizeWatchCapabilities,
@@ -62,23 +62,38 @@ export function weekWindow(weekStart: Date): { startDate: string; endDate: strin
   };
 }
 
-/**
- * A failed availability request, carrying copy fit to show.
- *
- * A distinct class rather than a bare `Error` so the component can tell a formatted
- * provider fault from a thrown network error and still render both — the message is
- * already the sentence in the first case.
- */
 export class AvailabilityRequestError extends Error {
-  constructor(
-    message: string,
-    readonly httpStatus: number,
-    /** The backend's `error` code, when it sent one — `null` for a bare HTTP failure. */
-    readonly code: string | null = null,
-    readonly earliestDate: string | null = null,
-  ) {
-    super(message);
+  readonly code: string | null;
+  readonly detail: string | null;
+  readonly upstreamStatus: number | null;
+  readonly providerDisplay: string | null;
+  readonly earliestDate: string | null;
+  readonly raw: string;
+
+  constructor(readonly httpStatus: number, body: AvailabilityErrorBody | null, bodyText: string | null = null) {
+    const detail = textOf(body?.detail) ?? (body === null ? textOf(bodyText) : null);
+    const facts = { ...(body ?? {}), detail };
+    super(formatAvailabilityError(facts, httpStatus));
     this.name = 'AvailabilityRequestError';
+    this.code = textOf(body?.error);
+    this.detail = detail;
+    this.upstreamStatus = typeof body?.upstream_status === 'number' ? body.upstream_status : null;
+    this.providerDisplay = textOf(body?.provider_display);
+    this.earliestDate = textOf(body?.earliest_date);
+    this.raw = rawAvailabilityError(facts, httpStatus);
+  }
+}
+
+function textOf(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function parsedBody(text: string): AvailabilityErrorBody | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === 'object' ? (parsed as AvailabilityErrorBody) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -113,13 +128,8 @@ export function useWeekAvailability(
       if (refresh.current.key === refreshKey && refresh.current.accepted) refresh.current.polls += 1;
       const response = await requestPoiCampsitesAvailability(poiId!, { startDate, endDate, signal });
       if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new AvailabilityRequestError(
-          formatAvailabilityError(body, response.status),
-          response.status,
-          typeof body?.error === 'string' ? body.error : null,
-          typeof body?.earliest_date === 'string' ? body.earliest_date : null,
-        );
+        const text = await response.text().catch(() => '');
+        throw new AvailabilityRequestError(response.status, parsedBody(text), text);
       }
       const json = (await response.json()) as PoiCampsitesAvailabilityResponse;
       return {
@@ -147,9 +157,11 @@ export function useWeekAvailability(
   return Object.assign(query, { refreshFailed });
 }
 
-/** Cache age in whole minutes, floored at 1 — "checked 0m ago" reads as a bug. */
-export function cacheAgeMinutes(ageSeconds: number | null | undefined): number {
-  return Math.max(1, Math.round((ageSeconds ?? 0) / 60));
+const SECONDS_PER_MINUTE = 60;
+
+export function cacheAgeMinutes(ageSeconds: number | null | undefined): number | null {
+  if (ageSeconds == null) return null;
+  return Math.max(1, Math.round(ageSeconds / SECONDS_PER_MINUTE));
 }
 
 export function refusedEarliestDate(error: unknown): Date | null {

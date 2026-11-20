@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Banner, Button, EmptyState, Skeleton, Table, TextField } from '@ui';
 import type { SnapshotStats } from '@/api/availability-dashboard-api';
+import { describeError } from '@/lib/error-report';
 import {
   dayOfWeek,
   formatDuration,
@@ -207,7 +208,7 @@ export function ChangesTab({ route }: ChangesTabProps) {
             {!filters.poiId && !filters.campsiteId ? PROMPT : EXACTLY_ONE}
           </div>
         ) : changes.isError ? (
-          <Banner status="error">{`Error: ${(changes.error as Error)?.message ?? 'failed'}`}</Banner>
+          <Banner status="error">{`Error: ${describeError(changes.error)}`}</Banner>
         ) : changes.isPending ? (
           <Skeleton aria-label="Loading changes" />
         ) : (

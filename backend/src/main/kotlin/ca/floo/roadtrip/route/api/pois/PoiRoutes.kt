@@ -12,8 +12,10 @@ import ca.floo.roadtrip.route.common.mapCatching
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.respondInvalidQuery
 import ca.floo.roadtrip.route.common.splitQueryValues
 import ca.floo.roadtrip.route.common.trimmedQuery
+import ca.floo.roadtrip.route.common.value
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -88,7 +90,13 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
             // dropdown so a user can find a POI without panning to it first.
             get("/search") {
                 val q = call.trimmedQuery("q")
-                val limit = call.boundedIntQuery("limit", DEFAULT_SEARCH_LIMIT, searchLimitRange)
+                val limit =
+                    call
+                        .boundedIntQuery(
+                            "limit",
+                            DEFAULT_SEARCH_LIMIT,
+                            searchLimitRange,
+                        ).value { return@get call.respondInvalidQuery(it) }
                 val categories = call.splitQueryValues("categories")
                 call.respondEncodedJson(
                     poiService.search(

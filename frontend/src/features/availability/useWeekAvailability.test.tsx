@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
-import { isStale, useWeekAvailability } from './useWeekAvailability';
+import { AvailabilityRequestError, cacheAgeMinutes, isStale, useWeekAvailability } from './useWeekAvailability';
 
 const POI = 7;
 const WEEK_START = new Date(2026, 11, 1);
@@ -96,4 +96,47 @@ test('changing week posts once for the new window', async () => {
   await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
   hook.rerender({ start: new Date(2026, 11, 8) });
   await waitFor(() => expect(calls.posts).toBe(1));
+});
+
+test('no cache age is no age, not one minute', () => {
+  expect(cacheAgeMinutes(undefined)).toBeNull();
+  expect(cacheAgeMinutes(null)).toBeNull();
+  expect(cacheAgeMinutes(0)).toBe(1);
+  expect(cacheAgeMinutes(600)).toBe(10);
+});
+
+test('a refusal keeps its code, detail, statuses and provider', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json(
+        {
+          state: 'error',
+          error: 'upstream_blocked',
+          detail: 'key rejected',
+          upstream_status: 401,
+          provider_display: 'Campflare',
+        },
+        { status: 502 },
+      ),
+    ),
+  );
+  const hook = mount();
+
+  await waitFor(() => expect(hook.result.current.error).toBeInstanceOf(AvailabilityRequestError));
+  expect(hook.result.current.error).toMatchObject({
+    code: 'upstream_blocked',
+    detail: 'key rejected',
+    httpStatus: 502,
+    upstreamStatus: 401,
+    providerDisplay: 'Campflare',
+  });
+});
+
+test('a refusal whose body is not JSON keeps the body as its detail', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('Bad Gateway from proxy', { status: 502 })));
+  const hook = mount();
+
+  await waitFor(() => expect(hook.result.current.error).toBeInstanceOf(AvailabilityRequestError));
+  expect(hook.result.current.error).toMatchObject({ code: null, detail: 'Bad Gateway from proxy', httpStatus: 502 });
 });
