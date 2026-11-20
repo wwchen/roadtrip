@@ -128,9 +128,14 @@ Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores
   date, lists the campsites it knows, and reads its own Postgres; it never calls a vendor on this
   path. Freshness counts only campsites mini-ca knows, so a campsite missing from its catalog shows
   unknown without keeping the week stale. A window mini-ca refuses is passed through as its `400`.
-  `closed_for_season` is judged over the campsites mini-ca knows. If mini-ca is unreachable or the
-  egress is not configured, the GET answers `503 availability_unavailable`, except that a
-  campground with no matching campsites answers an empty week without asking mini-ca.
+  `closed_for_season` is judged over the campsites mini-ca knows. Only a `404 not_found` from
+  mini-ca means it does not know the campground (catalog drift); that answers a week of unknown
+  cells and is logged. Any other mini-ca failure answers `503` with mini-ca's own code and
+  detail, for example `unreadable_response` (a vendor answer whose shape a parser refused, with
+  the missing field named) or `unknown` (the exception's class and message). Only a failure with
+  no code, mini-ca unreachable or the egress not configured, answers `503
+  availability_unavailable`. A campground with no matching campsites answers an empty week
+  without asking mini-ca.
 - When the week is stale, the page sends one `POST /api/pois/{id}/campsites/availability/refresh`.
   It first checks the window with a stored read, so a window mini-ca refuses is the caller's `400`.
   Then it answers `202` and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
@@ -320,7 +325,9 @@ Spec: `docs/superpowers/specs/2026-11-10-add-to-cart-on-vercel-design.md`.
   user, instead of Kotlin's in-memory map.
 - `POST /api/booking/add-to-cart` runs Kotlin's gates (window, rec.gov target, stored credentials,
   a refusal only on a night seen taken within `BOOKING_FRESHNESS_MAX_AGE_SECONDS` through the
-  availability egress's stored read), then the relay's hold. The availability matrix's
+  availability egress's stored read), then the relay's hold. A stored read that fails is logged
+  with its status, code and detail, and the hold goes ahead: the check only exists to save a
+  wasted hold, so an egress outage must not block booking. The availability matrix's
   `watch_capabilities.add_to_cart` is computed per reader, so the matrix is sent
   `private, no-store`.
 - The relay bounds each companion call at 90 seconds, under Cloudflare's 100-second proxy limit.
