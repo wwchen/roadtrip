@@ -33,7 +33,10 @@ export async function runRefresh(plan: FetchPlan, fetch: EgressFetch): Promise<R
   const result = await fetch(plan.request);
   if (result.kind === 'error') {
     const failed = result.code ?? UNCLASSIFIED_FAILURE;
-    console.warn(REFRESH_LOG, JSON.stringify({ outcome: FAILED, status: result.status, code: failed, campground: plan.request.campground }));
+    console.warn(
+      REFRESH_LOG,
+      JSON.stringify({ outcome: FAILED, status: result.status, code: failed, detail: result.body?.detail, campground: plan.request.campground }),
+    );
     return { failed };
   }
   console.info(REFRESH_LOG, JSON.stringify({ outcome: REFRESHED, cells: result.body.cells.length, campground: plan.request.campground }));

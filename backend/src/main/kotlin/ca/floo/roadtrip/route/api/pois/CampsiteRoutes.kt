@@ -164,6 +164,7 @@ internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode
             is AvailabilityProviderError.UpstreamBlocked,
             is AvailabilityProviderError.UpstreamUnavailable,
             is AvailabilityProviderError.UpstreamUnreachable,
+            is AvailabilityProviderError.UnreadableResponse,
             is AvailabilityProviderError.Unknown,
             -> HttpStatusCode.ServiceUnavailable
             is AvailabilityProviderError.Unsupported -> HttpStatusCode.NotImplemented
@@ -172,7 +173,7 @@ internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode
             -> HttpStatusCode.InternalServerError
         }
     val upstreamStatus = if (status == HttpStatusCode.ServiceUnavailable) upstream else null
-    return status to availabilityErrorDto(e.code, upstreamStatus = upstreamStatus)
+    return status to availabilityErrorDto(e.code, detail = e.detail, upstreamStatus = upstreamStatus)
 }
 
 /**

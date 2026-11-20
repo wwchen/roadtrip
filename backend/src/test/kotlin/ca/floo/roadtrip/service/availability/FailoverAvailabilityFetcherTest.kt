@@ -370,10 +370,57 @@ class FailoverAvailabilityFetcherTest {
             assertNull(result.servedBy)
             assertEquals(1, result.attempts.size)
             assertEquals(FetchOutcome.OTHER, result.attempts.single().outcome)
-            assertEquals("boom", result.attempts.single().error)
+            assertEquals("java.lang.IllegalStateException: boom", result.attempts.single().error)
             assertEquals(0, second.calls, "OTHER stops the walk — the second candidate is never tried")
             assertFalse(tracker.isCooling(BookingProvider.RECGOV), "OTHER does not cool the provider")
         }
+
+    @Test
+    fun `an unclassified throw surfaces as unknown with its class and message, not upstream_5xx`() =
+        runBlocking {
+            val clock = FakeClock()
+            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptThrows(IllegalStateException("boom")) }
+
+            val result =
+                fetcherWith(trackerWith(clock), clock).fetch(
+                    providers = listOf(provider),
+                    campground = testCampground,
+                    campsites = listOf(campsite(1L)),
+                    window = window,
+                )
+            val surfaced = availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
+
+            assertEquals(AvailabilityProviderError.Unknown.CODE, surfaced.code)
+            assertEquals("java.lang.IllegalStateException: boom", surfaced.message)
+        }
+
+    @Test
+    fun `an unreadable vendor answer stops the walk without cooling the provider`() =
+        runBlocking {
+            val clock = FakeClock()
+            val tracker = trackerWith(clock)
+            val unreadable = AvailabilityProviderError.UnreadableResponse(IllegalArgumentException("no campsites object"))
+            val first = ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptThrows(unreadable) }
+            val second = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
+
+            val result =
+                fetcherWith(tracker, clock).fetch(
+                    providers = listOf(first, second),
+                    campground = testCampground,
+                    campsites = listOf(campsite(1L)),
+                    window = window,
+                )
+
+            assertNull(result.batch)
+            assertEquals(0, second.calls, "a parse failure is not failed over")
+            assertFalse(tracker.isCooling(BookingProvider.CAMPFLARE), "a parse failure does not cool the provider")
+            assertSame(unreadable, availabilityProviderErrorFromAttempt(result.attempts.lastOrNull()))
+        }
+
+    @Test
+    fun `no attempt at all is not reported as the vendor's 5xx`() {
+        assertEquals(AvailabilityProviderError.Unknown.CODE, availabilityProviderErrorFromAttempt(null).code)
+    }
 
     @Test
     fun `sole cooling candidate is still tried`() =

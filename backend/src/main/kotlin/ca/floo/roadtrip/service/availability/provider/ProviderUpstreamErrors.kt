@@ -1,8 +1,11 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.model.api.HTTP_TOO_MANY_REQUESTS
+import ca.floo.roadtrip.model.availability.AvailabilityPayloadException
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.SerializationException
+import java.io.IOException
 
 /**
  * Translates a vendor exception's HTTP status into the provider-neutral
@@ -36,23 +39,8 @@ fun upstreamAvailabilityError(
         else -> AvailabilityProviderError.UpstreamUnavailable(cause)
     }
 
-/**
- * The one catch ladder every adapter wraps its upstream call in. Five copies of
- * it existed and had already drifted — Aspira's was missing the
- * [CancellationException] arm, so cancelling a poll run turned into a fake
- * `upstream_5xx` that cooled the provider down.
- *
- * The order is the contract: cancellation is never an upstream failure, an
- * [AvailabilityProviderError] a nested call already classified passes through
- * untouched, [vendorError] classifies the adapter's own vendor exception, and
- * [otherError] catches everything else — retryable-5xx by default, so an
- * unfamiliar failure fails over instead of stopping the candidate walk.
- */
 suspend inline fun <reified V : Exception, T> mapUpstreamErrors(
     crossinline vendorError: (V) -> AvailabilityProviderError,
-    crossinline otherError: (Exception) -> AvailabilityProviderError = {
-        AvailabilityProviderError.UpstreamUnavailable(it)
-    },
     crossinline block: suspend () -> T,
 ): T =
     try {
@@ -62,7 +50,15 @@ suspend inline fun <reified V : Exception, T> mapUpstreamErrors(
     } catch (e: AvailabilityProviderError) {
         throw e
     } catch (e: Exception) {
-        throw if (e is V) vendorError(e) else otherError(e)
+        throw if (e is V) vendorError(e) else ownAvailabilityError(e)
+    }
+
+fun ownAvailabilityError(cause: Exception): AvailabilityProviderError =
+    when {
+        causeChainHas(cause) { it is AvailabilityPayloadException || it is SerializationException } ->
+            AvailabilityProviderError.UnreadableResponse(cause)
+        causeChainHas(cause) { it is IOException } -> upstreamAvailabilityError(cause = cause, httpStatus = null)
+        else -> AvailabilityProviderError.Unknown(cause)
     }
 
 /** Depth cap so a self-referential cause chain can't spin. */
@@ -74,22 +70,27 @@ private const val MAX_CAUSE_DEPTH = 8
  * Guarded by `httpStatus == null` at the call site — once upstream has given
  * us a status, a later IO failure is a bad response, not an unreachable host.
  */
-private fun isTransportFailure(cause: Throwable): Boolean {
+private fun isTransportFailure(cause: Throwable): Boolean =
+    causeChainHas(cause) { t ->
+        t is java.net.UnknownHostException ||
+            t is java.net.ConnectException ||
+            t is java.net.NoRouteToHostException ||
+            t is java.net.PortUnreachableException ||
+            t is java.net.SocketTimeoutException ||
+            t is java.nio.channels.ClosedChannelException ||
+            t is javax.net.ssl.SSLException ||
+            t is java.net.http.HttpConnectTimeoutException
+    }
+
+private fun causeChainHas(
+    cause: Throwable,
+    matches: (Throwable) -> Boolean,
+): Boolean {
     var t: Throwable? = cause
     var depth = 0
     val seen = mutableSetOf<Throwable>()
     while (t != null && depth++ < MAX_CAUSE_DEPTH && seen.add(t)) {
-        when (t) {
-            is java.net.UnknownHostException,
-            is java.net.ConnectException,
-            is java.net.NoRouteToHostException,
-            is java.net.PortUnreachableException,
-            is java.net.SocketTimeoutException,
-            is java.nio.channels.ClosedChannelException,
-            is javax.net.ssl.SSLException,
-            is java.net.http.HttpConnectTimeoutException,
-            -> return true
-        }
+        if (matches(t)) return true
         t = t.cause
     }
     return false

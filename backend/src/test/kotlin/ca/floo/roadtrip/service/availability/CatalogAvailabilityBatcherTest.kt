@@ -14,6 +14,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.testCampground
+import ca.floo.roadtrip.support.RecGovException
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -90,6 +91,44 @@ class CatalogAvailabilityBatcherTest {
             assertTrue(results[0].providerError is AvailabilityProviderError.RateLimited)
             assertEquals(thrown, results[0].providerError)
         }
+
+    @Test
+    fun `the recorded error keeps the vendor's message, not only the classification code`() =
+        runBlocking {
+            val provider = fakeProvider()
+            val targets = listOf(resolvedTarget(1L, provider, BookingProviderRef.RecGov("100")))
+            val thrown = AvailabilityProviderError.UpstreamUnavailable(RecGovException("rec.gov 502 Bad Gateway on 100/2026-07", 502))
+            val results =
+                CatalogAvailabilityBatcher().fetchByGroup(
+                    targets,
+                    { _, _ -> windows },
+                    { _, _, _, _ -> throw thrown },
+                )
+            val error = assertNotNull(results[0].error)
+            assertTrue(error.contains("upstream_5xx"), error)
+            assertTrue(error.contains("rec.gov 502 Bad Gateway on 100/2026-07"), error)
+        }
+
+    @Test
+    fun `every provider error has a deliberate fetch outcome`() {
+        val cause = RuntimeException("cause")
+        val expected =
+            mapOf(
+                AvailabilityProviderError.RateLimited(cause) to FetchOutcome.RATE_LIMITED,
+                AvailabilityProviderError.UpstreamBlocked(cause) to FetchOutcome.BLOCKED,
+                AvailabilityProviderError.UpstreamUnavailable(cause) to FetchOutcome.UPSTREAM_5XX,
+                AvailabilityProviderError.UpstreamUnreachable(cause) to FetchOutcome.UPSTREAM_5XX,
+                AvailabilityProviderError.UnreadableResponse(cause) to FetchOutcome.OTHER,
+                AvailabilityProviderError.Misconfigured("recgov", "bad", cause) to FetchOutcome.OTHER,
+                AvailabilityProviderError.Unsupported("availability", "recgov") to FetchOutcome.OTHER,
+                AvailabilityProviderError.WrongRefType("recgov", "aspira") to FetchOutcome.OTHER,
+                AvailabilityProviderError.Unknown(cause) to FetchOutcome.OTHER,
+            )
+
+        for ((error, outcome) in expected) {
+            assertEquals(outcome, error.toFetchOutcome(), error::class.simpleName)
+        }
+    }
 
     @Test
     fun `null window skips the group with no fetch call`() =

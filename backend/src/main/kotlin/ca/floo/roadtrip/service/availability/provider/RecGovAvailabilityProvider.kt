@@ -95,22 +95,6 @@ class RecGovAvailabilityProvider(
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         mapUpstreamErrors(
             vendorError = { e: RecGovException -> upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus) },
-            otherError = { e ->
-                // Anything not thrown by the client can still name a rate limit
-                // in its message, so that text check stays. Everything else goes
-                // through the shared classifier with no typed status: a
-                // DNS/connect/socket cause becomes UpstreamUnreachable ("could
-                // not reach the booking site") instead of being mislabelled as a
-                // vendor 5xx — the exact confusion the incident turned on. A real
-                // 5xx has no transport cause, so it still falls through to
-                // UpstreamUnavailable.
-                val msg = e.message.orEmpty()
-                if (msg.contains("429") || msg.contains("rate")) {
-                    AvailabilityProviderError.RateLimited(e)
-                } else {
-                    upstreamAvailabilityError(cause = e, httpStatus = null)
-                }
-            },
         ) { block() }
 }
 
