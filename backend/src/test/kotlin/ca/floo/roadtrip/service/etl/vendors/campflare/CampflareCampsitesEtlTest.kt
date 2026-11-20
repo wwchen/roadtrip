@@ -136,6 +136,25 @@ class CampflareCampsitesEtlTest {
     }
 
     @Test
+    fun `a negative count or length is null and named in a warning since no column holds one`() {
+        val ok =
+            CampflareCampsitesEtl()
+                .transform(
+                    Json
+                        .parseToJsonElement(
+                            """{"id":"s1","campground_id":"cg","name":"Site 1","kind":"rv","max_cars":0,"driveway_length":-2.0,"max_rv_length":-3}""",
+                        ).jsonObject,
+                    transformCtx(),
+                ).single() as TransformResult.Ok
+
+        assertEquals(listOf(0, null, null), ok.record.let { listOf(it.maxCars, it.drivewayLength, it.maxRvLength) })
+        assertEquals(
+            listOf("Campflare driveway_length -2.0 is negative", "Campflare max_rv_length -3 is negative"),
+            ok.warnings,
+        )
+    }
+
+    @Test
     fun `normalizes E6 campsite coordinates when dump mixes coordinate scales`() {
         val etl = CampflareCampsitesEtl()
         val rows =

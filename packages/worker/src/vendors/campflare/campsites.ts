@@ -12,14 +12,14 @@ import { campflarePhotos } from './fields.js';
 import {
   CAMPSITES_ETL_SLUG,
   booleanField,
+  countField,
+  countWarning,
   doubleField,
   extractRecgovCampsiteRef,
-  intField,
   jsonArrayField,
   jsonObjectResults,
   normalizedLatitude,
   normalizedLongitude,
-  notWholeNumberWarning,
   objectField,
   stringField,
 } from './support.js';
@@ -53,7 +53,7 @@ const FIELD = {
   description: 'description',
 } as const;
 
-const WHOLE_NUMBER_FIELDS = [FIELD.maxPeople, FIELD.maxCars, FIELD.drivewayLength, FIELD.maxRvLength] as const;
+const COUNT_FIELDS = [FIELD.maxPeople, FIELD.maxCars, FIELD.drivewayLength, FIELD.maxRvLength] as const;
 const EQUIPMENT_NAME_KEY = 'name';
 const MISSING_ID = 'missing id';
 const MISSING_CAMPGROUND_ID = 'missing campground_id';
@@ -99,7 +99,7 @@ function campsiteRecord(raw: JsonObject): TransformResult<CampsiteUpsertCandidat
   const siteKind = campsiteKindCampflare(rawKind);
   const warnings = [
     siteKind.warning,
-    ...WHOLE_NUMBER_FIELDS.map((field) => notWholeNumberWarning(raw, field)),
+    ...COUNT_FIELDS.map((field) => countWarning(raw, field)),
   ].filter((warning): warning is string => warning !== null);
   return {
     ok: true,
@@ -126,11 +126,11 @@ function campsiteRecord(raw: JsonObject): TransformResult<CampsiteUpsertCandidat
       waterHookups: booleanField(raw, FIELD.waterHookups),
       electricHookups: booleanField(raw, FIELD.electricHookups),
       sewerHookups: booleanField(raw, FIELD.sewerHookups),
-      maxPeople: intField(raw, FIELD.maxPeople),
-      maxCars: intField(raw, FIELD.maxCars),
+      maxPeople: countField(raw, FIELD.maxPeople),
+      maxCars: countField(raw, FIELD.maxCars),
       pullThrough: booleanField(raw, FIELD.pullThrough),
-      drivewayLength: intField(raw, FIELD.drivewayLength),
-      maxRvLength: intField(raw, FIELD.maxRvLength),
+      drivewayLength: countField(raw, FIELD.drivewayLength),
+      maxRvLength: countField(raw, FIELD.maxRvLength),
       maxTrailerLength: doubleField(raw, FIELD.maxTrailerLength),
       photos: campflarePhotos(jsonArrayField(raw, FIELD.photos)),
       description: description === null ? null : nonBlank(stripTags(description)),

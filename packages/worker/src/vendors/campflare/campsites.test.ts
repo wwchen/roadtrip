@@ -106,6 +106,15 @@ describe('integer columns', () => {
     });
   });
 
+  test('a negative count or length is null and named in a warning, since no column holds one', () => {
+    const [result] = transformed(`{${BASE},"kind":"rv","max_cars":0,"driveway_length":-2.0,"max_rv_length":-3}`);
+    expect(result).toMatchObject({
+      ok: true,
+      record: { maxCars: 0, drivewayLength: null, maxRvLength: null },
+      warnings: ['Campflare driveway_length -2.0 is negative', 'Campflare max_rv_length -3 is negative'],
+    });
+  });
+
   test('a quoted whole number reads as the integer it names', () => {
     expect(recordOf(`{${BASE},"driveway_length":"40.0"}`).drivewayLength).toBe(40);
   });

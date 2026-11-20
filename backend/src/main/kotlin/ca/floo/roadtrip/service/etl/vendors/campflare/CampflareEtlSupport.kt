@@ -68,10 +68,13 @@ internal fun JsonObject.intField(name: String): Int? {
     return number.toInt().takeIf { it.toDouble() == number }
 }
 
-internal fun JsonObject.notWholeNumberWarning(name: String): String? {
+internal fun JsonObject.countField(name: String): Int? = intField(name)?.takeIf { it >= 0 }
+
+internal fun JsonObject.countWarning(name: String): String? {
     val primitive = this[name]?.jsonPrimitive ?: return null
-    if (primitive is JsonNull || intField(name) != null) return null
-    return "Campflare $name ${primitive.content} is not a whole number"
+    if (primitive is JsonNull) return null
+    val value = intField(name) ?: return "Campflare $name ${primitive.content} is not a whole number"
+    return if (value < 0) "Campflare $name ${primitive.content} is negative" else null
 }
 
 private val intAsDoubleRange = Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()

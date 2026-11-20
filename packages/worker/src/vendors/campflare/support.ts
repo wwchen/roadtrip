@@ -51,10 +51,17 @@ export function intField(raw: JsonObject | null | undefined, name: string): numb
   return number + 0;
 }
 
-export function notWholeNumberWarning(raw: JsonObject | null | undefined, name: string): string | null {
+export function countField(raw: JsonObject | null | undefined, name: string): number | null {
+  const value = intField(raw, name);
+  return value !== null && value >= 0 ? value : null;
+}
+
+export function countWarning(raw: JsonObject | null | undefined, name: string): string | null {
   const content = contentOrNull(fieldOf(raw, name));
-  if (content === null || intField(raw, name) !== null) return null;
-  return `Campflare ${name} ${content} is not a whole number`;
+  if (content === null) return null;
+  const value = intField(raw, name);
+  if (value === null) return `Campflare ${name} ${content} is not a whole number`;
+  return value < 0 ? `Campflare ${name} ${content} is negative` : null;
 }
 
 export function booleanField(raw: JsonObject | null | undefined, name: string): boolean | null {

@@ -46,7 +46,7 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
         val reservationUrl = raw.stringField("reservation_url")
         val recgovRef = extractRecgovCampsiteRef(reservationUrl)
         val siteKind = CampsiteKinds.campflare(rawKind)
-        val warnings = listOfNotNull(siteKind.warning) + wholeNumberFields.mapNotNull { raw.notWholeNumberWarning(it) }
+        val warnings = listOfNotNull(siteKind.warning) + countFields.mapNotNull { raw.countWarning(it) }
         return TransformResult.Ok(
             CampsiteUpsertCandidate(
                 dataProviderRef = DataProviderRef.Campflare(id = campsiteId),
@@ -70,11 +70,11 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 waterHookups = raw.booleanField("water_hookups"),
                 electricHookups = raw.booleanField("electric_hookups"),
                 sewerHookups = raw.booleanField("sewer_hookups"),
-                maxPeople = raw.intField(MAX_PEOPLE),
-                maxCars = raw.intField(MAX_CARS),
+                maxPeople = raw.countField(MAX_PEOPLE),
+                maxCars = raw.countField(MAX_CARS),
                 pullThrough = raw.booleanField("pull_through"),
-                drivewayLength = raw.intField(DRIVEWAY_LENGTH),
-                maxRvLength = raw.intField(MAX_RV_LENGTH),
+                drivewayLength = raw.countField(DRIVEWAY_LENGTH),
+                maxRvLength = raw.countField(MAX_RV_LENGTH),
                 maxTrailerLength = raw.doubleField("max_trailer_length"),
                 photos = campflarePhotos(raw.arrayField("photos")),
                 description = raw.stringField("description")?.let(HtmlText::stripTags)?.takeIf { it.isNotBlank() },
@@ -99,4 +99,4 @@ private const val MAX_PEOPLE = "max_people"
 private const val MAX_CARS = "max_cars"
 private const val DRIVEWAY_LENGTH = "driveway_length"
 private const val MAX_RV_LENGTH = "max_rv_length"
-private val wholeNumberFields = listOf(MAX_PEOPLE, MAX_CARS, DRIVEWAY_LENGTH, MAX_RV_LENGTH)
+private val countFields = listOf(MAX_PEOPLE, MAX_CARS, DRIVEWAY_LENGTH, MAX_RV_LENGTH)
