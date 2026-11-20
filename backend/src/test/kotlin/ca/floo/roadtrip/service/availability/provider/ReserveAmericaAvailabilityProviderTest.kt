@@ -43,6 +43,7 @@ class ReserveAmericaAvailabilityProviderTest {
                                         LocalDate.parse("2026-06-23") to AvailabilityStatus.AVAILABLE,
                                     ),
                             ),
+                        unrecognizedStatuses = mapOf("q/Q" to 2),
                     )
                 }
             val adapter =
@@ -73,6 +74,7 @@ class ReserveAmericaAvailabilityProviderTest {
                 batch.observations.sortedBy { it.date }.map { it.status },
             )
             assertEquals(setOf(253488L), batch.observations.map { it.campsiteId }.toSet())
+            assertEquals(mapOf("q/Q" to 2), batch.unrecognizedStatuses)
         }
 
     @Test

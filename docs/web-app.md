@@ -376,7 +376,9 @@ deletes the Neon branch when the git branch goes. So a preview reads a copy of t
 and can write to its own branch; it does not exercise `roadtrip_web`'s read-only path.
 
 `.github/workflows/preview-check.yml` runs on Vercel's `vercel.deployment.success` repository
-dispatch. For a preview, it searches a small bbox around Mahood Lake through
+dispatch. It acts only on `roadtrip-web` deployments (`client_payload.project.name`); every
+Vercel project on this repository dispatches the same event, and the Storybook project
+(`docs/frontend-components.md`) serves no API to probe. For a preview, it searches a small bbox around Mahood Lake through
 `/api/campgrounds/search`, opens that campground's page, and requires both to answer 200 with the
 name, then posts the `Preview check` commit status on the deployed commit. It reaches the
 protected deployment with the `x-vercel-protection-bypass` header, which needs Protection Bypass

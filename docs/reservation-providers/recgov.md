@@ -64,15 +64,27 @@ the adapter truncates them to the `YYYY-MM-DD` day.
 
 Status mapping (`classifyRecgovStatus`):
 
-| rec.gov | Internal |
-|---|---|
-| `Available`, `Open` | `AVAILABLE` |
-| `Reserved` | `RESERVED` |
-| `Not Available` | `RESERVED` |
-| `Closed` | `CLOSED` |
-| `Not Reservable` | `FIRST_COME` |
-| `null`, empty | `UNKNOWN` |
-| anything else | `UNKNOWN` |
+| rec.gov | Internal | Why |
+|---|---|---|
+| `Available`, `Open` | `AVAILABLE` | |
+| `Reserved` | `RESERVED` | |
+| `Not Available` | `RESERVED` | |
+| `Not Reservable` | `FIRST_COME` | rec.gov's label for walk-up sites |
+| `Closed` | `CLOSED` | |
+| `Not Available Cutoff` | `RESERVED` | inside the booking cutoff: not bookable online, like `Not Available`. Not `CLOSED`, which would make a near-term stay or window read as closed for the season |
+| `Not Reservable Management` | `CLOSED` | held back by the operator, not walk-up |
+| `NYR` | `UNKNOWN` | not yet released: nothing is known about it yet |
+| `null`, empty | `UNKNOWN` | |
+| anything else | `UNKNOWN`, counted | see "unrecognized statuses" in `../reservation-providers.md` |
+
+Matching is case-insensitive after trimming. Counts in the 2026-06-12
+`data/raw/recgov-campsites` capture (442 facilities): `Reserved` 1,223,643,
+`Not Reservable` 853,493, `Available` 682,670, `Closed` 151,248,
+`Not Available Cutoff` 26,519, `Not Available` 16,168, `Open` 15,832,
+`NYR` 2,370, `Not Reservable Management` 843. `Not Available Cutoff` falls on
+past dates (22,416) and the next seven days (4,094); `NYR` on days 8-60 out at
+43 facilities, followed by `Closed`; `Not Reservable Management` at 5
+facilities.
 
 The earliest bookable day at or after the window start is reported as
 `AvailabilitySeasonBlock.reopensOn`, which is how a closed-for-the-season

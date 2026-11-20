@@ -6,4 +6,5 @@ import java.time.LocalDate
 data class ParsedReserveAmericaMatrix(
     val statuses: Map<String, Map<LocalDate, AvailabilityStatus>>,
     val totalSites: Int?,
+    val unrecognizedStatuses: Map<String, Int> = emptyMap(),
 )

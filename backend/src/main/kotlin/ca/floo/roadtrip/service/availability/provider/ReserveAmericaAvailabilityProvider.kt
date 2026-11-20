@@ -71,6 +71,7 @@ class ReserveAmericaAvailabilityProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
+            unrecognizedStatuses = data.unrecognizedStatuses,
         )
     }
 
@@ -118,6 +119,7 @@ class ReserveAmericaAvailabilityProvider(
         startDate: LocalDate,
         endDate: LocalDate,
         observations: List<CampsiteDayObservation>,
+        unrecognizedStatuses: Map<String, Int>,
         campsiteId: Long? = null,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(
@@ -128,6 +130,7 @@ class ReserveAmericaAvailabilityProvider(
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
             scope = scope,
             campsiteId = campsiteId,
+            unrecognizedStatuses = unrecognizedStatuses,
         )
 
     private fun reserveAmericaRefOrThrow(campground: Campground): BookingProviderRef.ReserveAmerica =

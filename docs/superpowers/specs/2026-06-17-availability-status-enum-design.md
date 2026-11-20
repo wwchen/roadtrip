@@ -133,29 +133,15 @@ visible in `reservable_statuses`, not counted as online availability.
 
 ## Provider Mapping
 
-Rec.gov:
-
-| Upstream value | Canonical status |
-| --- | --- |
-| `Not Reservable` | `first_come` |
-| `Reserved` | `reserved` |
-| `Available` | `available` |
-| `Open` | `available` |
-| `Closed` | `closed` |
-| Missing date row | `unknown` |
-| Unknown non-empty value | `reserved` |
-
-Aspira:
-
-| Aspira classification | Canonical status |
-| --- | --- |
-| available/limited/partial/mixed/mostly-booked codes with a resource present | `available` |
-| unavailable | `closed` |
-| no-data / missing resource-day | `unknown` |
-| unknown code | `unknown` |
-
-Aspira does not currently expose a first-come signal in the adapter, so it
-never emits `first_come`.
+The per-vendor tables this section first held are superseded. Two of their
+rows were wrong by the time they were checked against captures: an unknown
+non-empty rec.gov value was never `reserved` (the code mapped it to
+`unknown`), and Aspira's codes are not the available/limited/partial family
+listed here (zero is bookable; `3` is first come). The current tables, with the
+capture counts behind each row, live with each adapter:
+`docs/reservation-providers/recgov.md`, `aspira.md`, `campflare.md` and
+`reserveamerica.md`. A value no table lists is `unknown` and counted, never
+folded into a plausible status (`docs/reservation-providers.md`).
 
 ## Frontend Rendering
 
