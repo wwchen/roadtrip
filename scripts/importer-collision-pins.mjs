@@ -5,8 +5,8 @@ const ARRAY_ORDER =
 export const COLLISION_PINS = {
   'Campflare Campgrounds': { count: 0, reason: NONE_EXPECTED },
   'Campflare Campsites': {
-    count: 40,
-    reason: `40 of 299,904 campsite ids repeat (35 identical to the first, 5 not); ${ARRAY_ORDER}`,
+    count: 566,
+    reason: `566 of 300,344 campsite ids repeat (35 identical to the first, 531 not); 526 of them are Maryland state park sites the export lists under every campground of the park (shad-landing/milburn, manor-area-cunningham/cunningham-falls-0, patapsco-hollofield/hilton-patapsco), so the first-listed campground wins each; ${ARRAY_ORDER}`,
   },
   'Rec.gov Campgrounds': { count: 0, reason: NONE_EXPECTED },
   'Rec.gov Campsites': { count: 0, reason: NONE_EXPECTED },
