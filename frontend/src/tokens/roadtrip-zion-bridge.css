@@ -1,5 +1,5 @@
 /* Maps app-owned chrome roles onto the mode-aware Roadtrip Zion theme.
-   Map layers, availability, status and chart roles remain app-owned data
+   Map layers and chart roles remain app-owned data
    semantics in tokens.css. This file loads last so bridge values win.
 
    Signal used to be on that app-owned list and no longer is. It is not that
