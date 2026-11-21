@@ -8,18 +8,18 @@ const LIGHT_MODE = 'light';
 const ZION_THEME_CLASS = 'theme-roadtrip-zion';
 
 const preview: Preview = {
+  beforeEach: ({ parameters }) => {
+    const root = document.documentElement;
+    root.classList.add(ZION_THEME_CLASS);
+    root.classList.toggle(DARK_MODE_CLASS, parameters.colorMode !== LIGHT_MODE);
+  },
   decorators: [
-    (Story, { parameters }) => {
-      const root = document.documentElement;
-      root.classList.add(ZION_THEME_CLASS);
-      root.classList.toggle(DARK_MODE_CLASS, parameters.colorMode !== LIGHT_MODE);
-      return (
-        <div className="rt-storybook-shell">
-          <IconSprite all />
-          <Story />
-        </div>
-      );
-    },
+    (Story) => (
+      <div className="rt-storybook-shell">
+        <IconSprite all />
+        <Story />
+      </div>
+    ),
   ],
   parameters: {
     a11y: {

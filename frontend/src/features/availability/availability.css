@@ -342,7 +342,7 @@
 }
 .cg-site-matrix-key-available::before { background: var(--rt-avail); }
 .cg-site-matrix-key-first-come::before { background: var(--rt-warn); }
-.cg-site-matrix-key-reserved::before { background: var(--rt-faint); }
+.cg-site-matrix-key-reserved::before { background: var(--rt-hint); }
 .cg-site-matrix-key-closed::before { background: var(--rt-border-strong); }
 .cg-site-matrix-key-unknown::before { background: var(--rt-muted); }
 .cg-site-matrix-tools {

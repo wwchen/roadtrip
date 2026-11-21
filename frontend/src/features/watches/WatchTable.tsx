@@ -131,7 +131,7 @@ export function WatchTable({
     { key: 'trigger', label: 'Trigger' },
     { key: 'status', label: sortHeader('status', 'Status') },
     { key: 'last_run_at', label: sortHeader('last_run_at', 'Last checked') },
-    { key: 'actions', label: '' },
+    { key: 'actions', label: 'Actions' },
   ];
 
   const rows = sorted.map((watch) => ({
