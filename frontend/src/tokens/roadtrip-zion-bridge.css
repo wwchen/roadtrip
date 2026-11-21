@@ -59,6 +59,10 @@
 
   --rt-error: var(--rt-error-ink);
   --rt-success: var(--rt-success-ink);
+  --rt-warn: var(--rt-warning-ink);
+  --rt-first-come: var(--rt-warning-ink);
+  --rt-stay-few: var(--rt-warning-ink);
+  --rt-stay-open: var(--rt-success-ink);
 
   /* Signal magnitude. tokens.css builds this ramp from --rt-c-overlay-rgb,
      which is fixed white for the app's own dark theme — on Zion's white page
