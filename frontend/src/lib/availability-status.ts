@@ -1,6 +1,6 @@
 // The union is the generated one, so a status added to the backend's
 // `AvailabilityStatus` makes `STATUS_META` below a compile error until it is
-// given a label, an aria string and a detail class. This module is the single
+// given a label and an aria string. This module is the single
 // place that maps the wire values to display strings.
 
 import type { AvailabilityStatus } from '@/api/generated/api-types';
@@ -18,7 +18,6 @@ export interface AvailabilityStatusMeta {
   aria: string;
   /** Sentence-case form, for detail views. */
   text: string;
-  detailClass: string;
 }
 
 const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStatusMeta>>> =
@@ -29,7 +28,6 @@ const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStat
       label: 'A',
       aria: 'available',
       text: 'Available',
-      detailClass: 'cg-status-ok',
     }),
     first_come: Object.freeze({
       value: 'first_come',
@@ -37,7 +35,6 @@ const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStat
       label: 'FF',
       aria: 'first come first served',
       text: 'First come first served',
-      detailClass: 'cg-status-first-come',
     }),
     reserved: Object.freeze({
       value: 'reserved',
@@ -45,7 +42,6 @@ const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStat
       label: 'R',
       aria: 'reserved',
       text: 'Reserved',
-      detailClass: 'cg-status-muted',
     }),
     closed: Object.freeze({
       value: 'closed',
@@ -53,7 +49,6 @@ const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStat
       label: 'C',
       aria: 'closed',
       text: 'Closed',
-      detailClass: 'cg-status-muted',
     }),
     unknown: Object.freeze({
       value: 'unknown',
@@ -61,7 +56,6 @@ const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStat
       label: '?',
       aria: 'unknown',
       text: 'Unknown',
-      detailClass: 'cg-status-unknown',
     }),
     past: Object.freeze({
       value: 'past',
@@ -69,7 +63,6 @@ const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStat
       label: '·',
       aria: 'past',
       text: 'Past',
-      detailClass: 'cg-status-muted',
     }),
   } satisfies Record<AvailabilityStatus, AvailabilityStatusMeta>);
 

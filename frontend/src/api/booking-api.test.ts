@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import type { BookingActionStatus } from './generated/api-types';
 import { addToCartFailure } from './booking-api';
 import { HttpError } from './http';
 
@@ -20,8 +21,6 @@ describe('addToCartFailure', () => {
   });
 
   test('reads the raw wire spelling when a rejection carries it instead', () => {
-    // A rejection that never went through `attachErrorCode` still speaks the
-    // envelope's own key, so the reader accepts both.
     const raw = { error: 'credentials_required', provider: 'aspira', provider_display: 'BC Parks' };
 
     expect(addToCartFailure(raw)).toEqual({
@@ -47,5 +46,21 @@ describe('addToCartFailure', () => {
       provider_display: undefined,
     });
     expect(addToCartFailure(null).provider_display).toBeUndefined();
+  });
+
+  test('a DOMException numeric code is not read as a reason name', () => {
+    const aborted = new DOMException('aborted', 'AbortError');
+
+    expect(addToCartFailure(aborted).error).toBe('');
+  });
+});
+
+function theOnlyStatusAHoldAnswersWith(status: BookingActionStatus): 'completed' {
+  return status;
+}
+
+describe('what a 200 from the hold route can say', () => {
+  test('is completed and nothing else, so the status code is the whole answer', () => {
+    expect(theOnlyStatusAHoldAnswersWith('completed')).toBe('completed');
   });
 });

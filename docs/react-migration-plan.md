@@ -703,7 +703,7 @@ function, and the components only draw.
 | Booking deep links from a per-campsite template | `booking-links.ts` |
 | Campsite facts, features, capacity, image search | `site-detail-facts.ts` |
 | Selected-day list rows | `site-list-rows.ts` |
-| Date labels (all UTC — see below) | `week-labels.ts` |
+| Date labels (all UTC — see below) | `lib/week-labels.ts` |
 | Persisted Site-column width | `site-column.ts` |
 | Provider-fault copy | `availability-errors.ts` |
 | Week fetch, catalog fetch, watch list + mutations | `useWeekAvailability.ts`, `useCampsites.ts`, `useWatches.ts` |

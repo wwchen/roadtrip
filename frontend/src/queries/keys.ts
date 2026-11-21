@@ -67,6 +67,12 @@ export const queryKeys = {
       ['availability', String(poiId), startDate ?? null, endDate ?? null, siteType ?? null] as const,
   },
 
+  stays: {
+    all: () => ['stays'] as const,
+    forPoi: (poiId: string | number, startDate: string, endDate: string, siteType?: string | null) =>
+      ['stays', String(poiId), startDate, endDate, siteType ?? null] as const,
+  },
+
   dashboard: {
     all: () => ['dashboard'] as const,
     /**
