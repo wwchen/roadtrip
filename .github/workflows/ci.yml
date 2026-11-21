@@ -65,6 +65,7 @@ jobs:
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - 'apps/web/src/**'
               - 'packages/**'
               - 'package.json'
               - 'package-lock.json'

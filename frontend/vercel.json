@@ -4,5 +4,5 @@
   "installCommand": "cd .. && npm ci",
   "buildCommand": "cd .. && npm run build -- roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend",
   "outputDirectory": "storybook-static",
-  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ../packages ../package.json ../package-lock.json"
+  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ../apps/web/src ../packages ../package.json ../package-lock.json"
 }
