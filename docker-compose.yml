@@ -12,12 +12,13 @@ x-log-rotation: &log-rotation
     max-file: "5"
 
 services:
-  # Postgres + PostGIS (postgres:16 + postgis 3.4) so geom can be Geometry
+  # Postgres + PostGIS (postgres:18 + postgis 3.6) so geom can be Geometry
   # (Polygon/MultiPolygon, not just Point) and GIST bbox queries work
   # without an extension install step.
   postgres:
     profiles: [pois]
-    image: postgis/postgis:16-3.4
+    image: postgis/postgis:18-3.6
+    platform: linux/amd64
     # The image may run its entrypoint as `postgres`. Starting the entrypoint
     # as root lets it fix ownership on a freshly-created bind mount before it
     # drops privileges to the postgres user for the server itself. This is
@@ -52,7 +53,7 @@ services:
       - WEB_DB_PASSWORD_FILE=/run/secrets/web_db_password
       - WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password
     volumes:
-      - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
+      - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # During initdb, the temporary server accepts Unix-socket connections
