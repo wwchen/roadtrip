@@ -34,8 +34,8 @@
 
   /* Text */
   --rt-text: var(--rt-ink);
-  --rt-muted: color-mix(in srgb, var(--rt-ink) 70%, var(--surface-page));
-  --rt-faint: color-mix(in srgb, var(--rt-ink) 68%, var(--surface-page));
+  --rt-muted: color-mix(in srgb, var(--rt-ink) 76%, var(--surface-page));
+  --rt-faint: color-mix(in srgb, var(--rt-ink) 72%, var(--surface-page));
   --rt-hint: color-mix(in srgb, var(--rt-ink) 35%, var(--surface-page));
 
   /* Brand / action */
