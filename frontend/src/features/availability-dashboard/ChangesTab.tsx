@@ -210,7 +210,7 @@ export function ChangesTab({ route }: ChangesTabProps) {
         ) : changes.isError ? (
           <Banner status="error">{`Error: ${describeError(changes.error)}`}</Banner>
         ) : changes.isPending ? (
-          <Skeleton aria-label="Loading changes" />
+          <Skeleton role="status" aria-label="Loading changes" />
         ) : (
           <>
             <div className="rt-dash-status">{`${changeCount} change${changeCount === 1 ? '' : 's'}.`}</div>

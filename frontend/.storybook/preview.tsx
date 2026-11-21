@@ -1,24 +1,25 @@
 import type { Preview } from '@storybook/react-vite';
 import { IconSprite } from '@ui';
+import { DARK_MODE_CLASS } from '@/lib/theme';
 import '@ui/styles.css';
 import '../src/ui/storybook.css';
 
 const LIGHT_MODE = 'light';
-const LIGHT_SHELL = 'theme-roadtrip-zion rt-storybook-shell';
-const DARK_SHELL = 'theme-roadtrip-zion mode-dark rt-storybook-shell';
+const ZION_THEME_CLASS = 'theme-roadtrip-zion';
 
 const preview: Preview = {
   decorators: [
-    // `theme-roadtrip-zion`, not the pre-#601 `theme-roadtrip`: that older name
-    // matches no rule in roadtrip-zion.css, so this decorator was inert and the
-    // WHOLE catalog rendered with no theme tokens at all — `mode-dark` included,
-    // since the night block is scoped `.mode-dark.theme-roadtrip-zion`.
-    (Story, { parameters }) => (
-      <div className={parameters.colorMode === LIGHT_MODE ? LIGHT_SHELL : DARK_SHELL}>
-        <IconSprite all />
-        <Story />
-      </div>
-    ),
+    (Story, { parameters }) => {
+      const root = document.documentElement;
+      root.classList.add(ZION_THEME_CLASS);
+      root.classList.toggle(DARK_MODE_CLASS, parameters.colorMode !== LIGHT_MODE);
+      return (
+        <div className="rt-storybook-shell">
+          <IconSprite all />
+          <Story />
+        </div>
+      );
+    },
   ],
   parameters: {
     a11y: {

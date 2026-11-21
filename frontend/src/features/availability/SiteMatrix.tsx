@@ -268,21 +268,17 @@ export function SiteMatrixSkeleton({
                     </th>
                   ))
                 : Array.from({ length: dateCount }, (_, index) => (
-                      <th
-                        scope="col"
-                        className="cg-site-matrix-date cg-site-matrix-skeleton-cell"
-                        key={index}
-                      />
-                    ))}
+                    <td className="cg-site-matrix-date cg-site-matrix-skeleton-cell" key={index} />
+                  ))}
             </tr>
           </thead>
           <tbody>
             {Array.from({ length: rowCount }, (_, rowIndex) => (
               <tr key={rowIndex}>
-                <th scope="row" className="cg-site-matrix-site cg-site-matrix-skeleton-cell">
+                <td className="cg-site-matrix-site cg-site-matrix-skeleton-cell">
                   <span className="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-name" />
                   <span className="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-meta" />
-                </th>
+                </td>
                 {Array.from({ length: dateCount }, (_, cellIndex) => (
                   <td
                     className="cg-site-matrix-cell cg-site-matrix-skeleton-cell"
