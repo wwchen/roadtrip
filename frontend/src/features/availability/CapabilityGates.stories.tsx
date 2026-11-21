@@ -1,48 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CellBookPopover, type CellCart } from './CellBookPopover';
 import { WatchSignInGate } from '@/domain/watch/WatchSignInGate';
 import { WatchEditor } from '@/domain/watch/WatchEditor';
 import { normalizeWatchCapabilities } from '@/lib/watch-windows';
+import { StoryAnchoredCell as AnchoredCell } from './StoryAnchoredCell';
 import './availability.css';
 
 /** The class the production shells put on `<html>`. */
 const ZION_THEME_CLASS = 'theme-roadtrip-zion';
-
-/**
- * The popovers anchor to a real element's rect, so a story needs one on the page.
- * The cell is drawn at the size the grid uses, and the popover lands under it
- * exactly as it does over the matrix.
- */
-function AnchoredCell({
-  label,
-  children,
-}: {
-  label: string;
-  children: (anchor: HTMLElement) => ReactNode;
-}) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    document.documentElement.classList.add(ZION_THEME_CLASS);
-    setAnchor(ref.current);
-  }, []);
-
-  return (
-    <div style={{ padding: 24, minHeight: 260 }}>
-      <button
-        ref={ref}
-        type="button"
-        className="cg-site-matrix-cell-button is-armed"
-        style={{ width: 66, height: 40 }}
-      >
-        {label}
-      </button>
-      {anchor ? children(anchor) : null}
-    </div>
-  );
-}
 
 /**
  * The theme boundary the editor is drawn inside.
