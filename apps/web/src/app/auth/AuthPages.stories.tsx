@@ -7,15 +7,17 @@ import {
   VERIFY_EMAIL,
   WRONG_PASSWORD,
 } from '../../server/auth/authCopy';
+import { FORGOT_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from '../../server/auth/authPaths';
+import { HOME_PATH, RETURN_TO_PARAM, withReturnTo } from '../../server/auth/returnTo';
 import type { AuthFormState, FormAction } from './AuthForm';
 import { ForgotCard, ResetCard, SignInCard, SignUpCard, type SignInActions } from './AuthViews';
 import './auth.css';
 
 const PAGE_CLASS = 'theme-roadtrip-zion auth-page';
-const RETURN_TO = { return_to: '/' };
-const SIGN_IN_HREF = '/auth/sign-in?return_to=/';
-const SIGN_UP_HREF = '/auth/sign-up?return_to=/';
-const FORGOT_HREF = '/auth/forgot?return_to=/';
+const RETURN_TO = { [RETURN_TO_PARAM]: HOME_PATH };
+const SIGN_IN_HREF = withReturnTo(SIGN_IN_PATH, HOME_PATH);
+const SIGN_UP_HREF = withReturnTo(SIGN_UP_PATH, HOME_PATH);
+const FORGOT_HREF = withReturnTo(FORGOT_PATH, HOME_PATH);
 const NO_MESSAGE = null;
 
 function answers(message: string | null, canResendVerification = false): FormAction {
