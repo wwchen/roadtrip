@@ -550,6 +550,20 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Key the LFS cache on the objects this commit points at
+        id: lfs
+        run: echo "key=$(git lfs ls-files --long | sha256sum | cut -c1-64)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache LFS objects
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .git/lfs
+          key: ${{ runner.os }}-lfs-${{ steps.lfs.outputs.key }}
+          restore-keys: ${{ runner.os }}-lfs-
+
+      - name: Fetch LFS objects
+        run: git lfs pull
+
       - name: Build data image
         env:
           DOCKER_BUILDKIT: '1'
