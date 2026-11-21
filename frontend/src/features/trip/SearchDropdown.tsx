@@ -1,5 +1,5 @@
 // The search dropdown under the rows.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { token, KIND_TOKEN } from '@tokens';
 import { sectionHeaders, type SearchKind, type SearchResult } from './search-results';
 
@@ -45,43 +45,44 @@ export function SearchDropdown({ results, activeIndex, onPick, errors = [] }: Se
   if (results.length === 0 && errors.length === 0) return null;
 
   return (
-    <div
-      className={`${SEARCH_POPOVER_CLASS} open`}
-      id="tb-dropdown"
-      ref={listRef}
-      role="listbox"
-      aria-label="Search results"
-    >
+    <div className={`${SEARCH_POPOVER_CLASS} open`} id="tb-dropdown" ref={listRef}>
       {errors.map((line) => (
         <div key={line} className="tb-section" role="alert">
           {line}
         </div>
       ))}
-      {results.map((result, index) => (
-        <div key={`${result.source}-${result.poiId ?? result.name}-${index}`}>
-          {headers[index] ? <div className="tb-section">{headers[index]}</div> : null}
-          <div
-            className={`tb-result${index === activeIndex ? ' active' : ''}`}
-            data-result-index={index}
-            role="option"
-            aria-selected={index === activeIndex}
-            // mousedown, not click: the input blurs on mousedown, and a click
-            // handler would fire after the blur had already closed the list.
-            onMouseDown={(event) => {
-              event.preventDefault();
-              onPick(result);
-            }}
-          >
-            <span className="tb-kind" style={{ background: kindColor(result.kind) }}>
-              {result.kind}
-            </span>
-            <span className="tb-name">
-              {result.name}
-              {result.sub ? <span className="tb-sub"> {result.sub}</span> : null}
-            </span>
-          </div>
+      {results.length > 0 ? (
+        <div role="listbox" aria-label="Search results">
+          {results.map((result, index) => (
+            <div key={`${result.source}-${result.poiId ?? result.name}-${index}`}>
+              {headers[index] ? <div className="tb-section">{headers[index]}</div> : null}
+              <div
+                className={`tb-result${index === activeIndex ? ' active' : ''}`}
+                data-result-index={index}
+                role="option"
+                aria-selected={index === activeIndex}
+                // mousedown, not click: the input blurs on mousedown, and a click
+                // handler would fire after the blur had already closed the list.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onPick(result);
+                }}
+              >
+                <span
+                  className="tb-kind"
+                  style={{ '--tb-kind-color': kindColor(result.kind) } as CSSProperties}
+                >
+                  {result.kind}
+                </span>
+                <span className="tb-name">
+                  {result.name}
+                  {result.sub ? <span className="tb-sub"> {result.sub}</span> : null}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }
