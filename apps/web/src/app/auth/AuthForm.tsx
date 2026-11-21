@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, ButtonGroup, TextField } from '@lew-ds/lds-react';
-import { useActionState, useId, useState } from 'react';
+import { useActionState, useId, useState, type FormEvent } from 'react';
 export interface AuthFormState {
   message: string | null;
   canResendVerification: boolean;
@@ -39,6 +39,13 @@ const EMPTY_STATE: AuthFormState = { message: null, canResendVerification: false
 const EMAIL_FIELD: FieldSpec = { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' };
 const UNUSED_ALTERNATE: FormAction = async (previous) => previous;
 const STRONG = 'strong';
+const MAIN: Submitter = 'main';
+const ALTERNATE: Submitter = 'alternate';
+
+function submitterOf(event: FormEvent<HTMLFormElement>): Submitter {
+  const { submitter } = event.nativeEvent as SubmitEvent;
+  return submitter instanceof HTMLElement && submitter.dataset.submitter === ALTERNATE ? ALTERNATE : MAIN;
+}
 
 export function AuthForm({
   action,
@@ -53,13 +60,13 @@ export function AuthForm({
 }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, { ...EMPTY_STATE, message });
   const [alternateState, alternateAction, alternatePending] = useActionState(alternate?.action ?? UNUSED_ALTERNATE, EMPTY_STATE);
-  const [lastSubmitter, setLastSubmitter] = useState<Submitter>('main');
+  const [lastSubmitter, setLastSubmitter] = useState<Submitter>(MAIN);
   const formId = useId();
   const busy = pending || alternatePending;
-  const shown = lastSubmitter === 'alternate' ? alternateState : state;
+  const shown = lastSubmitter === ALTERNATE ? alternateState : state;
   return (
     <>
-      <form action={formAction} className="auth-form">
+      <form action={formAction} className="auth-form" onSubmit={(event) => setLastSubmitter(submitterOf(event))}>
         {Object.entries(hidden).map(([name, value]) => (
           <input key={name} type="hidden" name={name} value={value} />
         ))}
@@ -80,7 +87,6 @@ export function AuthForm({
             emphasis={variant === 'primary' ? STRONG : undefined}
             variant={variant === 'primary' ? undefined : variant}
             disabled={busy}
-            onClick={() => setLastSubmitter('main')}
           >
             {submitLabel}
           </Button>
@@ -91,7 +97,7 @@ export function AuthForm({
               formAction={alternateAction}
               formNoValidate
               disabled={busy}
-              onClick={() => setLastSubmitter('alternate')}
+              data-submitter={ALTERNATE}
             >
               {alternate.label}
             </Button>
@@ -103,7 +109,7 @@ export function AuthForm({
           </p>
         )}
       </form>
-      {lastSubmitter === 'main' && state.canResendVerification && resendAction !== undefined && resendLabel !== undefined ? (
+      {lastSubmitter === MAIN && state.canResendVerification && resendAction !== undefined && resendLabel !== undefined ? (
         <AuthForm action={resendAction} hidden={hidden} submitLabel={resendLabel} fields={[EMAIL_FIELD]} variant="secondary" />
       ) : null}
     </>

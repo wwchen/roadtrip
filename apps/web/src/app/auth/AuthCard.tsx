@@ -21,7 +21,7 @@ export function AuthCard({ title, lede, footer, children }: AuthCardProps) {
 
 export function AuthDivider({ label }: { label: string }) {
   return (
-    <p className="auth-divider" role="separator">
+    <p className="auth-divider">
       <span>{label}</span>
     </p>
   );
