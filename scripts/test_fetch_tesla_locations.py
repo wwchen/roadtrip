@@ -48,5 +48,33 @@ class IsFreshTest(unittest.TestCase):
         self.assertTrue(ftl.is_fresh("both", FRESHNESS_DAYS))
 
 
+
+class BlockedBailoutTest(unittest.TestCase):
+    def run_main(self, statuses: list[int]) -> tuple[int, int]:
+        slugs = [f"slug{i}" for i in range(len(statuses))]
+        responses = iter((status, {"data": {}} if status == 200 else "blocked") for status in statuses)
+        with mock.patch.object(ftl.tesla_client, "load_env"), \
+                mock.patch.object(ftl, "newest_index_capture", return_value=ftl.ROOT / "index.json"), \
+                mock.patch.object(ftl, "na_supercharger_slugs", return_value=slugs), \
+                mock.patch.object(ftl, "is_fresh", return_value=False), \
+                mock.patch.object(ftl, "fetch_slug", side_effect=lambda _: next(responses)) as fetch, \
+                mock.patch.object(ftl, "write_envelope"), \
+                mock.patch.object(ftl.time, "sleep"), \
+                mock.patch.object(ftl, "err"), \
+                mock.patch.object(sys, "argv", ["fetch_tesla_locations.py"]):
+            return ftl.main(), fetch.call_count
+
+    def test_consecutive_403s_bail_like_429s(self):
+        self.assertEqual(self.run_main([403, 403, 403, 200]), (ftl.EXIT_RATE_LIMITED, 3))
+
+    def test_mixed_403_and_429_count_together(self):
+        self.assertEqual(self.run_main([403, 429, 403, 200]), (ftl.EXIT_RATE_LIMITED, 3))
+
+    def test_a_success_resets_the_count(self):
+        self.assertEqual(self.run_main([403, 403, 200, 403, 403, 200]), (0, 6))
+
+    def test_other_failures_do_not_bail(self):
+        self.assertEqual(self.run_main([404, 504, 404, 504]), (0, 4))
+
 if __name__ == "__main__":
     unittest.main()
