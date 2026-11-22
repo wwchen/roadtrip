@@ -363,7 +363,7 @@ test('every pin states a reason and a non-negative integer count', () => {
     assert.ok(Number.isInteger(pin.count) && pin.count >= 0, `${name}: pin count`);
     assert.ok(typeof pin.reason === 'string' && pin.reason.trim() !== '', `${name}: pin has no reason`);
   }
-  assert.equal(COLLISION_PINS['Campflare Campsites'].count, 566);
+  assert.equal(COLLISION_PINS['Campflare Campsites'].count, 40);
 });
 
 test('the collision pins name exactly the enabled registry targets', () => {

@@ -21,7 +21,12 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
     override val etlSlug = CAMPSITES_ETL_SLUG
     override val multiPart: Boolean = true
 
-    override fun parse(inputs: InputBundle): Sequence<ParseResult<JsonObject>> = jsonObjectResults(inputs.soleEnvelopes(), etlSlug)
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<JsonObject>> {
+        val sites = inputs.envelopes(CAMPSITES_INPUT)
+        val campgrounds = if (CAMPGROUNDS_INPUT in inputs.dataSourceSlugs()) inputs.envelopes(CAMPGROUNDS_INPUT) else emptyList()
+        val homes = CampflareCampsiteHomes.resolve(sites, campgrounds)
+        return jsonObjectResults(sites, etlSlug).filter { it !is ParseResult.Ok || homes.keeps(it.dto) }
+    }
 
     override fun transform(
         dto: JsonObject,
@@ -90,4 +95,9 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 else -> null
             }?.trim()?.takeIf(String::isNotEmpty)
         }
+
+    private companion object {
+        const val CAMPSITES_INPUT = "campflare-campsites-export"
+        const val CAMPGROUNDS_INPUT = "campflare-campgrounds-export"
+    }
 }

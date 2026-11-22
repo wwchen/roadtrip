@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -143,9 +144,70 @@ class CampflareCampsitesEtlTest {
         assertEquals(31.957925, rows.single { it.dataProviderRef.serialize() == "scaled-lat" }.latitude)
     }
 
+    @Test
+    fun `keeps the copy under the campground its loop name names`() {
+        val sites =
+            """
+            [
+              {"id":"a","campground_id":"shad","name":"A","loop_name":"Milburn Landing Nanticoke Loop"},
+              {"id":"b","campground_id":"shad","name":"B","loop_name":"Shad Landing Fox Den Loop"},
+              {"id":"a","campground_id":"milburn","name":"A","loop_name":"Milburn Landing Nanticoke Loop"},
+              {"id":"b","campground_id":"milburn","name":"B","loop_name":"Shad Landing Fox Den Loop"}
+            ]
+            """.trimIndent()
+        assertEquals(listOf("b@shad", "a@milburn"), homesOf(sites, parkCampgrounds))
+    }
+
+    @Test
+    fun `a loop that names no campground goes to the one named only for the park`() {
+        val sites =
+            """
+            [
+              {"id":"c","campground_id":"manor","name":"C","loop_name":"Bear Branch Loop"},
+              {"id":"d","campground_id":"manor","name":"D","loop_name":"Manor Camping Area"},
+              {"id":"c","campground_id":"falls","name":"C","loop_name":"Bear Branch Loop"},
+              {"id":"d","campground_id":"falls","name":"D","loop_name":"Manor Camping Area"}
+            ]
+            """.trimIndent()
+        assertEquals(listOf("d@manor", "c@falls"), homesOf(sites, parkCampgrounds))
+    }
+
+    @Test
+    fun `keeps the first-listed copy when neither rule decides`() {
+        val sites =
+            """
+            [
+              {"id":"e","campground_id":"hollofield","name":"E","loop_name":"McKeldin Area"},
+              {"id":"e","campground_id":"hilton","name":"E","loop_name":"McKeldin Area"}
+            ]
+            """.trimIndent()
+        assertEquals(listOf("e@hollofield"), homesOf(sites, parkCampgrounds))
+        assertEquals(listOf("e@hollofield"), homesOf(sites, null))
+    }
+
+    @Test
+    fun `repeats under one campground are left for the dedupe`() {
+        val sites = """[{"id":"f","campground_id":"shad","name":"F"},{"id":"f","campground_id":"shad","name":"F"}]"""
+        assertEquals(listOf("f@shad", "f@shad"), homesOf(sites, parkCampgrounds))
+    }
+
+    private fun homesOf(
+        sitesJson: String,
+        campgroundsJson: String?,
+    ): List<String> {
+        val captures = linkedMapOf("campflare-campsites-export" to listOf(envelope(sitesJson)))
+        if (campgroundsJson != null) captures["campflare-campgrounds-export"] = listOf(envelope(campgroundsJson))
+        return CampflareCampsitesEtl()
+            .parse(InputBundle(rawCaptures = captures))
+            .map { parsed ->
+                val dto = (parsed as ParseResult.Ok).dto
+                "${dto["id"]!!.jsonPrimitive.content}@${dto["campground_id"]!!.jsonPrimitive.content}"
+            }.toList()
+    }
+
     private fun bundle(payloadJson: String): InputBundle =
         InputBundle(
-            rawCaptures = linkedMapOf("campflare-campsites" to listOf(envelope(payloadJson))),
+            rawCaptures = linkedMapOf("campflare-campsites-export" to listOf(envelope(payloadJson))),
         )
 
     private fun envelope(payloadJson: String): Envelope =
@@ -198,4 +260,18 @@ class CampflareCampsitesEtlTest {
           }
         ]
         """.trimIndent()
+
+    private companion object {
+        val parkCampgrounds =
+            """
+            [
+              {"id":"shad","name":"Shad Landing Pocomoke River State Park Campground"},
+              {"id":"milburn","name":"Milburn Landing Campground"},
+              {"id":"manor","name":"Manor Cunningham Falls State Park Campground"},
+              {"id":"falls","name":"Cunningham Falls State Park Campground"},
+              {"id":"hollofield","name":"Patapsco Valley State Park Hollofield Campground"},
+              {"id":"hilton","name":"Patapsco Valley Hilton Vally State Park Campground"}
+            ]
+            """.trimIndent()
+    }
 }
