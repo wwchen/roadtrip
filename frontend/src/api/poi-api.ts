@@ -13,7 +13,7 @@ import type {
   PoiSearchResponseSchema,
   SlimPoiPropertiesSchema,
 } from './generated/api-types';
-import { HttpError, jsonGetOk, jsonPostOk, type RequestOptions } from './http';
+import { httpErrorFrom, jsonGetOk, jsonPostOk, type RequestOptions } from './http';
 
 const POIS_URL = '/api/pois';
 const POI_SEARCH_URL = '/api/pois/search';
@@ -106,17 +106,11 @@ export function poiSearchUrl({
   return `${POI_SEARCH_URL}?${params.toString()}`;
 }
 
-/**
- * Typeahead search. A failed response yields an empty result list rather than
- * throwing — same reasoning as `geocode`.
- */
 export async function searchPois(
   query: string,
   { limit = DEFAULT_TYPEAHEAD_LIMIT, categories, signal }: SearchPoisOptions = {},
 ): Promise<PoiSearchResponse> {
-  const url = poiSearchUrl({ q: query, limit, categories });
-  const response = await fetch(url, { signal });
-  return response.ok ? ((await response.json()) as PoiSearchResponse) : { results: [] };
+  return jsonGetOk<PoiSearchResponse>(poiSearchUrl({ q: query, limit, categories }), { signal });
 }
 
 /** Catalog search. Throws HttpError on a failed response. */
@@ -154,7 +148,7 @@ export async function fetchPoiDetail(
 ): Promise<unknown> {
   const url = poiDetailUrl(id);
   const response = await fetch(url, options);
-  if (!response.ok) throw new HttpError(url, response.status);
+  if (!response.ok) throw await httpErrorFrom(url, response);
   return response.json();
 }
 

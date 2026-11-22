@@ -269,6 +269,7 @@ export function TopBar({ alerts }: TopBarProps) {
         results={results.slice(0, MAX_SEARCH_RESULTS)}
         activeIndex={activeResult}
         onPick={pick}
+        errors={placeSearch.errors}
       />
 
       {/* Precedence, stated once: a routing failure is about the trip the user just

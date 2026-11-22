@@ -14,6 +14,7 @@ import { streamStays } from '@/api/availability-api';
 import type { StayCheckOutcome } from '@/api/generated/api-types';
 import { HttpError } from '@/api/http';
 import { DeadlineExceeded, withIdleTimeout } from '@/lib/deadline';
+import { describeError } from '@/lib/error-report';
 import { useBefore } from '@/lib/use-now';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import {
@@ -49,6 +50,7 @@ export interface CurrentStayCheck {
   running: boolean;
   observedAt: string | null;
   failure: StayCheckFailure | null;
+  failureDetail: string | null;
 }
 
 /** The check's answers when they answer the current question; null otherwise. */
@@ -62,6 +64,7 @@ export function useCurrentStayCheck(): CurrentStayCheck | null {
       running: s.running,
       observedAt: s.observedAt,
       failure: s.failure,
+      failureDetail: s.failureDetail,
     })),
   );
   return useMemo(
@@ -83,6 +86,7 @@ export interface StayCheckControl {
   coolingDown: boolean;
   /** Why the current question's check stopped early, if it did. */
   failure: StayCheckFailure | null;
+  failureDetail: string | null;
   /**
    * True when there is a stay to ask about and the list in view has loaded, but
    * nothing in it a provider can answer for. False while the list is still on its
@@ -161,9 +165,9 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     } catch (error) {
       if (controller.signal.aborted) return;
       if (error instanceof HttpError && error.code === THROTTLED_CODE) {
-        finish('throttled', Date.now() + THROTTLE_COOLDOWN_MS);
+        finish('throttled', Date.now() + THROTTLE_COOLDOWN_MS, describeError(error));
       } else {
-        finish(error instanceof DeadlineExceeded ? 'timed_out' : 'failed');
+        finish(error instanceof DeadlineExceeded ? 'timed_out' : 'failed', null, describeError(error));
       }
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
@@ -177,6 +181,7 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     checked,
     coolingDown,
     failure: current?.failure ?? null,
+    failureDetail: current?.failureDetail ?? null,
     nothingToCheck: query !== null && checkableIds !== null && checkableIds.length === 0,
     check: () => void run(checked ? RECHECK_MAX_AGE_SECONDS : null),
   };

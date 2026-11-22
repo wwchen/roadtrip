@@ -11,4 +11,5 @@ data class ReserveAmericaAvailability(
     val endDate: LocalDate,
     val observedAt: Instant,
     val statuses: Map<String, Map<LocalDate, AvailabilityStatus>>,
+    val unrecognizedStatuses: Map<String, Int> = emptyMap(),
 )

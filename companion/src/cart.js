@@ -215,6 +215,8 @@ const CART_VERIFY_FETCH_FAILED = 'cart_fetch_failed'
 const CART_VERIFY_HTTP_ERROR = 'cart_http_error'
 const CART_VERIFY_EMPTY = 'cart_empty'
 const CART_VERIFY_MISSING_ITEM = 'missing_expected_item'
+const CART_VERIFY_NOT_RUN = 'cart_not_verified'
+const CONFIRMATION_DISABLED_REASON = 'confirmation_disabled'
 const ERROR_RECGOV_NOT_AUTHENTICATED = 'recgov_not_authenticated'
 const ERROR_RECGOV_LOGIN_FAILED = 'recgov_login_failed'
 const ERROR_RECGOV_REFRESH_FAILED = 'recgov_refresh_failed'
@@ -225,6 +227,14 @@ const ERROR_RECGOV_CONFIRMATION_DISABLED = 'recgov_confirmation_disabled'
 // those dates at all, the other means we tried to hold it and could not.
 const ERROR_RECGOV_DATES_NOT_OFFERED = 'recgov_dates_not_offered'
 const ERROR_RECGOV_NO_RESERVE_BUTTON = 'recgov_no_reserve_button'
+const ERROR_ATC_AUTOMATION_EXCEPTION = 'atc_automation_exception'
+const ERROR_CAPTCHA_REQUIRED = 'captcha_required'
+const CAPTCHA_DETECT_TIMEOUT_MS = 1_500
+const CAPTCHA_SOLVE_TIMEOUT_MS = 90_000
+const CAPTCHA_HEADLESS_DETAIL =
+  'Recreation.gov presented a bot challenge on the booking page, and a headless companion cannot solve it.'
+const CAPTCHA_UNSOLVED_DETAIL =
+  'Recreation.gov presented a bot challenge on the booking page, and it was not solved within the wait.'
 const DATES_NOT_OFFERED_DETAIL =
   'Recreation.gov did not offer the requested arrival date for this site — its calendar refused the selection.'
 const NO_RESERVE_BUTTON_DETAIL =
@@ -321,7 +331,7 @@ export function recgovAuthenticationFailure ({
   if (attemptedLogin) {
     const blocker = LOGIN_BLOCKER_DETAIL[reason]
     return {
-      error: ERROR_RECGOV_LOGIN_FAILED,
+      error: reason || ERROR_RECGOV_LOGIN_FAILED,
       detail: blocker ? `${LOGIN_FAILED_DETAIL} ${blocker}` : LOGIN_FAILED_DETAIL,
       corrective_action: LOGIN_ON_COMPANION_ACTION,
       auth: authFields(headless),
@@ -549,7 +559,7 @@ async function clickConfirmationButton (page, { screenshots = null } = {}) {
     return {
       seen: true,
       clicked: false,
-      reason: 'confirmation_disabled',
+      reason: CONFIRMATION_DISABLED_REASON,
       candidates: visibleCandidates,
     }
   }
@@ -658,22 +668,26 @@ const CAPTCHA_SELECTORS = [
   '[id*="px-captcha"]',
 ].join(', ')
 
-async function waitForCaptchaIfPresent (page, solveTimeout = 90000) {
-  const appeared = await page.waitForSelector(CAPTCHA_SELECTORS, { timeout: 1500 })
+export async function captchaBlocker (page, { headless = IS_HEADLESS, solveTimeoutMs = CAPTCHA_SOLVE_TIMEOUT_MS } = {}) {
+  const appeared = await page.waitForSelector(CAPTCHA_SELECTORS, { timeout: CAPTCHA_DETECT_TIMEOUT_MS })
     .then(() => true).catch(() => false)
 
-  if (!appeared) return false
+  if (!appeared) return null
 
-  if (IS_HEADLESS) {
-    console.log('Cart: captcha detected in headless mode — cannot solve automatically, proceeding anyway')
-    return true
+  if (headless) {
+    console.log('Cart: captcha detected in headless mode — cannot solve automatically')
+    return { error: ERROR_CAPTCHA_REQUIRED, detail: CAPTCHA_HEADLESS_DETAIL }
   }
 
-  console.log('Cart: captcha detected — waiting up to 90s for manual solve in browser window…')
-  await page.waitForSelector(CAPTCHA_SELECTORS, { state: 'hidden', timeout: solveTimeout })
-    .catch(() => console.log('Cart: captcha wait timed out — proceeding'))
+  console.log(`Cart: captcha detected — waiting up to ${solveTimeoutMs / 1000}s for manual solve in browser window…`)
+  const cleared = await page.waitForSelector(CAPTCHA_SELECTORS, { state: 'hidden', timeout: solveTimeoutMs })
+    .then(() => true).catch(() => false)
+  if (!cleared) {
+    console.log('Cart: captcha wait timed out')
+    return { error: ERROR_CAPTCHA_REQUIRED, detail: CAPTCHA_UNSOLVED_DETAIL }
+  }
   console.log('Cart: captcha cleared, resuming')
-  return true
+  return null
 }
 
 function createAtcScreenshotCollector (page) {
@@ -773,6 +787,7 @@ async function runAddToCart (match, contextOptions) {
       cartVerificationRequests -= 1
     }
   }
+  const verifyContext = (label) => ({ label, captured, match, getCart: getCartForVerification, screenshots })
   page.on('response', r => {
     if (/api.*(cart|reserv|booking|order)/i.test(r.url())) {
       if (cartVerificationRequests > 0 && r.url().includes('/api/cart/shoppingcart')) return
@@ -784,8 +799,9 @@ async function runAddToCart (match, contextOptions) {
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await waitForCaptchaIfPresent(page)
+    const pageCaptcha = await captchaBlocker(page)
     await screenshots.capture('opened-booking-url')
+    if (pageCaptcha) return withScreenshots({ ok: false, page, ...pageCaptcha }, screenshots)
 
     const signInSel = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
     await page.waitForSelector(
@@ -808,15 +824,8 @@ async function runAddToCart (match, contextOptions) {
     const reserveClick = await clickReserveButton(page, { screenshots })
     if (reserveClick.failure) return withScreenshots({ ok: false, page, ...reserveClick.failure }, screenshots)
     if (reserveClick.clicked) {
-      await waitForCaptchaIfPresent(page)
-      console.log('Cart: verifying requested campsite/date in cart after reserve click')
-      const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
-      await screenshots.capture('cart-verification-after-reserve-click')
-      if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-      if (!verification.ok && reserveClick.confirmation?.reason === 'confirmation_disabled') {
-        return withScreenshots({ ok: false, page, ...confirmationDisabledFailure(verification.check, reserveClick.confirmation) }, screenshots)
-      }
-      return withScreenshots({ ok: verification.ok, page, cart_check: verification.check }, screenshots)
+      const verified = await verifyReserveClick(page, reserveClick, verifyContext('reserve-click'))
+      return withScreenshots({ page, ...verified }, screenshots)
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
@@ -838,15 +847,8 @@ async function runAddToCart (match, contextOptions) {
       const datedReserveClick = await clickReserveButton(page, { screenshots })
       if (datedReserveClick.failure) return withScreenshots({ ok: false, page, ...datedReserveClick.failure }, screenshots)
       if (datedReserveClick.clicked) {
-        await waitForCaptchaIfPresent(page)
-        console.log('Cart: verifying requested campsite/date in cart after dated reserve click')
-        const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
-        await screenshots.capture('cart-verification-after-dated-reserve-click')
-        if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-        if (!verification.ok && datedReserveClick.confirmation?.reason === 'confirmation_disabled') {
-          return withScreenshots({ ok: false, page, ...confirmationDisabledFailure(verification.check, datedReserveClick.confirmation) }, screenshots)
-        }
-        return withScreenshots({ ok: verification.ok, page, cart_check: verification.check }, screenshots)
+        const verified = await verifyReserveClick(page, datedReserveClick, verifyContext('dated-reserve-click'))
+        return withScreenshots({ page, ...verified }, screenshots)
       }
     }
 
@@ -868,9 +870,45 @@ async function runAddToCart (match, contextOptions) {
       detail: NO_RESERVE_BUTTON_DETAIL,
     }, screenshots)
   } catch (err) {
-    console.error('Cart automation error:', err.message)
+    console.error('Cart automation error:', err?.message)
     await screenshots.capture('automation-error')
-    return withScreenshots({ ok: false, page }, screenshots)
+    return withScreenshots({ ok: false, page, ...automationFailure(err) }, screenshots)
+  }
+}
+
+async function verifyReserveClick (page, click, { label, captured, match, getCart, screenshots }) {
+  const captcha = await captchaBlocker(page)
+  console.log(`Cart: verifying requested campsite/date in cart after ${label}`)
+  const verification = await waitForRequestedCartItem(page, captured, match, getCart)
+  await screenshots.capture(`cart-verification-after-${label}`)
+  if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
+  if (verification.ok) return { ok: true, cart_check: verification.check }
+  if (click.confirmation?.reason === CONFIRMATION_DISABLED_REASON) {
+    return { ok: false, ...confirmationDisabledFailure(verification.check, click.confirmation) }
+  }
+  if (captcha) return { ok: false, ...captcha, cart_check: verification.check }
+  return { ok: false, ...cartCheckFailure(verification.check) }
+}
+
+function cartCheckFailure (check) {
+  return {
+    error: check?.reason || CART_VERIFY_NOT_RUN,
+    detail: cartCheckDetail(check),
+    cart_check: check,
+  }
+}
+
+export function cartCheckDetail (check) {
+  const status = check?.status ?? '?'
+  const reservations = check?.reservation_count ?? '?'
+  const summary = `cart verification failed: reason=${check?.reason || CART_VERIFY_NOT_RUN} status=${status} reservations=${reservations}`
+  return check?.detail ? `${summary} detail="${check.detail}"` : summary
+}
+
+function automationFailure (err) {
+  return {
+    error: ERROR_ATC_AUTOMATION_EXCEPTION,
+    detail: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
   }
 }
 

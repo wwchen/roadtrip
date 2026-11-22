@@ -90,7 +90,7 @@ test('a fault is logged once with its kind', async () => {
   expect(warn).toHaveBeenCalledWith('booking gateway:', 'unreachable');
 });
 
-test('the unconfigured gateway answers not_configured for every operation, and unavailable for health', async () => {
+test('the unconfigured gateway answers not_configured for every operation, health included', async () => {
   const notConfigured = { kind: 'unavailable', fault: 'not_configured' };
   const gateway = unconfiguredBookingGateway;
   expect(await gateway.hold(7n, '300', WINDOW)).toEqual(notConfigured);
@@ -99,7 +99,7 @@ test('the unconfigured gateway answers not_configured for every operation, and u
   expect(await gateway.refresh(7n)).toEqual(notConfigured);
   expect(await gateway.verify(7n)).toEqual(notConfigured);
   expect(await gateway.signOut(7n)).toEqual(notConfigured);
-  expect(await gateway.health(7n)).toEqual({ kind: 'unavailable' });
+  expect(await gateway.health(7n)).toEqual(notConfigured);
   expect(warn).not.toHaveBeenCalled();
 });
 
@@ -160,6 +160,12 @@ test('a decoder-made fault is logged once by the gateway', async () => {
   expect(warn).toHaveBeenCalledWith('booking gateway:', 'malformed');
 });
 
+test('a health answer with an unknown session is logged as malformed', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ session: 'weird' })));
+  expect(await bookingRelayGateway(CONFIG).health(USER_ID)).toEqual({ kind: 'unavailable', fault: 'malformed' });
+  expect(warn).toHaveBeenCalledWith('booking gateway:', 'malformed');
+});
+
 test('a transport fault is logged once, not again by the gateway', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'unauthorized' }, { status: 401 })));
   expect(await bookingRelayGateway(CONFIG).hold(USER_ID, '300', WINDOW)).toEqual({ kind: 'unavailable', fault: 'unauthorized' });
@@ -168,7 +174,7 @@ test('a transport fault is logged once, not again by the gateway', async () => {
 
 test('a malformed health answer is logged once', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({})));
-  expect(await bookingRelayGateway(CONFIG).health(USER_ID)).toEqual({ kind: 'unavailable' });
+  expect(await bookingRelayGateway(CONFIG).health(USER_ID)).toEqual({ kind: 'unavailable', fault: 'malformed' });
   expect(warn).toHaveBeenCalledTimes(1);
   expect(warn).toHaveBeenCalledWith('booking gateway:', 'malformed');
 });

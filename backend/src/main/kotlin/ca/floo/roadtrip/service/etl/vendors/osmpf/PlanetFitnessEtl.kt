@@ -59,7 +59,9 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
         ctx: TransformCtx,
     ): Sequence<TransformResult<PlanetFitnessLocationUpsertCandidate>> =
         dto.elements.asSequence().map { el ->
-            transformElement(el)?.let { TransformResult.Ok(it) }
+            transformElement(el)?.let { record ->
+                TransformResult.Ok(record, if (record.country == null) listOf(NO_COUNTRY) else emptyList())
+            }
                 ?: TransformResult.Bad("${el.type}-${el.id}", listOf("missing latitude/longitude"))
         }
 
@@ -75,15 +77,16 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
 
         // Address bag. Empty values dropped so the row carries null
         // when nothing's known instead of {"street":"","city":""}.
-        val address = buildAddress(tags)
+        val country = countryOf(tags)
+        val address = buildAddress(tags, country)
 
         return PlanetFitnessLocationUpsertCandidate(
             locationId = sourceId,
             name = tags["name"] ?: "Planet Fitness",
             latitude = lat,
             longitude = lon,
-            region = tags["addr:state"]?.takeIf { it.isNotBlank() },
-            country = "US", // OSM-PF poller's bbox is continental US; safe default
+            region = regionOf(tags),
+            country = country,
             phone = tags["phone"]?.takeIf { it.isNotBlank() },
             address = addressJson(address),
             infoUrl = tags["website"]?.takeIf { it.isNotBlank() },
@@ -107,17 +110,35 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
             ),
         )
 
-    private fun buildAddress(tags: Map<String, String>): Address? {
+    private fun regionOf(tags: Map<String, String>): String? =
+        tags[STATE_TAG]?.takeIf { it.isNotBlank() } ?: tags[PROVINCE_TAG]?.takeIf { it.isNotBlank() }
+
+    private fun countryOf(tags: Map<String, String>): String? {
+        tags[COUNTRY_TAG]?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val postcode = tags[POSTCODE_TAG]?.trim().orEmpty()
+        val state = tags[STATE_TAG]?.trim().orEmpty()
+        val province = tags[PROVINCE_TAG]?.trim().orEmpty()
+        return when {
+            canadianPostcode.matches(postcode) || province.isNotEmpty() || state.uppercase() in canadianProvinceCodes -> CANADA
+            usZip.matches(postcode) || state.isNotEmpty() -> UNITED_STATES
+            else -> null
+        }
+    }
+
+    private fun buildAddress(
+        tags: Map<String, String>,
+        country: String?,
+    ): Address? {
         val street =
             listOfNotNull(tags["addr:housenumber"], tags["addr:street"])
                 .filter { it.isNotBlank() }
                 .joinToString(" ")
                 .takeIf { it.isNotBlank() }
         val city = tags["addr:city"]?.takeIf { it.isNotBlank() }
-        val state = tags["addr:state"]?.takeIf { it.isNotBlank() }
-        val postcode = tags["addr:postcode"]?.takeIf { it.isNotBlank() }
+        val state = regionOf(tags)
+        val postcode = tags[POSTCODE_TAG]?.takeIf { it.isNotBlank() }
         if (street == null && city == null && state == null && postcode == null) return null
-        return Address(street = street, city = city, state = state, postcode = postcode, country = "US")
+        return Address(street = street, city = city, state = state, postcode = postcode, country = country)
     }
 
     private fun addressJson(address: Address?): JsonElement? {
@@ -132,6 +153,16 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
     }
 
     companion object {
+        private const val COUNTRY_TAG = "addr:country"
+        private const val STATE_TAG = "addr:state"
+        private const val PROVINCE_TAG = "addr:province"
+        private const val POSTCODE_TAG = "addr:postcode"
+        private const val CANADA = "CA"
+        private const val UNITED_STATES = "US"
+        private const val NO_COUNTRY = "no country in the OSM address tags"
+        private val canadianPostcode = Regex("[A-Za-z][0-9][A-Za-z] ?[0-9][A-Za-z][0-9]")
+        private val usZip = Regex("[0-9]{5}(-[0-9]{4})?")
+        private val canadianProvinceCodes = setOf("AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT")
         private val json = Json { ignoreUnknownKeys = true }
 
         @OptIn(ExperimentalSerializationApi::class)

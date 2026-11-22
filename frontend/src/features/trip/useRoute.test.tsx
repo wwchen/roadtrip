@@ -157,30 +157,34 @@ describe('an incomplete trip', () => {
 
 describe('a routing failure', () => {
   test('names the refusal', async () => {
-    respond = () => json({ error: 'duplicate_adjacent' }, 400);
+    respond = () => json({ error: 'duplicate_adjacent', detail: 'points 1 and 0 are identical' }, 400);
     withTrip([A, B]);
     const { result } = renderHook(() => useRoute(), { wrapper });
 
-    await waitFor(() => expect(result.current.error).toBe('Two adjacent stops are the same.'));
+    await waitFor(() =>
+      expect(result.current.error).toBe(
+        'Two adjacent stops are the same. (duplicate_adjacent: points 1 and 0 are identical · HTTP 400)',
+      ),
+    );
     expect(useTripStore.getState().route).toBeNull();
   });
 
-  test('falls back to the status when the body is not JSON', async () => {
+  test('shows the body and status when the body is not JSON', async () => {
     respond = () => new Response('<html>bad gateway</html>', { status: 502 });
     withTrip([A, B]);
     const { result } = renderHook(() => useRoute(), { wrapper });
 
-    await waitFor(() => expect(result.current.error).toBe('Routing error (502)'));
+    await waitFor(() => expect(result.current.error).toBe('<html>bad gateway</html> · HTTP 502'));
   });
 
-  test('names a transport failure differently', async () => {
+  test('a transport failure keeps its class and message', async () => {
     respond = () => {
       throw new TypeError('Failed to fetch');
     };
     withTrip([A, B]);
     const { result } = renderHook(() => useRoute(), { wrapper });
 
-    await waitFor(() => expect(result.current.error).toBe('Network error'));
+    await waitFor(() => expect(result.current.error).toBe('TypeError: Failed to fetch'));
   });
 });
 

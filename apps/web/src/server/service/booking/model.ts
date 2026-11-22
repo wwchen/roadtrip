@@ -67,7 +67,7 @@ export type SessionHealth =
   | { kind: 'never_logged_in' }
   | { kind: 'inactive'; code?: string }
   | { kind: 'check_failed'; code?: string; detail?: string }
-  | { kind: 'unavailable'; code?: string; detail?: string };
+  | { kind: 'unavailable'; code?: string; detail?: string; fault?: GatewayFault };
 
 export type SignOutResult =
   | { kind: 'wiped'; signedOut: boolean }
@@ -98,7 +98,7 @@ export type AddToCartOutcome =
   | { kind: 'credentials_required'; providerDisplay: string }
   | { kind: 'not_available'; providerDisplay: string }
   | { kind: 'refused'; refusal: Refusal; providerDisplay: string; cartUrl?: string }
-  | { kind: 'unavailable'; providerDisplay: string };
+  | { kind: 'unavailable'; fault: GatewayFault; providerDisplay: string };
 
 export type ReaderStanding = 'sign_in_off' | 'signed_out' | 'no_credentials' | 'ready';
 

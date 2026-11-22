@@ -326,12 +326,12 @@ export const COMPANION_API_SCHEMAS = {
       next_refresh_at: { type: 'string', format: 'date-time', nullable: true },
       error: {
         type: 'string',
-        description: 'Stable failure code: recgov_login_failed, recgov_refresh_failed, recgov_not_authenticated, ...',
+        description: 'Failure code. A failed login names its blocker (captcha_required, login_error, recaccount_not_observed, login_form_still_visible, email_input_not_found, ...) and falls back to recgov_login_failed only when none was identified; other operations answer recgov_refresh_failed, recgov_not_authenticated, ...',
       },
       reason: {
         type: 'string',
         example: 'mfa_required',
-        description: 'The internal blocker behind `error` — which challenge appeared or which control was missing. Diagnostic; do not branch on it.',
+        description: 'The blocker the login attempt identified — which challenge appeared or which control was missing. A failed login also answers it as `error`.',
       },
       detail: { type: 'string' },
       corrective_action: { type: 'string' },
@@ -446,7 +446,7 @@ export const COMPANION_API_SCHEMAS = {
     required: ['ok', 'recgov_auth'],
     properties: {
       ok: { type: 'boolean', example: false },
-      error: { type: 'string', example: 'mfa_required', description: 'mfa_required opens a challenge; mfa_invalid means the submitted code was rejected.' },
+      error: { type: 'string', example: 'mfa_required', description: 'mfa_required opens a challenge; mfa_invalid means Recreation.gov rejected the submitted code; any other code is the blocker that stopped the completion (mfa_prompt_not_found, recaccount_not_observed, captcha_required, ...).' },
       challenge_id: { type: 'string' },
       expires_at: { type: 'string', format: 'date-time' },
       expires_in_seconds: { type: 'integer' },

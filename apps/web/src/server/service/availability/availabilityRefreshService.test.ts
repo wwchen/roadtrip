@@ -93,3 +93,12 @@ test.each([
   expect(log).toHaveBeenCalled();
   log.mockRestore();
 });
+
+test('runRefresh logs the detail mini-ca gave beside its code', async () => {
+  const plan = await fetchPlan();
+  const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const detail = 'ca.floo.roadtrip.model.availability.AvailabilityPayloadException: recgov availability payload unreadable: campsites';
+  await runRefresh(plan, async () => ({ kind: 'error', status: 503, code: 'unreadable_response', body: { state: 'error', error: 'unreadable_response', detail } }));
+  expect(log).toHaveBeenCalledWith(expect.any(String), expect.stringContaining(JSON.stringify(detail)));
+  log.mockRestore();
+});

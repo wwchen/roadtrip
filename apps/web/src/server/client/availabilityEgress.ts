@@ -7,6 +7,8 @@ export const EGRESS_TIMEOUT_CODE = 'timeout';
 export const EGRESS_UNREACHABLE_CODE = 'unreachable';
 export const EGRESS_REDIRECTED_CODE = 'egress_redirected';
 export const EGRESS_NOT_JSON_CODE = 'egress_not_json';
+export const EGRESS_CAMPGROUND_UNKNOWN_STATUS = 404;
+export const EGRESS_CAMPGROUND_UNKNOWN_CODE = 'not_found';
 const NO_STATUS = 0;
 const FIRST_REDIRECT_STATUS = 300;
 const FIRST_CLIENT_ERROR_STATUS = 400;
@@ -39,6 +41,10 @@ export type EgressResult =
   | { kind: 'error'; status: number; code: string | null; body: AvailabilityErrorDto | null };
 
 export type EgressFetch = (request: AvailabilityEgressRequestDto) => Promise<EgressResult>;
+
+export function isCampgroundUnknown(result: EgressResult): boolean {
+  return result.kind === 'error' && result.status === EGRESS_CAMPGROUND_UNKNOWN_STATUS && result.code === EGRESS_CAMPGROUND_UNKNOWN_CODE;
+}
 
 export async function fetchEgress(endpoint: EgressEndpoint, request: AvailabilityEgressRequestDto, timeoutMs: number): Promise<EgressResult> {
   let response: Response;

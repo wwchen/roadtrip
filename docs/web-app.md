@@ -103,7 +103,7 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `DATABASE_REQUIRE_READ_ONLY` | plain, optional | default `true`; set `false` for **Preview only**, whose branch-scoped `DATABASE_URL` from the Neon integration logs in as the branch owner, which is not read-only |
 | `ENABLED_DATA_PROVIDERS` | plain, optional | default `campflare,bcparks-strapi,aspira,reserveamerica,reservecalifornia`, the same campground providers as Kotlin's `read-path.enabled-data-providers` (rec.gov is off: Campflare carries the same facilities and their availability); set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
-| `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
+| `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, geocode answers 503 `geocoding_unavailable`, the two routing routes answer 503 `routing_not_configured`, and the rest of the map works. Routing failures keep Mapbox's cause (see below) |
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
 | `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list, which a test in `config.test.ts` keeps equal to `application.yaml`; decides `availability_supported` and picks the provider whose booking links the campsite list shows (the matrix takes its window from mini-ca). Change it only together with mini-ca's list |
 | `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this counts as stale |
@@ -117,6 +117,19 @@ login; the per-deployment, branch and team-slug URLs redirect to Vercel login.
 The first deployment of a project with no production deployment is assigned the production
 target, whatever its branch. The first build here was of `claude/nextjs-parallel-read-app-19ceab`.
 
+`/api/route` and `/api/pois/on-route` answer the same codes as Kotlin, each with Mapbox's own
+code or message, or the exception, as `detail`:
+
+| Code | Status | Cause |
+|---|---|---|
+| `route_not_found`, `route_no_segment`, `route_invalid_input` | 422 | Mapbox answered `NoRoute`, `NoSegment`, or `InvalidInput`/`ProfileNotFound`; retrying will not help |
+| `routing_auth_failed` | 502 | Mapbox rejected the token (401/403) |
+| `routing_unreachable` | 502 | Mapbox could not be reached |
+| `routing_unavailable` | 502 | any other Mapbox error |
+| `routing_rate_limited` | 503 | Mapbox answered 429 |
+| `routing_not_configured` | 503 | no `MAPBOX_TOKEN` |
+| `corridor_unavailable` | 503 | the on-route corridor query failed |
+
 ## Availability on Vercel
 
 Neon holds the catalog (POIs, campgrounds, campsites). Availability lives only in mini-ca's
@@ -128,9 +141,14 @@ Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores
   date, lists the campsites it knows, and reads its own Postgres; it never calls a vendor on this
   path. Freshness counts only campsites mini-ca knows, so a campsite missing from its catalog shows
   unknown without keeping the week stale. A window mini-ca refuses is passed through as its `400`.
-  `closed_for_season` is judged over the campsites mini-ca knows. If mini-ca is unreachable or the
-  egress is not configured, the GET answers `503 availability_unavailable`, except that a
-  campground with no matching campsites answers an empty week without asking mini-ca.
+  `closed_for_season` is judged over the campsites mini-ca knows. Only a `404 not_found` from
+  mini-ca means it does not know the campground (catalog drift); that answers a week of unknown
+  cells and is logged. Any other mini-ca failure answers `503` with mini-ca's own code and
+  detail, for example `unreadable_response` (a vendor answer whose shape a parser refused, with
+  the missing field named) or `unknown` (the exception's class and message). Only a failure with
+  no code, mini-ca unreachable or the egress not configured, answers `503
+  availability_unavailable`. A campground with no matching campsites answers an empty week
+  without asking mini-ca.
 - When the week is stale, the page sends one `POST /api/pois/{id}/campsites/availability/refresh`.
   It first checks the window with a stored read, so a window mini-ca refuses is the caller's `400`.
   Then it answers `202` and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
@@ -218,6 +236,12 @@ Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it thr
   `/auth/forgot`, `/auth/reset`. Their forms post to server actions. `/auth/login?return_to=…`
   redirects to the sign-in page and `/auth/logout` signs out, so the frontend's `auth-api.ts`
   is unchanged. `return_to` is kept only when it is a same-site path.
+- A failed sign-in says "Email or password is wrong" only for a credential rejection
+  (`INVALID_CREDENTIALS`). Every other failure, such as a rate limit, a disabled account or an
+  SDK code the port does not list, shows the retry message followed by its code and the SDK's
+  status and message. A missing configuration shows `sign_in_not_configured`. Reset and sign-up
+  failures carry their code in the same way. The unknown-user and existing-account answers are
+  unchanged, so they still reveal nothing about which accounts exist.
 - Google, magic-link and email-verification sign-ins finish on Neon Auth's host and come back with
   `?neon_auth_session_verifier=…`. `apps/web/src/proxy.ts` runs Neon Auth's middleware on exactly
   those requests; it exchanges the verifier for the session cookie and redirects to the same URL
@@ -320,12 +344,20 @@ Spec: `docs/superpowers/specs/2026-11-10-add-to-cart-on-vercel-design.md`.
   user, instead of Kotlin's in-memory map.
 - `POST /api/booking/add-to-cart` runs Kotlin's gates (window, rec.gov target, stored credentials,
   a refusal only on a night seen taken within `BOOKING_FRESHNESS_MAX_AGE_SECONDS` through the
-  availability egress's stored read), then the relay's hold. The availability matrix's
+  availability egress's stored read), then the relay's hold. A stored read that fails is logged
+  with its status, code and detail, and the hold goes ahead: the check only exists to save a
+  wasted hold, so an egress outage must not block booking. The availability matrix's
   `watch_capabilities.add_to_cart` is computed per reader, so the matrix is sent
   `private, no-store`.
 - The relay bounds each companion call at 90 seconds, under Cloudflare's 100-second proxy limit.
   A hold that runs out answers 409 `relay_timeout`; the companion may still finish it, so the
   detail tells the user to check the cart.
+- A hold the relay could not carry answers 503 `relay_<fault>`, naming the fault:
+  `relay_not_configured`, `relay_unanswered`, `relay_unreachable`, `relay_unauthorized`,
+  `relay_redirected` (an Access policy sent the call to a login page), `relay_malformed`,
+  `relay_rejected` or `relay_version_mismatch`. A hold the companion refused answers the
+  companion's own code and detail (see [companion.md](companion.md#post-atc-failure-codes)),
+  never a stock one.
 
 Vercel Production variables (the first three together, or none):
 
@@ -339,7 +371,7 @@ Vercel Production variables (the first three together, or none):
 
 The relay also needs `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`. Without the relay variables
 the rec.gov routes answer `companion_unavailable` and add to cart answers 503
-`booking_unavailable`; without the key, saving answers 503 `encryption_unavailable` and the grid
+`relay_not_configured`; without the key, saving answers 503 `encryption_unavailable` and the grid
 shows `no_credentials`.
 
 On mini-ca, `BOOKING_EGRESS_TOKEN` (`./secrets/manage.py set BOOKING_EGRESS_TOKEN prod`) turns the
@@ -511,7 +543,7 @@ reachable over HTTP.
 The catalog is built by the project's own importer, never copied from production, in two hops that
 touch no production tooling:
 
-1. A throwaway local Postgres (`postgis/postgis:16-3.4`) and the Kotlin backend from this
+1. A throwaway local Postgres (`postgis/postgis:18-3.6`) and the Kotlin backend from this
    worktree, run with `ROADTRIP_PROFILE=local` on a spare port. The backend's working directory
    is `backend/`, so `data/raw` is reached through a temporary `backend/data -> ../data` symlink.
    `make data-import TARGET=<name> ADMIN_BASE=http://127.0.0.1:<port>` for `Campflare Campgrounds`,

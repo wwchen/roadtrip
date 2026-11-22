@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -107,6 +108,51 @@ class CampflareCampsitesEtlTest {
         val missingKind = rows.single { it.dataProviderRef.serialize() == "missing-kind" }
         assertEquals(CampsiteKind.OTHER, missingKind.kind)
         assertNull(missingKind.kindListed)
+    }
+
+    @Test
+    fun `a whole number written with a fraction is the integer it names and a true fraction is null and warned about`() {
+        val results =
+            CampflareCampsitesEtl()
+                .transform(
+                    Json
+                        .parseToJsonElement(
+                            """
+                            {"id":"s1","campground_id":"cg","name":"Site 1","kind":"rv","max_people":"many",
+                             "max_cars":2.0,"driveway_length":45.5,"max_rv_length":40.0}
+                            """.trimIndent(),
+                        ).jsonObject,
+                    transformCtx(),
+                ).toList()
+        val ok = results.single() as TransformResult.Ok
+
+        assertEquals(listOf(null, 2, null, 40), ok.record.let { listOf(it.maxPeople, it.maxCars, it.drivewayLength, it.maxRvLength) })
+        assertEquals(
+            listOf(
+                "Campflare max_people many is not a whole number",
+                "Campflare driveway_length 45.5 is not a whole number",
+            ),
+            ok.warnings,
+        )
+    }
+
+    @Test
+    fun `a negative count or length is null and named in a warning since no column holds one`() {
+        val ok =
+            CampflareCampsitesEtl()
+                .transform(
+                    Json
+                        .parseToJsonElement(
+                            """{"id":"s1","campground_id":"cg","name":"Site 1","kind":"rv","max_cars":0,"driveway_length":-2.0,"max_rv_length":-3}""",
+                        ).jsonObject,
+                    transformCtx(),
+                ).single() as TransformResult.Ok
+
+        assertEquals(listOf(0, null, null), ok.record.let { listOf(it.maxCars, it.drivewayLength, it.maxRvLength) })
+        assertEquals(
+            listOf("Campflare driveway_length -2.0 is negative", "Campflare max_rv_length -3 is negative"),
+            ok.warnings,
+        )
     }
 
     @Test

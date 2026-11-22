@@ -109,6 +109,7 @@ class CampflareAvailabilityProviderTest {
                                     ),
                             ),
                         observedAt = Instant.EPOCH,
+                        unrecognizedStatuses = mapOf("Lottery" to 3),
                     )
                 }
             val provider = CampflareAvailabilityProvider(client, enabled = true, configured = true)
@@ -130,6 +131,7 @@ class CampflareAvailabilityProviderTest {
                 )
 
             assertEquals(listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN), batch.observations.map { it.status })
+            assertEquals(mapOf("Lottery" to 3), batch.unrecognizedStatuses)
         }
 
     @Test

@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object SharedTestDb {
     // The one place the postgis image is named — tests must not re-parse it.
-    const val IMAGE_NAME = "postgis/postgis:16-3.4"
+    const val IMAGE_NAME = "postgis/postgis:18-3.6"
 
     // Maintenance DB we stay connected to while issuing CREATE DATABASE; kept
     // separate from the template and the per-class clones so none of them ever

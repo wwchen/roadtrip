@@ -44,16 +44,16 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
         provider_display?: string;
         cartUrl?: string;
         cart_url?: string;
+        detail?: string;
       }
     | null
     | undefined;
   return {
-    // A `DOMException` carries a *numeric* legacy `code` (`AbortError` is 20),
-    // which `settings-errors.ts` would render as "Something went wrong (20)".
     error: typeof carried?.code === 'string' ? carried.code : (carried?.error ?? UNKNOWN_ERROR),
     provider: carried?.provider,
     provider_display: carried?.providerDisplay ?? carried?.provider_display,
     cart_url: carried?.cartUrl ?? carried?.cart_url,
+    detail: carried?.detail,
   };
 }
 

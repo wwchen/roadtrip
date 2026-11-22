@@ -279,6 +279,17 @@ describe('text fields', () => {
     expect(oneCampsite('"campsite_type":"Unlisted Thing"')).toMatchObject({ kind: CampsiteKind.OTHER, electricHookups: null });
     expect(oneCampsite('')).toMatchObject({ kind: CampsiteKind.OTHER, electricHookups: null });
   });
+
+  test('a campsite type the table does not list is kept and named in a warning, and a listed one carries none', () => {
+    const results = transformed([
+      { payload: '{"campsites":{"1":{"campsite_type":"BALL FIELD"},"2":{"campsite_type":"GROUP PICNIC AREA"},"3":{}}}' },
+    ]);
+    expect(results.map((result) => (result.ok ? [result.record.kind, result.warnings] : null))).toEqual([
+      [CampsiteKind.OTHER, ["unlisted rec.gov campsite_type 'BALL FIELD'"]],
+      [CampsiteKind.DAY_USE, []],
+      [CampsiteKind.OTHER, ['no rec.gov campsite_type']],
+    ]);
+  });
 });
 
 describe('equipment', () => {

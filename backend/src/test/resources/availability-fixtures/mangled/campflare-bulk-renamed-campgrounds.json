@@ -1,0 +1,15 @@
+{
+  "results": [
+    {
+      "campground_id": "upper-pines-campground-447",
+      "campsite_availability": [
+        {
+          "campsite_id": "upper-pines-site-100",
+          "availability": {
+            "2026-06-01": "available"
+          }
+        }
+      ]
+    }
+  ]
+}

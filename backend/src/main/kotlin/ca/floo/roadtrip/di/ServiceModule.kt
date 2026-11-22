@@ -48,6 +48,7 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
+import ca.floo.roadtrip.service.availability.UnrecognizedStatusReporter
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchNotificationTargetResolver
@@ -364,7 +365,12 @@ val serviceModule =
             val config: AppConfig = get()
             ProviderCooldownTracker(cooldown = config.availability.providerCooldown)
         }
-        single { FailoverAvailabilityFetcher(cooldowns = get<ProviderCooldownTracker>()) }
+        single {
+            FailoverAvailabilityFetcher(
+                cooldowns = get<ProviderCooldownTracker>(),
+                unrecognized = UnrecognizedStatusReporter(get<RoadtripMetrics>()),
+            )
+        }
         single {
             VendorRateLimiter(get<AppConfig>().vendorRateLimit, get<DataSource>())
         }

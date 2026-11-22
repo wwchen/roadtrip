@@ -28,6 +28,31 @@ test('directions sends the token and coords and returns the geometry, legs, dist
 });
 
 test.each([
+  ['a 500', 500, { message: 'boom' }, 'upstream_error', 'boom'],
+  ['a rejected token', 401, { message: 'Not Authorized - Invalid Token' }, 'upstream_auth', 'Not Authorized - Invalid Token'],
+  ['a 429', 429, { message: 'Too Many Requests' }, 'upstream_rate_limited', 'Too Many Requests'],
+  ['InvalidInput on a 422', 422, { code: 'InvalidInput', message: 'Coordinate is invalid: 200,0' }, 'invalid_input', 'Coordinate is invalid: 200,0'],
+  ['NoRoute', 200, { code: 'NoRoute', message: 'No route found' }, 'no_route', 'NoRoute: No route found'],
+  ['NoSegment', 200, { code: 'NoSegment', message: 'No matching segment' }, 'no_segment', 'No matching segment'],
+  ['an unparseable body', 200, 'nope', 'upstream_error', 'parse'],
+] as const)('%s keeps its failure kind and Mapbox\'s words', async (_name, status, body, failure, words) => {
+  const { fetch } = stubFetch(status, body);
+  const error = await createMapboxClient({ token: TOKEN, fetch }).directions([[0, 0], [1, 1]]).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(RoutingUnavailableError);
+  expect((error as RoutingUnavailableError).failure).toBe(failure);
+  expect((error as Error).message).toContain(words);
+});
+
+test('a transport failure is unreachable and keeps the exception class', async () => {
+  const fetch = (async () => {
+    throw new TypeError('fetch failed');
+  }) as typeof globalThis.fetch;
+  const error = await createMapboxClient({ token: TOKEN, fetch }).directions([[0, 0], [1, 1]]).catch((caught: unknown) => caught);
+  expect((error as RoutingUnavailableError).failure).toBe('unreachable');
+  expect((error as Error).message).toContain('TypeError: fetch failed');
+});
+
+test.each([
   ['a non-2xx', 500, { message: 'boom' }],
   ['a code other than Ok', 200, { code: 'NoRoute', message: 'no route' }],
   ['no routes', 200, { code: 'Ok', routes: [] }],

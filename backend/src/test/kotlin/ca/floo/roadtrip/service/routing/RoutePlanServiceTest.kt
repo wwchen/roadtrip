@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.routing.RouteLeg
 import ca.floo.roadtrip.model.routing.RouteResponse
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.support.RoutingException
+import ca.floo.roadtrip.support.RoutingFailure
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -80,7 +81,10 @@ class RoutePlanServiceTest {
 
         val result = runBlocking { RoutePlanService(emptyCache, refusingCorridor()).plan(listOf(vancouver, calgary), null) }
 
-        assertEquals(RoutePlanResult.DirectionsUnavailable("roadtrip.mapbox.token not configured"), result)
+        assertEquals(
+            RoutePlanResult.DirectionsUnavailable(RoutingFailure.NOT_CONFIGURED, "roadtrip.mapbox.token not configured"),
+            result,
+        )
     }
 
     private fun service(corridor: RouteCorridorService): RoutePlanService {

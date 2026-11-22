@@ -8,7 +8,7 @@ import {
   searchPoiCatalog,
   searchPois,
 } from './poi-api';
-import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
+import { jsonResponse, stubFetch } from '@/test/fetch-stub';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -58,13 +58,15 @@ describe('searchPois', () => {
     expect(fetchStub.last.url).toBe('/api/pois/search?q=lassen&limit=8');
   });
 
-  test.each([
-    ['a 500', textResponse('boom', 500)],
-    ['a 404', jsonResponse({ error: 'nope' }, 404)],
-  ])('yields an empty result list on %s', async (_label, response) => {
-    stubFetch(response);
+  test('a refusal is an error carrying its code, not an empty answer', async () => {
+    stubFetch(jsonResponse({ error: 'invalid_query', detail: 'q too long' }, 400));
 
-    await expect(searchPois('lassen')).resolves.toEqual({ results: [] });
+    await expect(searchPois('lassen')).rejects.toMatchObject({
+      name: 'HttpError',
+      status: 400,
+      code: 'invalid_query',
+      detail: 'q too long',
+    });
   });
 
   test('returns the parsed body on success', async () => {

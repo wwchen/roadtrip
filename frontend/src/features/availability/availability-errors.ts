@@ -1,5 +1,6 @@
 // Turning an availability failure into something worth reading.
 //
+import { rawErrorText } from '@/lib/error-report';
 
 /** Keyed by the `error` code on the backend's `AvailabilityErrorDto`. */
 const AVAILABILITY_ERROR_LABELS = new Map<string, string>([
@@ -9,33 +10,26 @@ const AVAILABILITY_ERROR_LABELS = new Map<string, string>([
   ['upstream_unreachable', 'Could not reach the booking site'],
   ['unsupported', 'Provider not supported'],
   ['provider_misconfigured', 'Provider misconfigured — we are on it'],
-  ['ip_throttled', 'Too many requests — slow down'],
+  ['ip_throttled', 'Too many requests from this network — slow down'],
   ['availability_unavailable', 'Availability is unavailable right now — try again shortly'],
   ['beyond_booking_horizon', 'That date is past what this provider lets you book'],
   ['start_before_earliest', 'That date is before this campground takes bookings'],
 ]);
 
-/** What the week grid shows when the request could not be fulfilled. */
-export const GENERIC_AVAILABILITY_ERROR = "Couldn't load availability";
+const FACT_SEPARATOR = ' · ';
 
-interface AvailabilityErrorBody {
+export interface AvailabilityErrorBody {
   error?: unknown;
+  detail?: unknown;
   upstream_status?: unknown;
+  provider_display?: unknown;
+  earliest_date?: unknown;
 }
 
-/**
- * The three booking-site failures the error family distinguishes, plus a
- * catch-all for everything it does not have specific copy for.
- *
- * Kept separate from the prose in {@link AVAILABILITY_ERROR_LABELS}: the card
- * shown for each kind picks its own title, icon and actions, so the code has to
- * survive past `formatAvailabilityError`'s human sentence.
- */
 export type AvailabilityErrorKind = 'throttled' | 'server_error' | 'unreachable' | 'other';
 
-const THROTTLED_CODES = new Set(['rate_limited', 'ip_throttled', 'upstream_blocked']);
+const THROTTLED_CODES = new Set(['rate_limited']);
 
-/** Which of the three named failures a backend error code is, if any. */
 export function classifyAvailabilityErrorCode(code: string | null): AvailabilityErrorKind {
   if (code && THROTTLED_CODES.has(code)) return 'throttled';
   if (code === 'upstream_5xx') return 'server_error';
@@ -43,22 +37,23 @@ export function classifyAvailabilityErrorCode(code: string | null): Availability
   return 'other';
 }
 
-/**
- * A sentence for an error body and HTTP status.
- *
- * An unrecognised code is shown verbatim rather than replaced with generic copy:
- * a code we have not written prose for is still more useful to whoever reads the
- * screenshot than "something went wrong". The upstream status is appended when the
- * backend passed one through, because "blocked (upstream HTTP 403)" and "blocked
- * (upstream HTTP 503)" are different conversations.
- */
+function stringOf(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+export function rawAvailabilityError(body: AvailabilityErrorBody | null | undefined, httpStatus: number): string {
+  const raw = rawErrorText({ code: stringOf(body?.error), detail: stringOf(body?.detail), status: httpStatus });
+  return typeof body?.upstream_status === 'number'
+    ? [raw, `upstream HTTP ${body.upstream_status}`].join(FACT_SEPARATOR)
+    : raw;
+}
+
 export function formatAvailabilityError(
   body: AvailabilityErrorBody | null | undefined,
   httpStatus: number,
 ): string {
-  const code = typeof body?.error === 'string' ? body.error : null;
-  const base = code ? AVAILABILITY_ERROR_LABELS.get(code) ?? code : `HTTP ${httpStatus}`;
-  return typeof body?.upstream_status === 'number'
-    ? `${base} (upstream HTTP ${body.upstream_status})`
-    : base;
+  const code = stringOf(body?.error);
+  const label = code ? AVAILABILITY_ERROR_LABELS.get(code) : undefined;
+  const raw = rawAvailabilityError(body, httpStatus);
+  return label ? `${label} (${raw})` : raw;
 }

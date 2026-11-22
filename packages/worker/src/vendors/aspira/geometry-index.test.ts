@@ -82,13 +82,13 @@ describe('the geometry index, whose source order is preference order', () => {
     });
   });
 
-  test('a second point from the same source does not displace the first either', () => {
+  test('a second nearby point from the same source does not displace the first either', () => {
     const index = indexOf([
       [
         ACCOMMODATION,
         new GeoJsonFeaturesSource([
           geoJson('Two Jack Lakeside', -115.49, 51.22),
-          geoJson('Two Jack Lakeside Campground', -115, 51),
+          geoJson('Two Jack Lakeside Campground', -115.5, 51.21),
         ]),
       ],
     ]);
@@ -99,6 +99,33 @@ describe('the geometry index, whose source order is preference order', () => {
       source: ACCOMMODATION,
     });
     expect(index.size).toBe(1);
+  });
+
+  test('a name one source places more than 0.2 degrees apart is left unindexed, warned about, and open to a later source', () => {
+    const warnings: string[] = [];
+    const log: RunLog = { info: () => undefined, warn: (line) => warnings.push(line) };
+    const index = buildGeometryIndex(
+      [
+        [
+          ACCOMMODATION,
+          new GeoJsonFeaturesSource([
+            geoJson('Two Jack Lakeside', -115.49, 51.22),
+            geoJson('Two Jack Lakeside Campground', -115.49, 51.43),
+            geoJson('Tunnel Mountain', -115.52, 51.19),
+          ]),
+        ],
+        [PLACES, new GeoJsonFeaturesSource([geoJson('Two Jack Lakeside', -115.6, 51.3)])],
+      ],
+      log,
+      ETL_SLUG,
+    );
+
+    expect(index.get(normalize('Two Jack Lakeside'))).toEqual({ latitude: 51.3, longitude: -115.6, source: PLACES });
+    expect(index.get(normalize('Tunnel Mountain'))?.source).toBe(ACCOMMODATION);
+    expect(warnings).toEqual([
+      `${ETL_SLUG}: geometry input slug=${ACCOMMODATION} left 1 names unindexed because points sharing them lie more ` +
+        'than 0.2 degrees apart: two jack lakeside <- [Two Jack Lakeside, Two Jack Lakeside Campground]',
+    ]);
   });
 
   test('a name only the later source carries is still indexed, tagged with that source', () => {

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.model.availability.AvailabilityPayloadException
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -16,11 +17,15 @@ import ca.floo.roadtrip.support.CampflareException
 import ca.floo.roadtrip.support.ReserveAmericaException
 import ca.floo.roadtrip.support.ReserveCaliforniaException
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import java.net.ConnectException
+import java.net.SocketException
 import java.time.LocalDate
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 /**
  * Pins each adapter's HTTP-status → [AvailabilityProviderError] classification.
@@ -83,6 +88,59 @@ class ProviderUpstreamErrorMappingTest {
         assertReserveCalifornia(500, AvailabilityProviderError.UpstreamUnavailable::class)
         assertReserveCalifornia(null, AvailabilityProviderError.UpstreamUnavailable::class)
     }
+
+    @Test
+    fun `a payload we could not read is unreadable_response, not the vendor's 5xx`() {
+        val thrown = campflareFailure(AvailabilityPayloadException("campflare", "missing campgrounds array"))
+
+        assertEquals("unreadable_response", thrown.code)
+        assertTrue(thrown.message!!.contains(AvailabilityPayloadException::class.java.name), thrown.message)
+        assertTrue(thrown.message!!.contains("missing campgrounds array"), thrown.message)
+    }
+
+    @Test
+    fun `a body that is not JSON is unreadable_response`() {
+        val notJson = runCatching { Json.parseToJsonElement("{\"campgrounds\": [") }.exceptionOrNull() as Exception
+
+        assertEquals("unreadable_response", campflareFailure(notJson).code)
+    }
+
+    @Test
+    fun `our own failure keeps its class and message instead of becoming upstream_5xx`() {
+        val thrown = campflareFailure(IllegalStateException("campsite index out of sync"))
+
+        assertEquals(AvailabilityProviderError.Unknown.CODE, thrown.code)
+        assertEquals("java.lang.IllegalStateException: campsite index out of sync", thrown.message)
+    }
+
+    @Test
+    fun `an unwrapped transport failure is still the vendor exchange failing`() {
+        assertEquals("upstream_unreachable", campflareFailure(ConnectException("Connection refused")).code)
+        assertEquals("upstream_5xx", campflareFailure(SocketException("Connection reset")).code)
+    }
+
+    private fun campflareFailure(cause: Exception): AvailabilityProviderError =
+        runBlocking {
+            val adapter =
+                CampflareAvailabilityProvider(
+                    CampflareAvailabilityClient { _, _, _ -> throw cause },
+                    enabled = true,
+                    configured = true,
+                )
+            assertFailsWith<AvailabilityProviderError> {
+                adapter.availability(
+                    campground =
+                        testCampground(
+                            bookingProvider = "campflare",
+                            bookingProviderRef = "upper-pines-campground-447",
+                            dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
+                        ),
+                    campsites = listOf(errorMappingCampsite),
+                    startDate = start,
+                    endDate = end,
+                )
+            }
+        }
 
     private fun assertAspira(
         httpStatus: Int?,

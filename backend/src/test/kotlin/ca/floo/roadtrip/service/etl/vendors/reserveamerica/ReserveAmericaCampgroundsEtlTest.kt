@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -17,6 +18,7 @@ import java.io.File
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class ReserveAmericaCampgroundsEtlTest {
@@ -92,6 +94,42 @@ class ReserveAmericaCampgroundsEtlTest {
         assertEquals("CA", campground.location.country)
         assertEquals("provincial", campground.kind)
         assertEquals("Alberta Parks", campground.management!!.agency)
+    }
+
+    @Test
+    fun `a park page that cannot be placed is reported bad by its part, not dropped`() {
+        val unplaced = nyParkEnvelope().let { it.copy(payload = JsonPrimitive("<html></html>"), part = "park-10885") }
+        val unnumbered = nyParkEnvelope().copy(part = "park-x")
+        val results =
+            ReserveAmericaCampgroundsEtl(etlSlug = "reserveamerica-ny-campgrounds", contractCode = "NY")
+                .parse(InputBundle(linkedMapOf("reserveamerica-ny" to listOf(unplaced, unnumbered, nyParkEnvelope()))))
+                .toList()
+
+        assertEquals(
+            listOf(
+                ParseResult.Bad("park-10885", listOf("no place:location:latitude")),
+                ParseResult.Bad("park-x", listOf("park id is not a number")),
+            ),
+            results.filterIsInstance<ParseResult.Bad>(),
+        )
+        assertEquals(
+            listOf(695L),
+            results
+                .filterIsInstance<ParseResult.Ok<ReserveAmericaDto>>()
+                .single()
+                .dto.parks
+                .map { it.parkId },
+        )
+    }
+
+    @Test
+    fun `a row that does not state its region is refused rather than defaulted to Alberta`() {
+        val dto = ReserveAmericaDto(parks = emptyList(), fetchedAt = fetchedAt)
+        val failure =
+            assertFailsWith<IllegalStateException> {
+                ReserveAmericaCampgroundsEtl(etlSlug = "unregistered", contractCode = "NY").transform(dto, transformCtx()).toList()
+            }
+        assertEquals("unregistered is missing required arg 'region'", failure.message)
     }
 
     private fun kotlinx.serialization.json.JsonElement.jsonObjectArrayFirstUrl(): String =

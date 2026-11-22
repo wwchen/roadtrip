@@ -33,7 +33,7 @@ export const RELAY_DECODED = {
   health_active: { kind: 'active' },
   health_never_logged_in: { kind: 'never_logged_in' },
   health_inactive: { kind: 'inactive', code: 'recgov_session_expired' },
-  health_check_failed: { kind: 'check_failed', code: 'recgov_auth_check_exception' },
+  health_check_failed: { kind: 'check_failed', code: 'recgov_auth_check_exception', detail: DETAIL },
   health_unavailable: { kind: 'unavailable', code: 'companion_unavailable', detail: DETAIL },
   health_timed_out: { kind: 'unavailable', code: 'relay_timeout' },
   sign_out_wiped: { kind: 'wiped', signedOut: true },

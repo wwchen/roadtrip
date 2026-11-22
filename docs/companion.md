@@ -102,11 +102,25 @@ a request without it is rejected with `400 profile_id_required`.
 - Session state that health reports — the refresh window, the last login
   diagnostic, the last auth result — is recorded per profile, so one user's
   failed login never appears on another user's status row.
-- Failure codes are stable: `recgov_auth.error` is one of
-  `recgov_login_failed`, `recgov_refresh_failed`, `recgov_not_authenticated`.
-  The internal blocker (`mfa_required`, `captcha_required`,
-  `login_link_not_found`, …) rides alongside in `recgov_auth.reason`, which is
-  diagnostic — callers branch on `error`.
+- A failure's code is its cause. `recgov_auth.error` carries the blocker
+  itself rather than one stable umbrella code, so a timeout is never reported
+  as a rejected password:
+
+  | `recgov_auth.error` | Meaning |
+  | --- | --- |
+  | `login_error` | rec.gov showed its own error on the sign-in form (its text is in `detail`) |
+  | `recaccount_not_observed` | the login never produced a session before the wait ran out |
+  | `login_form_still_visible` | the sign-in form was still showing after submit |
+  | `captcha_required` | rec.gov showed a bot challenge |
+  | `mfa_required` | rec.gov asked for a code |
+  | `login_link_not_found`, `email_input_not_found`, `password_input_not_found`, `submit_button_not_found`, `mfa_code_input_not_found`, `mfa_submit_button_not_found` | the page no longer looks as expected |
+  | `recgov_refresh_failed`, `recgov_not_authenticated` | a refresh or session check found no live session |
+  | `recgov_login_failed` | a failed login with no recorded blocker |
+
+  `recgov_auth.reason` still carries the same blocker for older readers. The
+  backend translates only two: `login_error` becomes `login_failed`, and the
+  `*_not_found` codes become `login_page_changed`. In both cases the original
+  code is kept in the detail. Every other code reaches the caller unchanged.
 
 ## Routes
 
@@ -143,7 +157,15 @@ are authoritative; this is the shape.
    new code, which would invalidate the one the user is holding.
    - A rejected code answers `401 mfa_invalid`. It consumes the challenge but
      does **not** arm the failed-login backoff — a typo must not lock the user
-     out of retrying. Start a new login to get a new challenge.
+     out of retrying. Start a new login to get a new challenge. The detail is
+     rec.gov's own text, or "Recreation.gov rejected the code (`<reason>`)".
+   - Only a rejection is `mfa_invalid`: rec.gov's error text, or the prompt
+     still asking for a code after one was entered. Any other way the
+     completion fails answers its own code with its detail, for example
+     `mfa_prompt_not_found` (the held page lost its prompt) or
+     `recaccount_not_observed` (the code went in but no session followed).
+     Telling the user to retry a correct code against a broken page is the
+     failure this rule prevents.
    - A missing `mfa_code` is refused with `400 mfa_required` and leaves the
      challenge and its held page intact.
    - An unknown id is `mfa_challenge_unknown`; a lapsed one is
@@ -184,6 +206,29 @@ the fingerprint cookie and Akamai without needing a campsite target. It
 **never clicks Reserve**, so no test ever costs a real cart hold. `200` means
 the session is live; `401` carries `verify.error`
 (`recgov_not_authenticated` or `recgov_cart_unreachable`).
+
+### `POST /atc` failure codes
+
+A failed hold answers the code for what actually happened, with a `detail`.
+`cart_not_added` is no longer a catch-all.
+
+| `error` | Meaning |
+| --- | --- |
+| `recgov_not_authenticated`, `recgov_spa_logged_out` | the profile had no live session |
+| `captcha_required` | a bot challenge on the booking page: headless, or not solved within the wait |
+| `recgov_dates_not_offered` | the site's calendar refused the requested arrival date |
+| `recgov_no_reserve_button` | the site showed, but with no Reserve or Add to Cart control for those dates |
+| `recgov_confirmation_disabled` | the Reserve confirmation stayed disabled; the site may need extra input, or refused the date or site |
+| `cart_empty`, `missing_expected_item` | Reserve was clicked, but the cart does not hold the requested site and dates |
+| `cart_http_error` | the cart API answered non-2xx, e.g. 401 for a rejected session or 429; the status is in `detail` |
+| `cart_fetch_failed` | the cart API could not be reached from the page |
+| `cart_not_verified` | no cart check ran after the click |
+| `atc_automation_exception` | the automation threw; `detail` is the exception's name and message |
+| `atc_result_unexplained` | the automation returned a failure with no code; a companion bug |
+
+For the cart codes, `detail` reads
+`cart verification failed: reason=<reason> status=<status> reservations=<n>`,
+and the full check is kept in `cart_check`.
 
 ### Destroying a profile
 
@@ -499,9 +544,11 @@ hold, `2` means invalid input.
 
 ## Known limitations
 
-- **CAPTCHA cannot be solved remotely.** The companion detects challenges and
-  surfaces `captcha_required`; only an operator at the headed browser can
-  clear one. Retrying often passes without a challenge.
+- **CAPTCHA cannot be solved remotely.** The companion detects challenges, on
+  the sign-in page and on the booking page, and surfaces `captcha_required`.
+  Only an operator at the headed browser can clear one: a headless companion
+  stops the hold at once, and a headed one waits up to 90 s for a manual solve.
+  Retrying often passes without a challenge.
 - **Unattended re-login fails under MFA**, by design — interactive MFA only.
   The keep-warm/refresh path makes this rare.
 - All profiles share the companion host's egress IP. Accepted at current

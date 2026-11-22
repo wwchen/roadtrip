@@ -116,6 +116,14 @@ test('recgovAuthenticationFailure reports failed login attempts distinctly', () 
   assert.match(failure.corrective_action, /companion root page/)
 })
 
+test('a failed login attempt names its blocker as the error code', () => {
+  const timedOut = recgovAuthenticationFailure({ headless: true, attemptedLogin: true, reason: 'recaccount_not_observed' })
+  assert.equal(timedOut.error, 'recaccount_not_observed')
+
+  const unexplained = recgovAuthenticationFailure({ headless: true, attemptedLogin: true })
+  assert.equal(unexplained.error, 'recgov_login_failed')
+})
+
 test('the login failure detail names the actual blocker, not always MFA', () => {
   // One detail line used to end "submit a current MFA code" for every reason,
   // so a captcha — which no code can clear — sent the operator to type one.

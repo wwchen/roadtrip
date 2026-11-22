@@ -1,16 +1,15 @@
 package ca.floo.roadtrip.client.campflare
 
+import ca.floo.roadtrip.client.AvailabilityPayloadReads
 import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.support.CampflareException
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.net.URI
@@ -25,6 +24,7 @@ class HttpCampflareAvailabilityClient(
     private val httpClient: HttpClient = defaultClient(),
 ) : CampflareAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val payloadReads = AvailabilityPayloadReads("campflare")
 
     override suspend fun fetchAvailability(
         campgroundIds: List<String>,
@@ -86,7 +86,7 @@ class HttpCampflareAvailabilityClient(
             VendorHttpTransport.send(httpClient, req, "campflare", url) { message, status, cause ->
                 CampflareException(message, httpStatus = status, cause = cause)
             }
-        return Json.parseToJsonElement(body).jsonObject
+        return payloadReads.parseObject(body)
     }
 
     companion object {

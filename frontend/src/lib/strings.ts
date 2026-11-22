@@ -120,14 +120,21 @@ export const watchCopy = {
   close: 'Close',
 } as const;
 
+const UNNAMED_BOOKING_SITE_TITLE = 'The booking site';
+
 /** The banners a failing upstream produces. Each names the vendor, not "the provider". */
 export const upstreamCopy = {
-  rateLimitedTitle: `${VENDOR} is limiting our checks`,
-  erroredTitle: `${VENDOR} returned an error`,
-  unreachableTitle: `We can't reach ${VENDOR}`,
+  rateLimitedTitle: (providerDisplay?: string) => `${providerDisplay ?? UNNAMED_BOOKING_SITE_TITLE} is limiting our checks`,
+  rateLimitedBody: "They've throttled us, so we're holding off.",
+  rateLimitedStaleBody: (ageMin: number) =>
+    `They've throttled us, so we're holding off. The availability below is from ${ageMin} minute${ageMin === 1 ? '' : 's'} ago and won't update until they let us back in.`,
+  erroredTitle: (providerDisplay?: string) => `${providerDisplay ?? UNNAMED_BOOKING_SITE_TITLE} returned an error`,
+  erroredBody: 'Their end failed on this request. Your dates are fine — this one is theirs.',
+  unreachableTitle: (providerDisplay?: string) => `We can't reach ${providerDisplay ?? UNNAMED_BOOKING_SITE}`,
+  unreachableBody: 'The request did not get an answer. Outages like this usually clear within a few minutes.',
   /** Copied to the clipboard for a bug report, so it carries the ids. */
-  reportDetail: (poiName: string, poiId: string | number, message: string) =>
-    `${VENDOR} error for ${poiName} (POI ${poiId}): ${message}`,
+  reportDetail: (providerDisplay: string | undefined, poiName: string, poiId: string | number, message: string) =>
+    `${providerDisplay ?? UNNAMED_BOOKING_SITE_TITLE} error for ${poiName} (POI ${poiId}): ${message}`,
 } as const;
 
 /** The account surface's vendor-bearing strings. The rest of its copy is still inline. */

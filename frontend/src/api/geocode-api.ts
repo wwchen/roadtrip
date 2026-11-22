@@ -1,5 +1,5 @@
 import type { GeocodeResponseDto, GeocodeResultDto } from './generated/api-types';
-import type { RequestOptions } from './http';
+import { jsonGetOk, type RequestOptions } from './http';
 
 const GEOCODE_URL = '/api/geocode';
 const DEFAULT_LIMIT = 5;
@@ -22,14 +22,6 @@ export interface GeocodeParams extends RequestOptions {
   proximity?: string | null;
 }
 
-/**
- * Geocode a query string.
- *
- * A failed response yields an empty result list rather than throwing: this backs
- * a search-as-you-type box, where a transient upstream failure should show "no
- * matches", not an error state. A caller that needs to distinguish the two has to
- * use a different wrapper.
- */
 export async function geocode(
   query: string,
   {
@@ -46,6 +38,5 @@ export async function geocode(
   });
   if (proximity) params.set('proximity', proximity);
 
-  const response = await fetch(`${GEOCODE_URL}?${params.toString()}`, { signal });
-  return response.ok ? ((await response.json()) as GeocodeResponse) : { results: [] };
+  return jsonGetOk<GeocodeResponse>(`${GEOCODE_URL}?${params.toString()}`, { signal });
 }

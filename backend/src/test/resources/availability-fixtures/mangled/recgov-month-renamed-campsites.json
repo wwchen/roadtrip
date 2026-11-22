@@ -1,0 +1,13 @@
+{
+  "campsite_list": {
+    "100": {
+      "campsite_id": "100",
+      "site": "A1",
+      "loop": "Loop A",
+      "availabilities": {
+        "2026-12-01T00:00:00Z": "Available"
+      }
+    }
+  },
+  "count": 1
+}

@@ -34,6 +34,9 @@ enum class AvailabilityStatus(
         get() = this == RESERVED || this == FIRST_COME
 
     companion object {
-        fun parse(raw: String?): AvailabilityStatus = entries.firstOrNull { it.wireValue == raw?.lowercase() } ?: UNKNOWN
+        fun parse(raw: String?): AvailabilityStatus =
+            requireNotNull(entries.firstOrNull { it.wireValue == raw }) {
+                "unrecognised availability status '$raw'; expected one of ${entries.map { it.wireValue }}"
+            }
     }
 }

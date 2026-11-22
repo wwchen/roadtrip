@@ -183,13 +183,20 @@ object ApiContract {
                 PasswordBeginRequestDto::class,
                 ApiBody(HTTP_OK, PasswordBeginResponseDto::class),
                 apiErrors(HTTP_BAD_REQUEST, HTTP_BAD_GATEWAY, HTTP_SERVICE_UNAVAILABLE),
+                requestRequired = false,
             ),
             ApiEndpoint(
                 ApiMethod.POST,
                 "/auth/password/complete",
                 PasswordCompleteRequestDto::class,
                 ApiBody(HTTP_NO_CONTENT),
-                apiErrors(HTTP_BAD_REQUEST, HTTP_UNAUTHORIZED, HTTP_SERVICE_UNAVAILABLE),
+                apiErrors(
+                    HTTP_BAD_REQUEST,
+                    HTTP_UNAUTHORIZED,
+                    HTTP_INTERNAL_SERVER_ERROR,
+                    HTTP_BAD_GATEWAY,
+                    HTTP_SERVICE_UNAVAILABLE,
+                ),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
@@ -309,9 +316,7 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/pois/search",
                 success = ApiBody(HTTP_OK, PoiSearchResponseSchema::class),
-                // PoiRoutes.kt:89 reads q, limit and categories through helpers that
-                // coerce rather than refuse; a missing or malformed one is not a 400.
-                errors = emptyList(),
+                errors = apiErrors(HTTP_BAD_REQUEST),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
@@ -324,7 +329,7 @@ object ApiContract {
                 "/api/pois/on-route",
                 OnRouteRequestDto::class,
                 ApiBody(HTTP_OK, PoisOnRouteResponseSchema::class),
-                apiErrors(HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE),
+                apiErrors(HTTP_BAD_REQUEST, HTTP_UNPROCESSABLE_ENTITY, HTTP_BAD_GATEWAY, HTTP_SERVICE_UNAVAILABLE),
             ),
             ApiEndpoint(
                 ApiMethod.POST,
@@ -479,9 +484,7 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/availability/runs",
                 success = ApiBody(HTTP_OK, AvailabilityRunsListResponse::class),
-                // AvailabilityDashboardRoutes.kt:92 parses every filter leniently — an
-                // unreadable ?since= or ?poller_id= is dropped, not refused.
-                errors = emptyList(),
+                errors = apiErrors(HTTP_BAD_REQUEST),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
@@ -502,6 +505,8 @@ object ApiContract {
                 errors =
                     listOf(
                         ApiBody(HTTP_BAD_REQUEST, RouteErrorDto::class),
+                        ApiBody(HTTP_UNPROCESSABLE_ENTITY, RouteErrorDto::class),
+                        ApiBody(HTTP_BAD_GATEWAY, RouteErrorDto::class),
                         ApiBody(HTTP_SERVICE_UNAVAILABLE, RouteErrorDto::class),
                     ),
             ),

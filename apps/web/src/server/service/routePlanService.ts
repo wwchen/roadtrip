@@ -6,6 +6,7 @@ import { serverDb } from '../db';
 import { SERVED_CATEGORIES } from '../poiCategories';
 import { fetchPoisWithinPolygon } from '../repo/poiServingRepo';
 import { bufferedCorridor, CorridorUnavailableError } from '../repo/routeCorridorRepo';
+import type { RoutingFailure } from './routing/model';
 
 export const MILES_TO_METERS = 1609.34;
 export const ROUTE_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -15,7 +16,7 @@ const CACHE_KEY_DECIMALS = 6;
 export type RoutePlanResult =
   | { status: 'planned'; body: RouteFeatureCollectionDto }
   | { status: 'duplicate_adjacent'; index: number }
-  | { status: 'routing_unavailable'; detail: string }
+  | { status: 'routing_unavailable'; failure: RoutingFailure; detail: string }
   | { status: 'corridor_unavailable'; detail: string };
 
 export interface RoutePlannerDeps {
@@ -57,7 +58,7 @@ export function createRoutePlanner(deps: RoutePlannerDeps) {
       try {
         directions = await cachedDirections(coords);
       } catch (error) {
-        if (error instanceof RoutingUnavailableError) return { status: 'routing_unavailable', detail: error.message };
+        if (error instanceof RoutingUnavailableError) return { status: 'routing_unavailable', failure: error.failure, detail: error.message };
         throw error;
       }
       const features: unknown[] = [

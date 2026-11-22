@@ -693,6 +693,23 @@ class RecGovCredentialServiceTest {
             assertEquals(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, svc.completeMfa(testUserId, "000001").error)
         }
 
+    @Test
+    fun `a completion that lost its prompt or never saw a session clears the challenge`() =
+        runBlocking {
+            for (code in listOf(RecGovSessionCodes.MFA_PROMPT_NOT_FOUND, RecGovSessionCodes.LOGIN_NO_SESSION_OBSERVED)) {
+                val companion =
+                    FakeCompanion(
+                        loginResult = CompanionLoginResult.MfaRequired("chal-1", null),
+                        mfaResult = CompanionLoginResult.Failed(code, "companion said so"),
+                    )
+                val svc = service(configuredRepo(), companion)
+                svc.login(testUserId)
+
+                assertEquals(code, svc.completeMfa(testUserId, "000000").error)
+                assertEquals(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, svc.completeMfa(testUserId, "000001").error, code)
+            }
+        }
+
     // ── verify ───────────────────────────────────────────────────────────────
 
     @Test
@@ -749,6 +766,17 @@ class RecGovCredentialServiceTest {
 
             assertEquals(RecgovSessionState.EXPIRED, dto.session)
             assertEquals(RecGovSessionCodes.NOT_AUTHENTICATED, dto.detail)
+        }
+
+    @Test
+    fun `status reports a failed health check with the companion's code and detail`() =
+        runBlocking {
+            val companion = FakeCompanion(healthResult = CompanionSessionHealth.CheckFailed("store_corrupt", "store.json is not JSON"))
+
+            val dto = service(configuredRepo(), companion).status(testUserId)
+
+            assertEquals(RecgovSessionState.CHECK_FAILED, dto.session)
+            assertEquals("store_corrupt: store.json is not JSON", dto.detail)
         }
 
     @Test

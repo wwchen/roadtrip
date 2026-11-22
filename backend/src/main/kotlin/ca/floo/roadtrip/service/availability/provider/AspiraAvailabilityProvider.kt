@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.UnrecognizedStatusTally
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -182,13 +183,15 @@ class AspiraAvailabilityProvider(
                     observedAt = observedAt,
                 )
             }
+        val unrecognized = UnrecognizedStatusTally()
         return AvailabilityObservationBatch(
             provider = "aspira",
             startDate = startDate,
             endDate = endDate,
-            observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
+            observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days, unrecognized),
             cacheBlock = directFetchCacheBlock(),
             scope = scope,
+            unrecognizedStatuses = unrecognized.counts(),
         )
     }
 
@@ -205,12 +208,13 @@ class AspiraAvailabilityProvider(
             return emptyBatch(scope, today, today.plusDays(days.toLong()))
         }
 
+        val unrecognized = UnrecognizedStatusTally()
         val observations =
             (0 until days).flatMap { offset ->
                 val arrival = today.plusDays(offset.toLong())
                 val checkout = arrival.plusDays(1)
                 val data = availabilityClient.fetchOccupancy(host, resourceLocationId, arrival, checkout)
-                observationsFromOccupancyCatalogArrivalDay(targets, data.resourceOccupancy, arrival, Instant.now())
+                observationsFromOccupancyCatalogArrivalDay(targets, data.resourceOccupancy, arrival, Instant.now(), unrecognized)
             }
         return AvailabilityObservationBatch(
             provider = "aspira",
@@ -219,6 +223,7 @@ class AspiraAvailabilityProvider(
             observations = observations,
             cacheBlock = directFetchCacheBlock(),
             scope = scope,
+            unrecognizedStatuses = unrecognized.counts(),
         )
     }
 
@@ -284,6 +289,7 @@ private fun observationsFromLinkedResourceCatalog(
     resources: List<CatalogResourceDays>,
     start: LocalDate,
     days: Int,
+    unrecognized: UnrecognizedStatusTally,
 ): List<CampsiteDayObservation> =
     resources.flatMap { resource ->
         (0 until days).map { d ->
@@ -291,7 +297,7 @@ private fun observationsFromLinkedResourceCatalog(
                 campsiteId = resource.campsiteId,
                 date = start.plusDays(d.toLong()),
                 observedAt = resource.observedAt,
-                status = resource.days?.let { statusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
+                status = resource.days?.let { statusAt(it, d, unrecognized) } ?: AvailabilityStatus.UNKNOWN,
             )
         }
     }
@@ -301,6 +307,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
     occupancyRows: List<ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy>,
     arrival: LocalDate,
     observedAt: Instant,
+    unrecognized: UnrecognizedStatusTally,
 ): List<CampsiteDayObservation> {
     val occupancyByResourceId = occupancyRows.associateBy { it.resourceId.toString() }
     return resources.map { resource ->
@@ -309,7 +316,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
             when {
                 occupancy == null -> AvailabilityStatus.UNKNOWN
                 occupancy.filtered -> AvailabilityStatus.RESERVED
-                else -> AspiraStatus.classifyOccupancy(occupancy.availability)
+                else -> unrecognized.orUnknown(occupancy.availability.toString(), AspiraStatus.classifyOccupancy(occupancy.availability))
             }
         CampsiteDayObservation(
             campsiteId = resource.campsiteId,
@@ -329,9 +336,10 @@ private data class CatalogResourceDays(
 private fun statusAt(
     statuses: List<Int>,
     offset: Int,
+    unrecognized: UnrecognizedStatusTally,
 ): AvailabilityStatus =
     if (offset < statuses.size) {
-        AspiraStatus.classify(statuses[offset])
+        unrecognized.orUnknown(statuses[offset].toString(), AspiraStatus.classify(statuses[offset]))
     } else {
         AvailabilityStatus.UNKNOWN
     }

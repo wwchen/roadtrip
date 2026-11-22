@@ -104,6 +104,6 @@ export const unconfiguredBookingGateway: BookingGateway = {
   submitMfa: async (): Promise<LoginResult> => NOT_CONFIGURED,
   refresh: async (): Promise<ActionResult> => NOT_CONFIGURED,
   verify: async (): Promise<ActionResult> => NOT_CONFIGURED,
-  health: async (): Promise<SessionHealth> => ({ kind: 'unavailable' }),
+  health: async (): Promise<SessionHealth> => NOT_CONFIGURED,
   signOut: async (): Promise<SignOutResult> => NOT_CONFIGURED,
 };

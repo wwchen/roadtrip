@@ -12,11 +12,15 @@ import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.routing.RoutePlanResult
 import ca.floo.roadtrip.service.routing.RoutePlanService
+import ca.floo.roadtrip.support.RoutingFailure
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
+import org.slf4j.LoggerFactory
+
+private val routeLog = LoggerFactory.getLogger("RouteRoutes")
 
 /**
  * GET /api/route?coords=lng,lat;lng,lat;...
@@ -32,10 +36,11 @@ internal fun Route.routeRoutes(
     route("/api") {
         get("/route") {
             if (!routePlanService.configured) {
+                val answer = RoutingFailure.NOT_CONFIGURED.answer()
                 call.respondRouteError(
-                    error = "routing_unavailable",
+                    error = answer.error,
                     detail = "roadtrip.mapbox.token not set",
-                    status = HttpStatusCode.ServiceUnavailable,
+                    status = answer.status,
                 )
                 return@get
             }
@@ -122,18 +127,16 @@ internal fun Route.routeRoutes(
                         detail = "points ${result.index} and ${result.index - 1} are identical",
                         status = HttpStatusCode.BadRequest,
                     )
-                is RoutePlanResult.DirectionsUnavailable ->
-                    call.respondRouteError(
-                        error = "routing_unavailable",
-                        detail = result.detail,
-                        status = HttpStatusCode.ServiceUnavailable,
-                    )
-                is RoutePlanResult.CorridorUnavailable ->
-                    call.respondRouteError(
-                        error = "corridor_unavailable",
-                        detail = result.detail,
-                        status = HttpStatusCode.ServiceUnavailable,
-                    )
+                is RoutePlanResult.DirectionsUnavailable -> {
+                    val answer = result.failure.answer()
+                    routeLog.warn("directions failed: {} {}", answer.error, result.detail)
+                    call.respondRouteError(error = answer.error, detail = result.detail, status = answer.status)
+                }
+                is RoutePlanResult.CorridorUnavailable -> {
+                    val answer = RoutingFailure.CORRIDOR.answer()
+                    routeLog.warn("corridor failed: {}", result.detail)
+                    call.respondRouteError(error = answer.error, detail = result.detail, status = answer.status)
+                }
                 is RoutePlanResult.Planned ->
                     call.respondEncodedJson(routeResponseMapper.featureCollection(result.plan))
             }

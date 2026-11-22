@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.client.aspira
 
 import ca.floo.roadtrip.client.ScriptedHttpClient
+import ca.floo.roadtrip.fixtures.mangledAvailabilityFixture
+import ca.floo.roadtrip.model.availability.AvailabilityPayloadException
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
@@ -84,5 +86,37 @@ class AspiraAvailabilityClientTest {
         assertEquals(listOf(1, 6), parsed.parkRollup)
         assertEquals(listOf(1, 5), parsed.byMapLink["-2147483515"])
         assertEquals(listOf(0, 1, AspiraStatus.UNKNOWN), parsed.byResource["-2147478966"])
+    }
+
+    @Test
+    fun `a map answer without resourceAvailabilities is unreadable, not empty`() {
+        val thrown =
+            assertFailsWith<AvailabilityPayloadException> {
+                HttpAspiraAvailabilityClient().parse(mangledAvailabilityFixture("aspira-map-no-resource-availabilities.json"), mapId = 1)
+            }
+
+        assertEquals("aspira", thrown.provider)
+        assertTrue(thrown.message!!.contains("resourceAvailabilities"), thrown.message)
+    }
+
+    @Test
+    fun `a resource row that is not an array is unreadable`() {
+        val thrown =
+            assertFailsWith<AvailabilityPayloadException> {
+                HttpAspiraAvailabilityClient().parse("""{"resourceAvailabilities":{"-1":{"availability":0}}}""", mapId = 1)
+            }
+
+        assertTrue(thrown.message!!.contains("-1"), thrown.message)
+    }
+
+    @Test
+    fun `a parent map's empty resourceAvailabilities is a well-formed empty answer`() {
+        val parsed =
+            HttpAspiraAvailabilityClient().parse(
+                """{"mapLinkAvailabilities":{"-2":[0]},"resourceAvailabilities":{}}""",
+                mapId = 1,
+            )
+
+        assertEquals(emptyMap(), parsed.byResource)
     }
 }

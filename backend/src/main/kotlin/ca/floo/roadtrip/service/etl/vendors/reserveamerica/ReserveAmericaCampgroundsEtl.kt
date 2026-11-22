@@ -46,10 +46,16 @@ class ReserveAmericaCampgroundsEtl(
             val parks = mutableListOf<ParsedPark>()
             for (env in envelopes) {
                 val partLabel = env.part ?: continue
-                if (!partLabel.startsWith("park-")) continue
-                val parkId = partLabel.removePrefix("park-").toLongOrNull() ?: continue
-                val html = env.payload.jsonPrimitive.content
-                parsePark(parkId, html)?.let { parks += it }
+                if (!partLabel.startsWith(PARK_PART_PREFIX)) continue
+                val parkId = partLabel.removePrefix(PARK_PART_PREFIX).toLongOrNull()
+                if (parkId == null) {
+                    yield(ParseResult.Bad(partLabel, listOf("park id is not a number")))
+                    continue
+                }
+                when (val parsed = parsePark(partLabel, parkId, env.payload.jsonPrimitive.content)) {
+                    is ParseResult.Ok -> parks += parsed.dto
+                    is ParseResult.Bad -> yield(parsed)
+                }
             }
             val dto = ReserveAmericaDto(parks = parks, fetchedAt = envelopes.first().fetchedAtOrNow())
             if (dto.parks.isEmpty()) {
@@ -123,23 +129,24 @@ class ReserveAmericaCampgroundsEtl(
         )
 
     private fun parsePark(
+        partLabel: String,
         parkId: Long,
         html: String,
-    ): ParsedPark? {
+    ): ParseResult<ParsedPark> {
         val lat =
             latitudeRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
-                ?.toDoubleOrNull() ?: return null
+                ?.toDoubleOrNull() ?: return ParseResult.Bad(partLabel, listOf("no place:location:latitude"))
         val lon =
             longitudeRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
-                ?.toDoubleOrNull() ?: return null
-        val rawTitle = ogTitleRegex.find(html)?.groupValues?.get(1) ?: return null
-        val name = rawTitle.trim().ifBlank { return null }
+                ?.toDoubleOrNull() ?: return ParseResult.Bad(partLabel, listOf("no place:location:longitude"))
+        val rawTitle = ogTitleRegex.find(html)?.groupValues?.get(1) ?: return ParseResult.Bad(partLabel, listOf("no og:title"))
+        val name = rawTitle.trim().ifBlank { return ParseResult.Bad(partLabel, listOf("blank og:title")) }
         val phone =
             telephoneRegex
                 .find(html)
@@ -169,15 +176,17 @@ class ReserveAmericaCampgroundsEtl(
                 ?.groupValues
                 ?.get(1)
                 ?.takeIf { it.isNotBlank() }
-        return ParsedPark(
-            parkId = parkId,
-            name = name,
-            lat = lat,
-            lon = lon,
-            phone = phone,
-            description = description,
-            photoUrl = photoUrl,
-            infoUrl = infoUrl,
+        return ParseResult.Ok(
+            ParsedPark(
+                parkId = parkId,
+                name = name,
+                lat = lat,
+                lon = lon,
+                phone = phone,
+                description = description,
+                photoUrl = photoUrl,
+                infoUrl = infoUrl,
+            ),
         )
     }
 
@@ -194,6 +203,7 @@ class ReserveAmericaCampgroundsEtl(
     }
 
     companion object {
+        private const val PARK_PART_PREFIX = "park-"
         private val latitudeRegex = Regex("""place:location:latitude"\s+content='([^']+)'""")
         private val longitudeRegex = Regex("""place:location:longitude"\s+content='([^']+)'""")
         private val ogTitleRegex = Regex("""og:title"\s+content='([^']+)'""")
@@ -203,6 +213,14 @@ class ReserveAmericaCampgroundsEtl(
         private val telephoneRegex = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
     }
 }
+
+private const val REGION_ARG = "region"
+private const val COUNTRY_ARG = "country"
+
+private fun TransformCtx.requiredArg(
+    etlSlug: String,
+    key: String,
+): String = argFor(etlSlug, key) ?: error("$etlSlug is missing required arg '$key'")
 
 private data class ReserveAmericaSettings(
     val contract: String,
@@ -219,11 +237,11 @@ private data class ReserveAmericaSettings(
             etlSlug: String,
             contract: String,
         ): ReserveAmericaSettings {
-            val region = ctx.argFor(etlSlug, "region") ?: "AB"
+            val region = ctx.requiredArg(etlSlug, REGION_ARG)
             return ReserveAmericaSettings(
                 contract = contract,
                 region = region,
-                country = ctx.argFor(etlSlug, "country") ?: "CA",
+                country = ctx.requiredArg(etlSlug, COUNTRY_ARG),
                 agency = ctx.requiredConstantAgency(etlSlug),
                 provider = ctx.argFor(etlSlug, "provider") ?: BookingProvider.RESERVEAMERICA.id,
                 titleSuffix = ctx.argFor(etlSlug, "title_suffix") ?: ", $region",

@@ -459,6 +459,28 @@ describe('runTarget', () => {
     expect(cleanHarness.warnings).toEqual([]);
     expect(cleanHarness.infos).toHaveLength(1);
   });
+
+  test('records kept with warnings are counted once each, and each distinct warning is logged with its tally', async () => {
+    const slug = nextSlug();
+    const warningsPerRecord = [['unlisted kind "Parking"'], [], ['unlisted kind "Parking"', 'unlisted kind "Hut"']];
+    const etl: SourceEtl<number, number> = {
+      etlSlug: slug,
+      *parse(): Iterable<ParseResult<number>> {
+        yield { ok: true, dto: 0 };
+      },
+      *transform(): Iterable<TransformResult<number>> {
+        for (const [record, warnings] of warningsPerRecord.entries()) yield { ok: true, record, warnings };
+      },
+    };
+    const h = harness(slug, bindingOf(etl, recordingSink<number>()));
+    const stats = await runTarget(h.target, h.deps);
+    expect(stats).toMatchObject({ transformed: 3, upserted: 3, skipped: 0, warned: 2 });
+    expect(h.warnings).toEqual([
+      `poi_data '${h.rowName}' terminal slug=${slug} kept 2 records carrying 2 distinct warnings`,
+      `poi_data '${h.rowName}' terminal slug=${slug} warning x2: unlisted kind "Parking"`,
+      `poi_data '${h.rowName}' terminal slug=${slug} warning x1: unlisted kind "Hut"`,
+    ]);
+  });
 });
 
 describe('runTarget through the catalog sinks', () => {

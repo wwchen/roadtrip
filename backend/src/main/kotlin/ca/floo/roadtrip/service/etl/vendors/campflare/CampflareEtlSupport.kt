@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -59,10 +60,24 @@ internal fun JsonObject.doubleField(name: String): Double? =
         ?.jsonPrimitive
         ?.doubleOrNull
 
-internal fun JsonObject.intField(name: String): Int? =
-    this[name]
-        ?.jsonPrimitive
-        ?.intOrNull
+internal fun JsonObject.intField(name: String): Int? {
+    val primitive = this[name]?.jsonPrimitive ?: return null
+    primitive.intOrNull?.let { return it }
+    val number = primitive.doubleOrNull ?: return null
+    if (number !in intAsDoubleRange) return null
+    return number.toInt().takeIf { it.toDouble() == number }
+}
+
+internal fun JsonObject.countField(name: String): Int? = intField(name)?.takeIf { it >= 0 }
+
+internal fun JsonObject.countWarning(name: String): String? {
+    val primitive = this[name]?.jsonPrimitive ?: return null
+    if (primitive is JsonNull) return null
+    val value = intField(name) ?: return "Campflare $name ${primitive.content} is not a whole number"
+    return if (value < 0) "Campflare $name ${primitive.content} is negative" else null
+}
+
+private val intAsDoubleRange = Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()
 
 internal fun JsonObject.booleanField(name: String): Boolean? =
     this[name]

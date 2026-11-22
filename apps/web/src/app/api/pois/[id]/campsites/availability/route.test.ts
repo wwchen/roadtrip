@@ -42,11 +42,24 @@ test('site_type and dates reach the service', async () => {
   expect(getAvailabilityWeek).toHaveBeenCalledWith(7n, ['rv', 'tent'], '2026-12-01', '2026-12-08');
 });
 
-test('an unavailable mini-ca is 503 availability_unavailable', async () => {
+test('an unconfigured mini-ca is 503 availability_unavailable', async () => {
   getAvailabilityWeek.mockRejectedValue(new AvailabilityUnavailableError());
   const response = await get('7');
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ state: 'error', error: 'availability_unavailable' });
+});
+
+test('a mini-ca failure is 503 with mini-ca’s own code and detail', async () => {
+  getAvailabilityWeek.mockRejectedValue(
+    new AvailabilityUnavailableError({ status: 503, code: 'unreadable_response', detail: 'recgov availability payload unreadable: campsites' }),
+  );
+  const response = await get('7');
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    state: 'error',
+    error: 'unreadable_response',
+    detail: 'recgov availability payload unreadable: campsites',
+  });
 });
 
 test('a window mini-ca refuses is 400 with its code and detail', async () => {

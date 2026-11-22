@@ -36,7 +36,8 @@ const ANSWERS: [string, AddToCartOutcome, number, object][] = [
   ],
   ['refused retry_later', { kind: 'refused', refusal: { category: 'retry_later', code: 'c' }, providerDisplay: DISPLAY, cartUrl: CART_URL }, 409, { error: 'c', cart_url: CART_URL, ...PROVIDER }],
   ['refused upstream', { kind: 'refused', refusal: { category: 'upstream', code: 'c' }, providerDisplay: DISPLAY }, 502, { error: 'c', ...PROVIDER }],
-  ['unavailable', { kind: 'unavailable', providerDisplay: DISPLAY }, 503, { error: 'booking_unavailable', ...PROVIDER }],
+  ['unavailable', { kind: 'unavailable', fault: 'unreachable', providerDisplay: DISPLAY }, 503, { error: 'relay_unreachable', ...PROVIDER }],
+  ['unavailable, malformed', { kind: 'unavailable', fault: 'malformed', providerDisplay: DISPLAY }, 503, { error: 'relay_malformed', ...PROVIDER }],
 ];
 
 test.each(ANSWERS)('%s answers its status and body', (_name, outcome, status, body) => {

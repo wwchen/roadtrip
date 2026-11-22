@@ -113,11 +113,12 @@ function checkLabel({ running, checked }: StayCheckControl): string {
  * Why the check button is off, or why the last check stopped — red when a check
  * stopped or must wait, muted when there is simply nothing to ask about.
  */
-function CheckNote({ control: { running, coolingDown, failure, nothingToCheck } }: { control: StayCheckControl }) {
+function CheckNote({ control: { running, coolingDown, failure, failureDetail, nothingToCheck } }: { control: StayCheckControl }) {
   if (running) return null;
-  if (coolingDown || failure === 'throttled') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.throttled}</span>;
-  if (failure === 'timed_out') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.timedOut}</span>;
-  if (failure === 'failed') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.failed}</span>;
+  const withDetail = (sentence: string) => (failureDetail ? `${sentence} (${failureDetail})` : sentence);
+  if (coolingDown || failure === 'throttled') return <span className="tb-check-note tb-check-note--error" role="status">{withDetail(stayCopy.throttled)}</span>;
+  if (failure === 'timed_out') return <span className="tb-check-note tb-check-note--error" role="status">{withDetail(stayCopy.timedOut)}</span>;
+  if (failure === 'failed') return <span className="tb-check-note tb-check-note--error" role="status">{withDetail(stayCopy.failed)}</span>;
   if (nothingToCheck) return <span className="tb-check-note" role="status">{stayCopy.noneCheckable}</span>;
   return null;
 }

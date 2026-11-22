@@ -15,6 +15,11 @@ COMPANION_PACKAGE_JSON = ROOT / "companion" / "package.json"
 BASE_COMPOSE = ROOT / "docker-compose.yml"
 SANDBOX_COMPOSE = ROOT / "docker-compose.sandbox.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+TEST_HARNESSES = (
+    ROOT / "backend" / "build.gradle.kts",
+    ROOT / "backend" / "src" / "test" / "kotlin" / "ca" / "floo" / "roadtrip" / "repo" / "SharedTestDb.kt",
+    ROOT / "scripts" / "schema-reference.mjs",
+)
 
 PLAYWRIGHT_IMAGE = re.compile(
     r"^FROM\s+mcr\.microsoft\.com/playwright:v(?P<version>\d+\.\d+\.\d+)-\w+\s*$",
@@ -86,6 +91,20 @@ class PostgisPinAlignmentTest(unittest.TestCase):
             "workflow service image, so a bump otherwise leaves the test suite "
             "validating a database version production does not run",
         )
+
+    def test_every_test_harness_starts_the_deployed_build(self) -> None:
+        deployed = yaml.safe_load(BASE_COMPOSE.read_text())["services"]["postgres"]["image"]
+
+        for harness in TEST_HARNESSES:
+            with self.subTest(harness=harness.relative_to(ROOT).as_posix()):
+                self.assertEqual(
+                    {f"postgis/postgis:{tag}" for tag in POSTGIS_IMAGE.findall(harness.read_text())},
+                    {deployed},
+                    "the backend Testcontainers image, SharedTestDb and the JS "
+                    "suites' schema-reference container must start the postgis "
+                    "build docker-compose.yml deploys; dependabot bumps none of "
+                    "them, so a compose bump otherwise leaves them on the old one",
+                )
 
 
 if __name__ == "__main__":

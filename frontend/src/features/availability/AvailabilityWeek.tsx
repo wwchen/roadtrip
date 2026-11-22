@@ -17,7 +17,8 @@ import { SiteList } from './SiteList';
 import { SiteMatrix, SiteMatrixSkeleton, type WatchGate } from './SiteMatrix';
 import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
-import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
+import { classifyAvailabilityErrorCode } from './availability-errors';
+import { describeError } from '@/lib/error-report';
 import { reservationUrlFromTemplate } from './booking-links';
 import { type AvailabilityDay, seasonReopensOn } from '@/api/availability-api';
 import { DEFAULT_SITE_COLUMN_WIDTH } from './site-column';
@@ -93,6 +94,7 @@ function AvailabilityWeekView({
   feature: PoiFeature;
 }) {
   const poiName = (feature.properties?.name as string | undefined) || 'this campground';
+  const bookingSystem = featureBookingSystem(feature);
 
   // The first date this provider will quote. Everything paginates forward from here,
   // and "Earliest" returns to it — which is not the same as "today" for a campground
@@ -236,19 +238,20 @@ function AvailabilityWeekView({
         .catch((err: unknown) => {
           const { error: code, provider_display: providerDisplay, cart_url: cartUrl } = addToCartFailure(err);
           const holder = providerDisplay || undefined;
+          const message = settingsErrorMessage(err, holder);
           actions.cartActionChanged({ type: 'failed', cell, code });
           toast({
             status: 'warning',
             title: 'Could not hold the site',
             children: cartUrl ? (
               <>
-                {settingsErrorMessage(code, holder)}{' '}
+                {message}{' '}
                 <a href={cartUrl} target="_blank" rel="noreferrer noopener">
                   {bookingCopy.openCart(holder)}
                 </a>
               </>
             ) : (
-              settingsErrorMessage(code, holder)
+              message
             ),
           });
         });
@@ -360,12 +363,18 @@ function AvailabilityWeekView({
     <section className="cg-availability">
       <WeekSurface
         week={week}
+        bookingSystem={bookingSystem}
         showSkeleton={showSkeleton}
         siteColumnWidth={siteColumnWidth}
         weekNav={weekNav}
         onOpenWatch={(anchor) => actions.openWatch(anchor, selectedDate ?? localYmd(weekStart))}
         onReport={() => {
-          const detail = upstreamCopy.reportDetail(poiName, poiId, week.error?.message ?? 'unknown');
+          const detail = upstreamCopy.reportDetail(
+            weekProviderDisplay(week.error, bookingSystem),
+            poiName,
+            poiId,
+            describeError(week.error),
+          );
           // `copyShareUrl` rather than `navigator.clipboard` directly: the async
           // clipboard is absent in a non-secure context and rejects when the document
           // is not focused, and the helper's textarea fallback covers both. A bare
@@ -384,7 +393,7 @@ function AvailabilityWeekView({
               campsites: catalog.data?.campsites ?? [],
               reservationUrlTemplates: catalog.data?.reservation_url_templates,
               state: catalog.isPending ? 'loading' : catalog.error ? 'error' : 'success',
-              error: catalog.error?.message ?? null,
+              error: catalog.error ? describeError(catalog.error) : null,
               retry: () => void catalog.refetch(),
             }}
             view={{
@@ -447,7 +456,7 @@ function AvailabilityWeekView({
         state={catalog.isPending ? 'loading' : catalog.error ? 'error' : 'success'}
         campsites={catalog.data?.campsites ?? []}
         reservationUrlTemplates={catalog.data?.reservation_url_templates}
-        error={catalog.error?.message ?? null}
+        error={catalog.error ? describeError(catalog.error) : null}
         expanded={sitesExpanded}
         onToggle={actions.toggleSites}
         onRetry={() => void catalog.refetch()}
@@ -502,6 +511,7 @@ function AvailabilityWeekView({
  */
 function WeekSurface({
   week,
+  bookingSystem,
   showSkeleton,
   siteColumnWidth,
   weekNav,
@@ -510,6 +520,7 @@ function WeekSurface({
   onReport,
 }: {
   week: ReturnType<typeof useWeekAvailability>;
+  bookingSystem: string | undefined;
   showSkeleton: boolean;
   siteColumnWidth: number;
   weekNav: React.ReactNode;
@@ -546,11 +557,11 @@ function WeekSurface({
   }
 
   if (week.error && !(showStale && week.data)) {
-    const code = week.error instanceof AvailabilityRequestError ? week.error.code : null;
-    const kind =
-      week.error instanceof AvailabilityRequestError
-        ? classifyAvailabilityErrorCode(code)
-        : 'unreachable';
+    const failure = week.error instanceof AvailabilityRequestError ? week.error : null;
+    const kind = failure ? classifyAvailabilityErrorCode(failure.code) : 'other';
+    const providerDisplay = weekProviderDisplay(week.error, bookingSystem);
+    const raw = failure ? failure.raw : describeError(week.error);
+    const withRaw = (sentence: string) => `${sentence} (${raw})`;
     const hasStaleData = week.data != null;
 
     if (kind === 'throttled') {
@@ -559,12 +570,12 @@ function WeekSurface({
       return withNav(
         <EmptyState
           icon="lock"
-          title={upstreamCopy.rateLimitedTitle}
-          body={
-            hasStaleData
-              ? `They've throttled us, so we're holding off. The availability below is from ${ageMin} minute${ageMin === 1 ? '' : 's'} ago and won't update until they let us back in.`
-              : "They've throttled us, so we're holding off."
-          }
+          title={upstreamCopy.rateLimitedTitle(providerDisplay)}
+          body={withRaw(
+            hasStaleData && ageMin !== null
+              ? upstreamCopy.rateLimitedStaleBody(ageMin)
+              : upstreamCopy.rateLimitedBody,
+          )}
           actions={
             <>
               {hasStaleData ? (
@@ -590,8 +601,8 @@ function WeekSurface({
       return withNav(
         <EmptyState
           icon="warning-fill"
-          title={upstreamCopy.erroredTitle}
-          body="Their end failed on this request. Your dates are fine — this one is theirs."
+          title={upstreamCopy.erroredTitle(providerDisplay)}
+          body={withRaw(upstreamCopy.erroredBody)}
           actions={
             <>
               <Button
@@ -615,8 +626,8 @@ function WeekSurface({
       return withNav(
         <EmptyState
           icon="warning"
-          title={upstreamCopy.unreachableTitle}
-          body="The request timed out. Outages like this usually clear within a few minutes."
+          title={upstreamCopy.unreachableTitle(providerDisplay)}
+          body={withRaw(upstreamCopy.unreachableBody)}
           actions={
             <>
               <Button
@@ -643,7 +654,7 @@ function WeekSurface({
 
     return withNav(
       <div className="cg-summary">
-        <span className="cg-error">{week.error.message || GENERIC_AVAILABILITY_ERROR}</span> ·{' '}
+        <span className="cg-error">{failure ? failure.message : raw}</span> ·{' '}
         <LinkButton className="cg-retry" onClick={() => void week.refetch()}>
           Retry
         </LinkButton>
@@ -694,6 +705,7 @@ function Freshness({
   // when the pill appears.
   if (!cache) return <>&nbsp;</>;
   const ageMin = cacheAgeMinutes(cache.age_seconds);
+  if (ageMin === null) return <>&nbsp;</>;
   return (
     <span className={ageMin >= STALE_THRESHOLD_MIN ? 'cg-stale' : undefined}>
       checked {ageMin}m ago ·{' '}
@@ -703,6 +715,15 @@ function Freshness({
       </LinkButton>
     </span>
   );
+}
+
+function featureBookingSystem(feature: PoiFeature): string | undefined {
+  const raw = feature.properties?.booking_system;
+  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : undefined;
+}
+
+function weekProviderDisplay(error: unknown, bookingSystem: string | undefined): string | undefined {
+  return (error instanceof AvailabilityRequestError ? error.providerDisplay : null) ?? bookingSystem;
 }
 
 /**

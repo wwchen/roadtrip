@@ -342,6 +342,7 @@ poi_data:
             - input: uscampgrounds
               format: uscampgrounds_csv
               state: WA
+              types: [SP, CP, SF]
           match:
             parent_fallback: true
 
@@ -395,6 +396,8 @@ poi_data:
         args:
           contract: ABPP
           host: shop.albertaparks.ca
+          region: AB
+          country: CA
           provider: reserveamerica
 
   - name: New York State Parks

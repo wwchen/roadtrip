@@ -59,7 +59,7 @@ test('runAtcOnce emits one success JSON result on stdout', async () => {
   })
 })
 
-test('runAtcOnce exits one when cart automation does not confirm a hold', async () => {
+test('runAtcOnce names an unexplained automation failure instead of calling it a lost race', async () => {
   const stdout = bufferWriter()
 
   const code = await runAtcOnce({
@@ -73,7 +73,8 @@ test('runAtcOnce exits one when cart automation does not confirm a hold', async 
   assert.equal(code, 1)
   assert.equal(result.ok, false)
   assert.equal(result.cart_added, false)
-  assert.equal(result.error, 'cart_not_added')
+  assert.equal(result.error, 'atc_result_unexplained')
+  assert.equal(result.detail, 'cart automation returned a failure without an error code')
   assert.deepEqual(result.screenshots, [])
 })
 
@@ -97,6 +98,7 @@ test('runAtcOnce includes cart verification details on ATC failure', async () =>
 
   const result = JSON.parse(stdout.text())
   assert.equal(code, 1)
+  assert.equal(result.error, 'missing_expected_item')
   assert.equal(result.detail, 'cart verification failed: reason=missing_expected_item status=200 reservations=1')
   assert.deepEqual(result.cart_check, {
     reason: 'missing_expected_item',

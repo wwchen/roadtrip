@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.UnrecognizedStatusTally
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -77,14 +78,16 @@ class RecGovAvailabilityProvider(
             val catalogSites = campsiteIdByVendorId.keys.associateWith { siteId -> merged[siteId].orEmpty() }
             val dates = datesInWindow(startDate, endDate)
             val observedAtByDate = dates.associateWith { observedAt }
+            val unrecognized = UnrecognizedStatusTally()
 
             AvailabilityObservationBatch(
                 provider = "recgov",
                 startDate = startDate,
                 endDate = endDate,
-                observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId),
+                observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId, unrecognized),
                 cacheBlock = directFetchCacheBlock(),
                 scope = BookingProviderRef.RecGov(facilityId = recgovId),
+                unrecognizedStatuses = unrecognized.counts(),
             )
         }
 
@@ -95,22 +98,6 @@ class RecGovAvailabilityProvider(
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         mapUpstreamErrors(
             vendorError = { e: RecGovException -> upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus) },
-            otherError = { e ->
-                // Anything not thrown by the client can still name a rate limit
-                // in its message, so that text check stays. Everything else goes
-                // through the shared classifier with no typed status: a
-                // DNS/connect/socket cause becomes UpstreamUnreachable ("could
-                // not reach the booking site") instead of being mislabelled as a
-                // vendor 5xx — the exact confusion the incident turned on. A real
-                // 5xx has no transport cause, so it still falls through to
-                // UpstreamUnavailable.
-                val msg = e.message.orEmpty()
-                if (msg.contains("429") || msg.contains("rate")) {
-                    AvailabilityProviderError.RateLimited(e)
-                } else {
-                    upstreamAvailabilityError(cause = e, httpStatus = null)
-                }
-            },
         ) { block() }
 }
 
@@ -154,6 +141,7 @@ private fun observationsFromCampsites(
     dates: List<LocalDate>,
     observedAtByDate: Map<LocalDate, Instant>,
     campsiteIdsBySiteId: Map<String, Long>,
+    unrecognized: UnrecognizedStatusTally,
 ): List<CampsiteDayObservation> =
     merged.flatMap { (siteId, byDate) ->
         val campsiteId = campsiteIdsBySiteId[siteId] ?: return@flatMap emptyList()
@@ -162,22 +150,26 @@ private fun observationsFromCampsites(
                 campsiteId = campsiteId,
                 date = date,
                 observedAt = observedAtByDate[date] ?: Instant.EPOCH,
-                status = classifyRecgovStatus(byDate[date.toString()]),
+                status = byDate[date.toString()].let { raw -> unrecognized.orUnknown(raw.orEmpty(), classifyRecgovStatus(raw)) },
             )
         }
     }
 
-private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
-    val status = raw?.trim()
-    if (status.isNullOrEmpty()) return AvailabilityStatus.UNKNOWN
-    return when {
-        status.equals("null", true) -> AvailabilityStatus.UNKNOWN
-        status.equals("Available", true) || status.equals("Open", true) -> AvailabilityStatus.AVAILABLE
-        status.equals("Not Reservable", true) -> AvailabilityStatus.FIRST_COME
-        status.equals("Closed", true) -> AvailabilityStatus.CLOSED
-        status.equals("Reserved", true) || status.equals("Not Available", true) -> AvailabilityStatus.RESERVED
-        else -> AvailabilityStatus.UNKNOWN
-    }
-}
+private val recgovStatuses: Map<String, AvailabilityStatus> =
+    mapOf(
+        "" to AvailabilityStatus.UNKNOWN,
+        "null" to AvailabilityStatus.UNKNOWN,
+        "available" to AvailabilityStatus.AVAILABLE,
+        "open" to AvailabilityStatus.AVAILABLE,
+        "reserved" to AvailabilityStatus.RESERVED,
+        "not available" to AvailabilityStatus.RESERVED,
+        "not reservable" to AvailabilityStatus.FIRST_COME,
+        "closed" to AvailabilityStatus.CLOSED,
+        "not available cutoff" to AvailabilityStatus.RESERVED,
+        "not reservable management" to AvailabilityStatus.CLOSED,
+        "nyr" to AvailabilityStatus.UNKNOWN,
+    )
+
+private fun classifyRecgovStatus(raw: String?): AvailabilityStatus? = recgovStatuses[raw.orEmpty().trim().lowercase()]
 
 private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)

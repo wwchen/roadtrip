@@ -110,7 +110,7 @@ export async function findDetailByPoi(db: Db, poiId: bigint): Promise<Campground
   const row = rows[0];
   if (row === undefined) return null;
 
-  const decoder = createColumnDecoder();
+  const decoder = createColumnDecoder(`campgrounds id=${String(row.id)}`);
   return {
     poiId: idString(row.poi_id),
     campgroundId: idString(row.id),
@@ -171,7 +171,7 @@ export async function findSummariesByPoiIds(
 
   const byPoi = new Map<string, CampgroundSummaryDto>();
   for (const row of rows) {
-    const decoder = createColumnDecoder();
+    const decoder = createColumnDecoder(`campgrounds poi_id=${String(row.poi_id)}`);
     const location = decoder.decode(LOCATION_COLUMN, locationShape, row.location);
     const poiId = idString(row.poi_id);
     if (byPoi.has(poiId)) continue;

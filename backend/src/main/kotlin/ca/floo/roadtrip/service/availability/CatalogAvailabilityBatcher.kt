@@ -7,16 +7,20 @@ import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.support.causeChain
 
 internal fun AvailabilityProviderError.toFetchOutcome(): FetchOutcome =
     when (this) {
         is AvailabilityProviderError.RateLimited -> FetchOutcome.RATE_LIMITED
         is AvailabilityProviderError.UpstreamBlocked -> FetchOutcome.BLOCKED
         is AvailabilityProviderError.UpstreamUnavailable -> FetchOutcome.UPSTREAM_5XX
-        // Unreachable is still retryable: fail over to the next candidate
-        // rather than dropping to OTHER, which does not trigger failover.
         is AvailabilityProviderError.UpstreamUnreachable -> FetchOutcome.UPSTREAM_5XX
-        else -> FetchOutcome.OTHER
+        is AvailabilityProviderError.UnreadableResponse,
+        is AvailabilityProviderError.Misconfigured,
+        is AvailabilityProviderError.Unsupported,
+        is AvailabilityProviderError.WrongRefType,
+        is AvailabilityProviderError.Unknown,
+        -> FetchOutcome.OTHER
     }
 
 internal class CatalogAvailabilityBatcher {
@@ -101,7 +105,7 @@ internal class CatalogAvailabilityBatcher {
                         batch = null,
                         outcome = e.toFetchOutcome(),
                         durationMs = elapsedMs(startedNanos),
-                        error = e.message ?: e::class.simpleName,
+                        error = causeChain(e),
                         providerError = e,
                     )
                 }

@@ -563,6 +563,56 @@ test('a mistyped MFA code reports mfa_invalid and never arms the credential back
   assert.equal(retried.json.error, 'mfa_required')
 })
 
+test('an MFA completion that lost its prompt reports that, not a rejected code', async () => {
+  const server = testServer({
+    credentialLoginFn: mfaChallengeLogin({ failure: { reason: 'mfa_prompt_not_found' } }),
+  })
+  const challenged = await beginLogin(server)
+
+  const lost = await submitMfaCode(server, challenged.json.challenge_id, '000000')
+
+  assert.equal(lost.status, 401)
+  assert.equal(lost.json.error, 'mfa_prompt_not_found')
+  assert.notEqual(lost.json.detail, 'mfa_prompt_not_found')
+  assert.ok(lost.json.detail)
+})
+
+test('an MFA completion that never saw a session reports the timeout as its own code', async () => {
+  const server = testServer({
+    credentialLoginFn: mfaChallengeLogin({ failure: { reason: 'recaccount_not_observed' } }),
+  })
+  const challenged = await beginLogin(server)
+
+  const timedOut = await submitMfaCode(server, challenged.json.challenge_id, '000000')
+
+  assert.equal(timedOut.json.error, 'recaccount_not_observed')
+})
+
+test('rec.gov error text after a submitted code is a rejected code and keeps the text', async () => {
+  const server = testServer({
+    credentialLoginFn: mfaChallengeLogin({ failure: { reason: 'login_error', detail: 'The code you entered is incorrect.' } }),
+  })
+  const challenged = await beginLogin(server)
+
+  const rejected = await submitMfaCode(server, challenged.json.challenge_id, '000000')
+
+  assert.equal(rejected.json.error, 'mfa_invalid')
+  assert.equal(rejected.json.detail, 'The code you entered is incorrect.')
+})
+
+test('a prompt still showing after a submitted code is a rejection with a sentence, not a bare reason', async () => {
+  const server = testServer({
+    credentialLoginFn: mfaChallengeLogin({ failure: { reason: 'mfa_required' } }),
+  })
+  const challenged = await beginLogin(server)
+
+  const rejected = await submitMfaCode(server, challenged.json.challenge_id, '000000')
+
+  assert.equal(rejected.json.error, 'mfa_invalid')
+  assert.notEqual(rejected.json.detail, 'mfa_required')
+  assert.match(rejected.json.detail, /mfa_required/)
+})
+
 test('a malformed JSON body never echoes its content back', async () => {
   const server = testServer()
 
@@ -724,7 +774,7 @@ test('an abandoned MFA challenge closes its held page when it expires', async ()
   assert.equal(pool.isBusy(PROFILE_ID), false)
 })
 
-test('a failed login keeps the documented error code and carries the internal reason', async () => {
+test('a failed login names its blocker as the error code and still carries the reason', async () => {
   const response = await request(testServer({
     credentialLoginFn: async () => ({
       state: 'failed',
@@ -740,9 +790,7 @@ test('a failed login keeps the documented error code and carries the internal re
   })
 
   assert.equal(response.status, 401)
-  // The stable code recgovAuthenticationFailure has always produced for an
-  // attempted login — never an internal blocker name.
-  assert.equal(response.json.recgov_auth.error, 'recgov_login_failed')
+  assert.equal(response.json.recgov_auth.error, 'login_link_not_found')
   assert.equal(response.json.recgov_auth.reason, 'login_link_not_found')
   assert.equal(response.json.recgov_auth.detail, 'the login control never appeared')
   assert.ok(response.json.recgov_auth.corrective_action)
@@ -1372,7 +1420,11 @@ function testServer (overrides = {}) {
 
 // A credential login that stops at the 2FA prompt and hands back a resume
 // closure, the way runRecgovProfileLogin does with the page held open.
-function mfaChallengeLogin ({ acceptCode = '123456', resumedCodes = [] } = {}) {
+function mfaChallengeLogin ({
+  acceptCode = '123456',
+  resumedCodes = [],
+  failure = { reason: 'mfa_invalid', detail: 'code rejected' },
+} = {}) {
   return async () => ({
     state: 'mfa_required',
     logged_in: false,
@@ -1380,8 +1432,17 @@ function mfaChallengeLogin ({ acceptCode = '123456', resumedCodes = [] } = {}) {
     resume: async (code) => {
       resumedCodes.push(code)
       if (code === acceptCode) return { state: 'ok', logged_in: true }
-      return { state: 'failed', logged_in: false, reason: 'mfa_invalid', detail: 'code rejected' }
+      return { state: 'failed', logged_in: false, ...failure }
     },
+  })
+}
+
+async function submitMfaCode (server, challengeId, mfaCode) {
+  return request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, challenge_id: challengeId, mfa_code: mfaCode }),
   })
 }
 

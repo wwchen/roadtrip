@@ -2,8 +2,7 @@ package ca.floo.roadtrip.model.availability
 
 /**
  * Provider-agnostic error surface. Adapters translate vendor-specific
- * exceptions (Aspira HTTP 429, rec.gov rate-limit message strings, etc.)
- * into one of these so the route layer maps to HTTP without knowing what
+ * exceptions into one of these so the route layer maps to HTTP without knowing what
  * upstream answered.
  *
  * Anything that doesn't map to a known case gets `Unknown` — the route
@@ -19,6 +18,9 @@ sealed class AvailabilityProviderError(
     message: String? = null,
     cause: Throwable? = null,
 ) : Exception(message ?: code, cause) {
+    val detail: String?
+        get() = cause?.let(::describeThrowable) ?: message?.takeIf { it != code }
+
     /** Upstream told us we're sending too many requests. */
     class RateLimited(
         cause: Throwable? = null,
@@ -45,6 +47,14 @@ sealed class AvailabilityProviderError(
     class UpstreamUnreachable(
         cause: Throwable,
     ) : AvailabilityProviderError("upstream_unreachable", cause = cause)
+
+    class UnreadableResponse(
+        cause: Throwable,
+    ) : AvailabilityProviderError(CODE, describeThrowable(cause), cause) {
+        companion object {
+            const val CODE = "unreadable_response"
+        }
+    }
 
     /**
      * Our own config or catalog data is wrong for this provider — an
@@ -83,10 +93,12 @@ sealed class AvailabilityProviderError(
      */
     class Unknown(
         cause: Throwable,
-    ) : AvailabilityProviderError(CODE, cause = cause) {
+    ) : AvailabilityProviderError(CODE, describeThrowable(cause), cause) {
         companion object {
             /** The wire code, for a caller that has to answer it without a cause in hand. */
             const val CODE = "unknown"
         }
     }
 }
+
+private fun describeThrowable(t: Throwable): String = "${t.javaClass.name}: ${t.message}"

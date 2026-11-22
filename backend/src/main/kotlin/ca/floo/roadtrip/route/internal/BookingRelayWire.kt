@@ -98,7 +98,8 @@ internal fun RelayAnswer<CompanionSessionHealth>.toHealthDto(): BookingRelayHeal
                 CompanionSessionHealth.Active -> BookingRelayHealthDto(BookingRelaySession.ACTIVE)
                 CompanionSessionHealth.NeverLoggedIn -> BookingRelayHealthDto(BookingRelaySession.NEVER_LOGGED_IN)
                 is CompanionSessionHealth.Inactive -> BookingRelayHealthDto(BookingRelaySession.INACTIVE, code = health.code)
-                is CompanionSessionHealth.CheckFailed -> BookingRelayHealthDto(BookingRelaySession.CHECK_FAILED, code = health.code)
+                is CompanionSessionHealth.CheckFailed ->
+                    BookingRelayHealthDto(BookingRelaySession.CHECK_FAILED, code = health.code, detail = health.detail)
                 is CompanionSessionHealth.Unavailable ->
                     BookingRelayHealthDto(
                         BookingRelaySession.UNAVAILABLE,

@@ -4,7 +4,9 @@ import ca.floo.roadtrip.model.domain.AmenityKey
 import ca.floo.roadtrip.model.domain.CampgroundAmenity
 import ca.floo.roadtrip.model.domain.CampgroundMetadata
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.DataProvider
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.okRecords
@@ -78,6 +80,13 @@ class ReserveCaliforniaCampgroundsEtlTest {
                 "Store-convenience" to AmenityKey.CAMP_STORE,
                 "Store - Convenience" to AmenityKey.CAMP_STORE,
                 "Fire Rings" to AmenityKey.FIRES_ALLOWED,
+                "Flush Toilets" to AmenityKey.TOILETS,
+                "Solar Showers" to AmenityKey.SHOWERS,
+                "Convenience Store" to AmenityKey.CAMP_STORE,
+                "Fire Pit" to AmenityKey.FIRES_ALLOWED,
+                "Potable Water" to AmenityKey.WATER,
+                "Water" to AmenityKey.WATER,
+                "Central Water Access" to AmenityKey.WATER,
                 "Museum" to AmenityKey.OTHER,
                 "  rinse SHOWERS " to AmenityKey.SHOWERS,
             )
@@ -120,6 +129,38 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals("690", sourcePayload["_parent_place_id"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun `each unit takes the kind of its own unit type rather than its facility's first`() {
+        val base = catalog()
+        val pineLoop = base.grids.getValue(611L)
+        val units =
+            listOf(
+                pineLoop.units.single(),
+                ReserveCaliforniaUnit(9003L, "PINE 003", CAMPSITE_TYPE, jsonObject("""{"UnitId":9003}""")),
+                ReserveCaliforniaUnit(9004L, "PINE 004", UNLISTED_TYPE, jsonObject("""{"UnitId":9004}""")),
+                ReserveCaliforniaUnit(9005L, "PINE 005", null, jsonObject("""{"UnitId":9005}""")),
+            )
+        val results =
+            ReserveCaliforniaSitesEtl("reservecalifornia-campsites")
+                .transform(base.copy(grids = mapOf(611L to pineLoop.copy(units = units))), transformCtx())
+                .filterIsInstance<TransformResult.Ok<CampsiteUpsertCandidate>>()
+                .toList()
+
+        assertEquals(
+            listOf(
+                Triple(CampsiteKind.TENT, "Tent Site", emptyList()),
+                Triple(CampsiteKind.STANDARD, "Campsite", emptyList()),
+                Triple(
+                    CampsiteKind.OTHER,
+                    null,
+                    listOf("ReserveCalifornia unit type $UNLISTED_TYPE not listed by place 690 facility 611"),
+                ),
+                Triple(CampsiteKind.OTHER, null, listOf("ReserveCalifornia unit has no UnitTypeId")),
+            ),
+            results.map { Triple(it.record.kind, it.record.kindListed, it.warnings) },
+        )
+    }
+
     private fun catalog(): ReserveCaliforniaCatalog =
         ReserveCaliforniaCatalog(
             places =
@@ -131,7 +172,11 @@ class ReserveCaliforniaCampgroundsEtlTest {
                             latitude = 38.954,
                             longitude = -120.094,
                             facilityIds = listOf(611L, 612L),
-                            unitTypeByFacilityId = mapOf(611L to "Tent Site", 612L to "Day Use"),
+                            unitTypeNamesByFacilityId =
+                                mapOf(
+                                    611L to mapOf(TENT_SITE_TYPE to "Tent Site", CAMPSITE_TYPE to "Campsite"),
+                                    612L to mapOf(DAY_USE_TYPE to "Day Use"),
+                                ),
                             imageUrl = "https://cdn.example/emerald.jpg",
                             description = "Lakefront camping.",
                             amenities =
@@ -181,6 +226,7 @@ class ReserveCaliforniaCampgroundsEtlTest {
                                     ReserveCaliforniaUnit(
                                         unitId = 9001L,
                                         name = "PINE 001",
+                                        unitTypeId = TENT_SITE_TYPE,
                                         raw = jsonObject("""{"UnitId":9001,"Name":"PINE 001"}"""),
                                     ),
                                 ),
@@ -195,6 +241,7 @@ class ReserveCaliforniaCampgroundsEtlTest {
                                     ReserveCaliforniaUnit(
                                         unitId = 9002L,
                                         name = "DAY 001",
+                                        unitTypeId = DAY_USE_TYPE,
                                         raw = jsonObject("""{"UnitId":9002,"Name":"DAY 001"}"""),
                                     ),
                                 ),
@@ -207,4 +254,11 @@ class ReserveCaliforniaCampgroundsEtlTest {
 
     private fun transformCtx(): TransformCtx =
         TransformCtx.load(File("build/tmp/reservecalifornia-etl-test-raw"), PoiRegistry.loadResource("poi-registry.yaml"))
+
+    private companion object {
+        const val TENT_SITE_TYPE = 4328L
+        const val CAMPSITE_TYPE = 4303L
+        const val DAY_USE_TYPE = 4304L
+        const val UNLISTED_TYPE = 9999L
+    }
 }

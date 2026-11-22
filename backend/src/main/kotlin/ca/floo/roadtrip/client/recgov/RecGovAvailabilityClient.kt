@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.client.recgov
+import ca.floo.roadtrip.client.AvailabilityPayloadReads
 import ca.floo.roadtrip.support.RecGovException
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -22,19 +22,19 @@ interface RecGovAvailabilityClient : AutoCloseable {
     override fun close() {}
 }
 
+private val recgovPayload = AvailabilityPayloadReads("recgov")
+
 internal fun parseCampsites(body: String): Map<String, Campsite> {
-    val root = Json.parseToJsonElement(body) as? JsonObject ?: return emptyMap()
-    val campsites = root["campsites"] as? JsonObject ?: return emptyMap()
+    val root = recgovPayload.parseObject(body)
+    val campsites = recgovPayload.obj(root["campsites"], "campsites")
     val out = mutableMapOf<String, Campsite>()
     for ((id, element) in campsites) {
-        val obj = element as? JsonObject ?: continue
+        val obj = recgovPayload.obj(element, "campsite $id")
         val avail =
-            (obj["availabilities"] as? JsonObject)
-                ?.mapNotNull { (date, value) ->
-                    val status = (value as? JsonPrimitive)?.contentOrNull() ?: return@mapNotNull null
-                    date to status
-                }?.toMap()
-                ?: emptyMap()
+            recgovPayload
+                .obj(obj["availabilities"], "campsite $id availabilities")
+                .filterValues { it !is JsonNull }
+                .mapValues { (date, value) -> recgovPayload.string(value, "campsite $id availability on $date") }
         val equip =
             (obj["equipment_types"] as? kotlinx.serialization.json.JsonArray)
                 ?.map { (it as JsonPrimitive).content } ?: emptyList()

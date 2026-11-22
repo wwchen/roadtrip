@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import org.slf4j.Logger
+import kotlin.math.abs
 
 /**
  * Merges the declared geometry sources into one normalized-name index.
@@ -21,6 +22,7 @@ object GeometryIndex {
     private const val MAX_LATITUDE = 90.0
     private const val MIN_LONGITUDE = -180.0
     private const val MAX_LONGITUDE = 180.0
+    private const val AMBIGUOUS_SPREAD_DEGREES = 0.2
 
     /**
      * [build], plus the rule every geometry-joining ETL shares: an index with no
@@ -45,8 +47,20 @@ object GeometryIndex {
         for ((slug, source) in sources) {
             val before = byName.size
             val (plottable, dropped) = source.points().partition { it.isOnEarth() }
+            val ambiguous = ambiguousNames(plottable)
             for ((key, point) in byNormalizedName(plottable) { it.name }) {
+                if (key in ambiguous) continue
                 byName.putIfAbsent(key, GeometryPoint(point.latitude, point.longitude, slug))
+            }
+            if (ambiguous.isNotEmpty()) {
+                log.warn(
+                    "{}: geometry input slug={} left {} names unindexed because points sharing them lie more than {} degrees apart: {}",
+                    etlSlug,
+                    slug,
+                    ambiguous.size,
+                    AMBIGUOUS_SPREAD_DEGREES,
+                    ambiguous.entries.joinToString("; ") { (key, names) -> "$key <- $names" },
+                )
             }
             val added = byName.size - before
             log.info(
@@ -85,6 +99,21 @@ object GeometryIndex {
         }
         return byName
     }
+
+    private fun ambiguousNames(points: List<NamedPoint>): Map<String, List<String>> {
+        val byKey = LinkedHashMap<String, MutableList<NamedPoint>>()
+        for (point in points) {
+            val key = normalize(point.name)
+            if (key.isNotEmpty()) byKey.getOrPut(key) { mutableListOf() } += point
+        }
+        return byKey
+            .filterValues { group -> group.any { it.isFarFrom(group.first()) } }
+            .mapValues { (_, group) -> group.map { it.name }.distinct() }
+    }
+
+    private fun NamedPoint.isFarFrom(other: NamedPoint): Boolean =
+        abs(latitude - other.latitude) > AMBIGUOUS_SPREAD_DEGREES ||
+            abs(longitude - other.longitude) > AMBIGUOUS_SPREAD_DEGREES
 
     /**
      * A coordinate the catalog can plot and its JSON codec can encode. `NaN`,

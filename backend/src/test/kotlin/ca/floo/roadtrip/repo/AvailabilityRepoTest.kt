@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.KnownStatus
+import ca.floo.roadtrip.model.availability.opensSiteFor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -193,6 +195,54 @@ class AvailabilityRepoTest : SharedDbTest() {
         assertEquals(2, ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)))
         val current = repo.readCurrent(listOf(campsiteId), listOf(date)).single()
         assertEquals(AvailabilityStatus.AVAILABLE, current.status)
+    }
+
+    @Test
+    fun `a transition carries the status the cell held before it`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t1 = Instant.parse("2026-06-18T10:00:00Z")
+        val t2 = Instant.parse("2026-06-18T10:05:00Z")
+        val first = repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, t1)))
+        val second = repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t2)))
+
+        assertNull(first.single().lastKnown)
+        assertEquals(KnownStatus(AvailabilityStatus.RESERVED, t1), second.single().lastKnown)
+    }
+
+    @Test
+    fun `a transition out of unknown carries the last status the cell was known to hold`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t0 = Instant.parse("2026-06-18T10:00:00Z")
+        listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.UNKNOWN).forEachIndexed { i, status ->
+            repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, status, t0.plusSeconds(i * 60L))))
+        }
+        val back =
+            repo.recordObservations(
+                null,
+                listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t0.plusSeconds(120))),
+            )
+
+        assertEquals(KnownStatus(AvailabilityStatus.AVAILABLE, t0), back.single().lastKnown)
+        assertFalse(back.single().opensSiteFor(watchSince = t0.minusSeconds(60)))
+        assertTrue(back.single().opensSiteFor(watchSince = t0.plusSeconds(90)))
+    }
+
+    @Test
+    fun `a cell never known before it was unknown has no last known status`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t0 = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.UNKNOWN, t0)))
+        val known =
+            repo.recordObservations(
+                null,
+                listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t0.plusSeconds(60))),
+            )
+
+        assertNull(known.single().lastKnown)
+        assertTrue(known.single().opensSiteFor(watchSince = t0.minusSeconds(60)))
     }
 
     @Test

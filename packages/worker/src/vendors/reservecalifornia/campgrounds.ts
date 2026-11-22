@@ -41,12 +41,19 @@ const AMENITY_KEY_BY_HIGHLIGHT: ReadonlyMap<string, AmenityKey> = new Map([
   ['restrooms', AmenityKey.TOILETS],
   ['toilet, accessible', AmenityKey.TOILETS],
   ['comfort station', AmenityKey.TOILETS],
+  ['flush toilets', AmenityKey.TOILETS],
   ['showers', AmenityKey.SHOWERS],
   ['rinse showers', AmenityKey.SHOWERS],
+  ['solar showers', AmenityKey.SHOWERS],
   ['dump station', AmenityKey.DUMP_STATION],
   ['store-convenience', AmenityKey.CAMP_STORE],
   ['store - convenience', AmenityKey.CAMP_STORE],
+  ['convenience store', AmenityKey.CAMP_STORE],
   ['fire rings', AmenityKey.FIRES_ALLOWED],
+  ['fire pit', AmenityKey.FIRES_ALLOWED],
+  ['potable water', AmenityKey.WATER],
+  ['water', AmenityKey.WATER],
+  ['central water access', AmenityKey.WATER],
 ]);
 
 export const ACTIVITY_HINTS: readonly string[] = [
@@ -130,15 +137,19 @@ export function campsiteSourcePayload(
   );
 }
 
-function firstUnitTypeName(facility: JsonObject): string | null {
+function unitTypeNames(facility: JsonObject): Map<bigint, string> {
+  const names = new Map<bigint, string>();
   const unitTypes = fieldOf(facility, 'UnitTypes');
-  if (unitTypes === undefined) return null;
-  for (const entry of documentValues(jsonObjectOf(unitTypes))) {
+  if (unitTypes === undefined) return names;
+  for (const [key, entry] of documentEntries(jsonObjectOf(unitTypes))) {
     if (!isJsonObject(entry)) continue;
+    const unitTypeId = longOrNull(fieldOf(entry, 'UnitTypeId')) ?? kotlinStringToLongOrNull(key);
+    if (unitTypeId === null) continue;
     const name = contentOrNull(fieldOf(entry, 'Name'));
-    if (name !== null) return name;
+    if (name === null) continue;
+    names.set(unitTypeId, name);
   }
-  return null;
+  return names;
 }
 
 function latitudeOrLongitude(selected: JsonObject, key: string): number | null {
@@ -161,14 +172,13 @@ export function parsePlace(payload: JsonObject): ReserveCaliforniaPlace | null {
   const facilitiesElement = fieldOf(selected, 'Facilities');
   const facilities = facilitiesElement === undefined ? {} : jsonObjectOf(facilitiesElement);
   const facilityIds: bigint[] = [];
-  const unitTypes = new Map<bigint, string>();
+  const unitTypes = new Map<bigint, ReadonlyMap<bigint, string>>();
   for (const [key, rawFacility] of documentEntries(facilities)) {
     if (!isJsonObject(rawFacility)) continue;
     const facilityId = longOrNull(fieldOf(rawFacility, 'FacilityId')) ?? kotlinStringToLongOrNull(key);
     if (facilityId === null) continue;
     facilityIds.push(facilityId);
-    const unitTypeName = firstUnitTypeName(rawFacility);
-    if (unitTypeName !== null) unitTypes.set(facilityId, unitTypeName);
+    unitTypes.set(facilityId, unitTypeNames(rawFacility));
   }
   const highlights = parseHighlights(contentOrNull(fieldOf(selected, 'Allhighlights')));
   return {
@@ -177,7 +187,7 @@ export function parsePlace(payload: JsonObject): ReserveCaliforniaPlace | null {
     latitude,
     longitude,
     facilityIds: [...new Set(facilityIds)].sort(compareLongs),
-    unitTypeByFacilityId: unitTypes,
+    unitTypeNamesByFacilityId: unitTypes,
     imageUrl: stringValue(selected, 'ImageUrl'),
     description: stringValue(selected, 'Description'),
     amenities: highlights.filter((label) => !isActivityHighlight(label)),
@@ -204,7 +214,12 @@ function parseUnit(raw: unknown): ReserveCaliforniaUnit | null {
   if (!isJsonObject(raw)) return null;
   const unitId = longOrNull(fieldOf(raw, 'UnitId'));
   if (unitId === null) return null;
-  return { unitId, name: contentOrNull(fieldOf(raw, 'Name')), raw };
+  return {
+    unitId,
+    name: contentOrNull(fieldOf(raw, 'Name')),
+    unitTypeId: longOrNull(fieldOf(raw, 'UnitTypeId')),
+    raw,
+  };
 }
 
 export function parseGrid(payload: JsonObject): ReserveCaliforniaGridCatalog | null {
