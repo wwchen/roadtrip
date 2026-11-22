@@ -73,10 +73,18 @@ def load_source(slug: str) -> LoadedSource:
     raise KeyError(f"data_source slug={slug!r} not in {REGISTRY}")
 
 
+CAPTURE_TS_FORMAT = "%Y-%m-%dT%H-%M-%SZ"
+
+
 def utc_ts() -> str:
     """Filesystem-safe UTC timestamp: 2026-06-07T19-23-44Z."""
     now = dt.datetime.now(dt.timezone.utc)
-    return now.strftime("%Y-%m-%dT%H-%M-%SZ")
+    return now.strftime(CAPTURE_TS_FORMAT)
+
+
+def capture_time(capture: Path) -> dt.datetime:
+    """When a capture was fetched, read from its timestamp name rather than its mtime."""
+    return dt.datetime.strptime(capture.stem, CAPTURE_TS_FORMAT).replace(tzinfo=dt.timezone.utc)
 
 
 def write_envelope(

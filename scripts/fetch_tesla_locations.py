@@ -22,6 +22,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import sys
 import time
@@ -31,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import tesla_client  # noqa: E402
 from _envelope import (  # noqa: E402
     LoadedSource,
+    capture_time,
     err,
     load_source,
     write_envelope,
@@ -80,8 +82,8 @@ def is_fresh(slug: str, max_age_days: int) -> bool:
     cap = latest_capture(slug)
     if cap is None:
         return False
-    age_s = time.time() - cap.stat().st_mtime
-    return age_s < max_age_days * 86400
+    age = dt.datetime.now(dt.timezone.utc) - capture_time(cap)
+    return age < dt.timedelta(days=max_age_days)
 
 
 def na_supercharger_slugs(index_path: Path) -> list[str]:
