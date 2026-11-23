@@ -34,9 +34,9 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@storybook/addon-a11y": "^10.6.6",
-    "@storybook/addon-docs": "^10.6.6",
-    "@storybook/react-vite": "^10.6.6",
+    "@storybook/addon-a11y": "^10.6.8",
+    "@storybook/addon-docs": "^10.6.8",
+    "@storybook/react-vite": "^10.6.8",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.10",
@@ -49,6 +49,6 @@
     "storybook": "^10.5.7",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   }
 }
