@@ -59,7 +59,7 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
   return (
     <>
       <div className={`rt-drawer-backdrop ${entered ? 'rt-drawer-backdrop--open' : ''}`} />
-      <aside
+      <div
         ref={setRoot}
         className={`rt-drawer ${state}`}
         role="dialog"
@@ -71,7 +71,7 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
           <Icon name="close" aria-hidden="true" />
         </button>
         <div className="rt-drawer-content">{children}</div>
-      </aside>
+      </div>
     </>
   );
 }

@@ -342,7 +342,7 @@
 }
 .cg-site-matrix-key-available::before { background: var(--rt-avail); }
 .cg-site-matrix-key-first-come::before { background: var(--rt-warn); }
-.cg-site-matrix-key-reserved::before { background: var(--rt-faint); }
+.cg-site-matrix-key-reserved::before { background: var(--rt-hint); }
 .cg-site-matrix-key-closed::before { background: var(--rt-border-strong); }
 .cg-site-matrix-key-unknown::before { background: var(--rt-muted); }
 .cg-site-matrix-tools {
@@ -413,7 +413,8 @@
 .cg-site-matrix-table tr:last-child td { border-bottom: 0; }
 .cg-site-matrix-table th:last-child,
 .cg-site-matrix-table td:last-child { border-right: 0; }
-.cg-site-matrix-table thead th {
+.cg-site-matrix-table thead th,
+.cg-site-matrix-table thead td {
   position: sticky;
   top: 0;
   z-index: 2;
@@ -992,9 +993,8 @@
   align-items: center;
   justify-content: center;
   /* --rt-success, so "held" reads as a stronger form of the available green
-     rather than as an unrelated colour. --rt-on-accent is the paired
-     foreground role for a filled accent surface. */
-  color: var(--rt-on-accent);
+     rather than as an unrelated colour. */
+  color: var(--rt-ink-on);
   background: var(--rt-success);
 }
 

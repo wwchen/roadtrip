@@ -34,7 +34,7 @@ import kotlin.test.assertTrue
 //       the one surface whose DOM contract was worth preserving, because these
 //       assertions are what proves the rewritten planner behaves;
 //   roles and accessible names for everything React reshaped — the drawer
-//       (`aside.rt-drawer`, `role=dialog`) and the legend (`.rt-legend*`). Where the
+//       (`div.rt-drawer`, `role=dialog`) and the legend (`.rt-legend*`). Where the
 //       vanilla's hooks were ids on hand-built DOM (`#cg-drawer`, `#panel`,
 //       `#cg-agency-legend input[data-cg-agency]`), the port has real roles and
 //       names, so the smoke asks for those rather than pinning class names that only
@@ -70,7 +70,7 @@ class SmokeTest {
      * `--open` is still in the selector because that class lands a frame later, and an
      * assertion that fires mid-animation reads a half-positioned panel.
      */
-    private fun drawerOf(page: Page): Locator = page.locator("aside.rt-drawer.rt-drawer--open[role='dialog']")
+    private fun drawerOf(page: Page): Locator = page.locator("div.rt-drawer.rt-drawer--open[role='dialog']")
 
     /**
      * A legend agency row's clickable control.
