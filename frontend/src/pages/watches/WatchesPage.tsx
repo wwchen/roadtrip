@@ -256,7 +256,7 @@ function WatchesListPage() {
               {`Could not load watches. (${describeError(listError)})`}
             </Banner>
           ) : isPending ? (
-            <Skeleton aria-label="Loading watches" />
+            <Skeleton role="status" aria-label="Loading watches" />
           ) : (
             <WatchTable
               watches={watches}

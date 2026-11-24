@@ -281,7 +281,7 @@
 
 .rt-site-matrix__cell-button.is-held {
   background: var(--rt-success);
-  color: var(--rt-on-accent);
+  color: var(--rt-ink-on);
 }
 
 .rt-site-matrix__cell--closed {

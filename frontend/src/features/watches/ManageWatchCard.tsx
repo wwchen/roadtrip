@@ -107,7 +107,7 @@ export function ManageWatchCard({ link }: ManageWatchCardProps) {
     );
   }
 
-  if (isPending || !watch) return <Skeleton aria-label="Loading alert" />;
+  if (isPending || !watch) return <Skeleton role="status" aria-label="Loading alert" />;
 
   // Mirrors WatchTable: anything not active resumes, so a `done` watch
   // reactivates rather than being pushed sideways into `paused`.

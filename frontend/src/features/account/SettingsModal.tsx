@@ -253,7 +253,7 @@ export function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
 
           <div className="rt-settings-panel">
             {settingsQuery.isPending ? (
-              <Skeleton aria-label="Loading settings" />
+              <Skeleton role="status" aria-label="Loading settings" />
             ) : settingsQuery.isError || !settings ? (
               <Banner status="error">
                 {settingsErrorMessage(settingsQuery.error)}

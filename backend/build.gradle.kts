@@ -19,8 +19,8 @@ buildscript {
     repositories { mavenCentral() }
     dependencies {
         classpath("org.testcontainers:postgresql:1.21.4")
-        classpath("org.flywaydb:flyway-core:13.12.2")
-        classpath("org.flywaydb:flyway-database-postgresql:13.12.2")
+        classpath("org.flywaydb:flyway-core:13.13.0")
+        classpath("org.flywaydb:flyway-database-postgresql:13.13.0")
         classpath("org.postgresql:postgresql:42.7.14")
     }
 }
@@ -30,7 +30,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("io.ktor.plugin") version "3.6.1"
-    id("org.flywaydb.flyway") version "13.12.2"
+    id("org.flywaydb.flyway") version "13.13.0"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("dev.detekt") version "2.0.0-alpha.6"
@@ -132,15 +132,15 @@ repositories {
 val ktorVersion = "3.6.1"
 val jooqVersion = "3.21.10"
 val postgresVersion = "42.7.14"
-val flywayVersion = "13.12.2"
+val flywayVersion = "13.13.0"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2026b.29"
-val resendVersion = "4.30.0"
+val resendVersion = "4.31.0"
 val nimbusJoseVersion = "10.10"
 val junitVersion = "6.1.3"
 val koinVersion = "4.2.2"
-val playwrightVersion = "1.65.0"
+val playwrightVersion = "1.65.1"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
 
@@ -201,7 +201,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.6.7")
+    implementation("ch.qos.logback:logback-classic:1.6.8")
     // JSON log encoder that emits the fully-formatted message (SLF4J {}
     // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
     // which logged the raw pattern + a separate arguments array. 8.x targets

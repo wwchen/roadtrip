@@ -140,7 +140,7 @@ export function RunsTab({ route }: RunsTabProps) {
         {runs.isError ? (
           <Banner status="error">{`Error: ${describeError(runs.error)}`}</Banner>
         ) : runs.isPending ? (
-          <Skeleton aria-label="Loading runs" />
+          <Skeleton role="status" aria-label="Loading runs" />
         ) : (
           <>
             {/* Counts the rows returned, not a `total` — the runs response has no

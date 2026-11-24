@@ -205,7 +205,7 @@ export function PollersTab({ route }: PollersTabProps) {
         {pollers.isError ? (
           <Banner status="error">{`Error: ${describeError(pollers.error)}`}</Banner>
         ) : pollers.isPending ? (
-          <Skeleton aria-label="Loading pollers" />
+          <Skeleton role="status" aria-label="Loading pollers" />
         ) : (
           <>
             {/* The count line shows alongside the empty message, as it did before:
