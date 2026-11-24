@@ -299,6 +299,7 @@
      would pill it. A pill here would read as a status tag rather than the
      type prefix it is. */
   border-radius: 3px;
+  background: color-mix(in srgb, var(--tb-kind-color) 85%, rgb(var(--rt-c-shadow-rgb)));
   color: var(--rt-on-accent);
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -538,7 +539,7 @@
 }
 
 .tb-card-dist {
-  color: var(--rt-map-route);
+  color: var(--rt-brand-text);
   font-weight: 500;
 }
 

@@ -30,9 +30,10 @@ and links as props) with stand-in actions, because Vite cannot load server actio
 anything under `src/server` that reaches the database. `next/link` resolves to the plain
 anchor in `frontend/.storybook/NextLink.tsx`. Storybook builds with the frontend's Vite
 config, where `@/` means `frontend/src`, so anything a story reaches in `apps/web` imports
-by relative path. The global decorator renders every story in
-dark mode; a story for a page that is never dark sets `parameters.colorMode: 'light'`,
-since LDS reads dark mode from an ancestor class the story cannot remove.
+by relative path. The global decorator puts `theme-roadtrip-zion` and `mode-dark` on
+`<html>`, where the page shells and the theme store put them in production, so popovers
+and modals that portal to `<body>` get the same tokens and the same cascade as the app. A
+story for a page that is never dark sets `parameters.colorMode: 'light'`.
 
 Every pull request also gets a Storybook preview: the Vercel project `roadtrip-storybook`,
 beside `roadtrip-web` on the same repository, adds its own row to the comment the Vercel bot

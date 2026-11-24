@@ -41,7 +41,7 @@ html.has-sandbox-chrome {
   font-size: 12px;
   line-height: 1.4;
   background: var(--rt-warn);
-  color: var(--rt-on-accent);
+  color: var(--rt-ink-on);
 }
 
 .sandbox-banner__env {
@@ -51,7 +51,7 @@ html.has-sandbox-chrome {
 
 .sandbox-banner__sha,
 .sandbox-banner a {
-  color: var(--rt-on-accent);
+  color: var(--rt-ink-on);
   text-decoration: underline;
   font-family: var(--rt-mono);
   font-size: 11px;

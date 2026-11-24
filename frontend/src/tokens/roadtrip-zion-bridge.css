@@ -1,5 +1,5 @@
 /* Maps app-owned chrome roles onto the mode-aware Roadtrip Zion theme.
-   Map layers, availability, status and chart roles remain app-owned data
+   Map layers and chart roles remain app-owned data
    semantics in tokens.css. This file loads last so bridge values win.
 
    Signal used to be on that app-owned list and no longer is. It is not that
@@ -34,8 +34,8 @@
 
   /* Text */
   --rt-text: var(--rt-ink);
-  --rt-muted: color-mix(in srgb, var(--rt-ink) 70%, var(--surface-page));
-  --rt-faint: color-mix(in srgb, var(--rt-ink) 50%, var(--surface-page));
+  --rt-muted: color-mix(in srgb, var(--rt-ink) 76%, var(--surface-page));
+  --rt-faint: color-mix(in srgb, var(--rt-ink) 72%, var(--surface-page));
   --rt-hint: color-mix(in srgb, var(--rt-ink) 35%, var(--surface-page));
 
   /* Brand / action */
@@ -56,6 +56,13 @@
   /* Toward the body ink rather than a fixed lighter step, so hover darkens on
      day and lightens on night without a second override. */
   --rt-link-hover: color-mix(in srgb, var(--rt-info-ink) 78%, var(--rt-ink));
+
+  --rt-error: var(--rt-error-ink);
+  --rt-success: var(--rt-success-ink);
+  --rt-warn: var(--rt-warning-ink);
+  --rt-first-come: var(--rt-warning-ink);
+  --rt-stay-few: var(--rt-warning-ink);
+  --rt-stay-open: var(--rt-success-ink);
 
   /* Signal magnitude. tokens.css builds this ramp from --rt-c-overlay-rgb,
      which is fixed white for the app's own dark theme — on Zion's white page
@@ -94,4 +101,7 @@
   /* --c-600 is 5.45:1 on the day page and 3.13:1 on the night one; --c-400
      inverts that to 7.43:1 without leaving the persimmon ramp. */
   --rt-brand-text: var(--c-400);
+  --link: var(--link-dark);
+  --link-hover: var(--link-dark-hover);
+  --link-pressed: var(--link-dark-pressed);
 }
