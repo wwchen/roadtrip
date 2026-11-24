@@ -454,7 +454,7 @@ campsite_data:
     etls:
       - slug: campflare-campsites
         adapter: CampflareCampsitesEtl
-        inputs: [campflare-campsites-export]
+        inputs: [campflare-campsites-export, campflare-campgrounds-export]
 
   - name: Rec.gov Campsites
     etls:

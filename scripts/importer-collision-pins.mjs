@@ -6,7 +6,7 @@ export const COLLISION_PINS = {
   'Campflare Campgrounds': { count: 0, reason: NONE_EXPECTED },
   'Campflare Campsites': {
     count: 40,
-    reason: `40 of 299,904 campsite ids repeat (35 identical to the first, 5 not); ${ARRAY_ORDER}`,
+    reason: `40 of 299,818 campsite ids repeat under one campground (35 identical to the first, 5 not); a site the export lists under several campgrounds of one park keeps only the copy under the campground its loop name names, or the one named only for the park; ${ARRAY_ORDER}`,
   },
   'Rec.gov Campgrounds': { count: 0, reason: NONE_EXPECTED },
   'Rec.gov Campsites': { count: 0, reason: NONE_EXPECTED },

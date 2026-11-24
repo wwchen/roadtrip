@@ -39,6 +39,17 @@ jobs:
           - { name: prove update keys, args: '--prove-update-keys' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Key the LFS cache on the objects this commit points at
+        id: lfs
+        run: echo "key=$(git lfs ls-files --long | sha256sum | cut -c1-64)" >> "$GITHUB_OUTPUT"
+      - name: Cache LFS objects
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .git/lfs
+          key: ${{ runner.os }}-lfs-${{ steps.lfs.outputs.key }}
+          restore-keys: ${{ runner.os }}-lfs-
+      - name: Fetch LFS objects
+        run: git lfs pull
       - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin

@@ -19,6 +19,14 @@ ROOT = Path(__file__).resolve().parent.parent
 # only one of them can use. Paste it here per machine (see .env.example for
 # the DevTools steps). Everything else arrives via `manage.py exec`.
 ENV_LOCAL_PATH = ROOT / ".env.local"
+ENV_QUOTES = ("'", '"')
+
+
+def unquote_env_value(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] in ENV_QUOTES and value[-1] == value[0]:
+        return value[1:-1]
+    return value
 
 
 def load_env():
@@ -29,7 +37,7 @@ def load_env():
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
+        os.environ.setdefault(k.strip(), unquote_env_value(v))
 
 
 def get_tesla_cookies() -> str:
