@@ -8,6 +8,7 @@ import { contentOrNull } from '../../etl/kotlin-json.js';
 import { kotlinTrim, nonBlank } from '../../etl/kotlin-text.js';
 import type { ParseResult, SourceEtl, TransformResult } from '../../etl/source-etl.js';
 import type { CampsiteUpsertCandidate } from '../../model/campsite-candidate.js';
+import { CampflareCampsiteHomes } from './campsite-homes.js';
 import { campflarePhotos } from './fields.js';
 import {
   CAMPSITES_ETL_SLUG,
@@ -53,6 +54,8 @@ const FIELD = {
   description: 'description',
 } as const;
 
+const CAMPSITES_INPUT = 'campflare-campsites-export';
+const CAMPGROUNDS_INPUT = 'campflare-campgrounds-export';
 const COUNT_FIELDS = [FIELD.maxPeople, FIELD.maxCars, FIELD.drivewayLength, FIELD.maxRvLength] as const;
 const EQUIPMENT_NAME_KEY = 'name';
 const MISSING_ID = 'missing id';
@@ -142,8 +145,13 @@ function campsiteRecord(raw: JsonObject): TransformResult<CampsiteUpsertCandidat
 export class CampflareCampsitesEtl implements SourceEtl<JsonObject, CampsiteUpsertCandidate> {
   readonly etlSlug = CAMPSITES_ETL_SLUG;
 
-  parse(inputs: InputBundle): Iterable<ParseResult<JsonObject>> {
-    return jsonObjectResults(inputs.soleEnvelopes(), this.etlSlug);
+  *parse(inputs: InputBundle): Iterable<ParseResult<JsonObject>> {
+    const sites = inputs.envelopes(CAMPSITES_INPUT);
+    const campgrounds = inputs.dataSourceSlugs().includes(CAMPGROUNDS_INPUT) ? inputs.envelopes(CAMPGROUNDS_INPUT) : [];
+    const homes = CampflareCampsiteHomes.resolve(sites, campgrounds);
+    for (const result of jsonObjectResults(sites, this.etlSlug)) {
+      if (!result.ok || homes.keeps(result.dto)) yield result;
+    }
   }
 
   *transform(dto: JsonObject): Iterable<TransformResult<CampsiteUpsertCandidate>> {

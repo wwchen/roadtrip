@@ -170,3 +170,68 @@ describe('the rest of the record', () => {
     expect(record.sourcePayload).toBe(`{"id":"s1","campground_id":"c1","name":"Site 1","driveway_length":25.0,"unmapped":{"a":[1,2.50]}}`);
   });
 });
+
+const CAMPGROUNDS_SLUG = 'campflare-campgrounds-export';
+
+function envelopeFile(name: string, rowsJson: string): string {
+  const file = path.join(dir, name);
+  writeFileSync(
+    file,
+    `{"fetcher":"f","fetcher_version":"1","fetched_at":"t","request":{"url":"u","method":"GET"},` +
+      `"response":{"status":${HTTP_OK}},"payload":${rowsJson}}`,
+  );
+  return file;
+}
+
+function homesOf(sitesJson: string, campgroundsJson: string | null): string[] {
+  const inputs = new Map([[INPUT_SLUG, [parseEnvelope(envelopeFile('sites.json', sitesJson))]]]);
+  if (campgroundsJson !== null) inputs.set(CAMPGROUNDS_SLUG, [parseEnvelope(envelopeFile('campgrounds.json', campgroundsJson))]);
+  const kept: string[] = [];
+  for (const parsed of new CampflareCampsitesEtl().parse(new InputBundle(inputs))) {
+    if (!parsed.ok) throw new Error(parsed.errors.join());
+    kept.push(`${String(parsed.dto['id'])}@${String(parsed.dto['campground_id'])}`);
+  }
+  return kept;
+}
+
+const PARK_CAMPGROUNDS =
+  '[{"id":"shad","name":"Shad Landing Pocomoke River State Park Campground"},' +
+  '{"id":"milburn","name":"Milburn Landing Campground"},' +
+  '{"id":"manor","name":"Manor Cunningham Falls State Park Campground"},' +
+  '{"id":"falls","name":"Cunningham Falls State Park Campground"},' +
+  '{"id":"hollofield","name":"Patapsco Valley State Park Hollofield Campground"},' +
+  '{"id":"hilton","name":"Patapsco Valley Hilton Vally State Park Campground"}]';
+
+describe('a campsite the export lists under several campgrounds', () => {
+  test('keeps the copy under the campground its loop name names', () => {
+    const sites =
+      '[{"id":"a","campground_id":"shad","name":"A","loop_name":"Milburn Landing Nanticoke Loop"},' +
+      '{"id":"b","campground_id":"shad","name":"B","loop_name":"Shad Landing Fox Den Loop"},' +
+      '{"id":"a","campground_id":"milburn","name":"A","loop_name":"Milburn Landing Nanticoke Loop"},' +
+      '{"id":"b","campground_id":"milburn","name":"B","loop_name":"Shad Landing Fox Den Loop"}]';
+    expect(homesOf(sites, PARK_CAMPGROUNDS)).toEqual(['b@shad', 'a@milburn']);
+  });
+
+  test('a loop that names no campground goes to the one named only for the park', () => {
+    const sites =
+      '[{"id":"c","campground_id":"manor","name":"C","loop_name":"Bear Branch Loop"},' +
+      '{"id":"d","campground_id":"manor","name":"D","loop_name":"Manor Camping Area"},' +
+      '{"id":"c","campground_id":"falls","name":"C","loop_name":"Bear Branch Loop"},' +
+      '{"id":"d","campground_id":"falls","name":"D","loop_name":"Manor Camping Area"}]';
+    expect(homesOf(sites, PARK_CAMPGROUNDS)).toEqual(['d@manor', 'c@falls']);
+  });
+
+  test('keeps the first-listed copy when neither rule decides', () => {
+    const sites =
+      '[{"id":"e","campground_id":"hollofield","name":"E","loop_name":"McKeldin Area"},' +
+      '{"id":"e","campground_id":"hilton","name":"E","loop_name":"McKeldin Area"}]';
+    expect(homesOf(sites, PARK_CAMPGROUNDS)).toEqual(['e@hollofield']);
+    expect(homesOf(sites, null)).toEqual(['e@hollofield']);
+  });
+
+  test('repeats under one campground are left for the dedupe', () => {
+    const sites =
+      '[{"id":"f","campground_id":"shad","name":"F"},{"id":"f","campground_id":"shad","name":"F"}]';
+    expect(homesOf(sites, PARK_CAMPGROUNDS)).toEqual(['f@shad', 'f@shad']);
+  });
+});

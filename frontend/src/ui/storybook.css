@@ -1,4 +1,9 @@
+body {
+  font-family: var(--rt-sans);
+}
+
 .rt-storybook-shell {
+  --rt-chrome-top: 0px;
   min-height: 100vh;
   padding: 32px;
   background: var(--rt-bg);
