@@ -47,9 +47,10 @@ stories render from fixtures. Its `ignoreCommand` skips a build when nothing und
 changed since the
 branch's last Storybook deployment (`VERCEL_GIT_PREVIOUS_SHA`, or the previous commit on a
 branch's first push); if git cannot tell, it builds. That fallback is the trailing
-`|| exit 1`: `git diff` exits 128 when the base commit is missing from Vercel's clone (a
-force-pushed branch, or a base deeper than the shallow clone), and Vercel fails a deployment
-whose ignore step exits with anything but 0 or 1. A skipped build keeps the branch's
+`|| exit 1`: `git diff` exits 128 when the base commit is missing from Vercel's clone, as
+after a force-push such as Dependabot's rebase, or in a shallow clone whose history stops short
+of it. Vercel documents only exit 0 (skip) and 1 (build), and it fails the deployment at the
+ignore step on 128. A skipped build keeps the branch's
 earlier preview URL live. Preview deployments sit behind Vercel Authentication, like the
 app's. Its deployments dispatch the same `vercel.deployment.success` event as the app's, so
 `.github/workflows/preview-check.yml` skips any project but `roadtrip-web`.
