@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
-import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
 import { FakeGeolocateControl, FakeMap } from '@/test/fake-map';
@@ -210,10 +209,9 @@ const panel = () => screen.getByText('Layers').parentElement!;
 /**
  * The accessible name of every legend checkbox, in DOM order.
  *
- * Agency rows are LDS `Checkbox`, whose visible label sits inside the same
- * `<label>` as the input, so `textContent` reads it. Overlay rows are `Toggle`,
- * whose label/count are rendered outside the control's own `<label>` — that
- * text reaches assistive tech (and this helper) through `aria-label` instead.
+ * Overlay rows are `Toggle`, whose label/count are rendered outside the
+ * control's own `<label>` — that text reaches assistive tech (and this helper)
+ * through `aria-label` instead.
  */
 const checkboxLabels = () =>
   screen
@@ -614,7 +612,7 @@ describe('the legend', () => {
     expect(screen.getByLabelText(/Planet Fitness \(1\)/)).toBeInTheDocument();
   });
 
-  test('lists the agencies in view, alphabetically, with counts', async () => {
+  test('counts the campgrounds in view on the Campgrounds row, with no agency rows', async () => {
     poiResponses = [
       collection([
         pin(1, 'campground', 'US Forest Service'),
@@ -625,17 +623,9 @@ describe('the legend', () => {
     ];
     await renderMap({ zoom: 8 });
 
-    await waitFor(() => expect(screen.getByLabelText(/BC Parks \(2\)/)).toBeInTheDocument());
-    // DOM order: agencies (under "Places to sleep") come before the "Stops along
-    // the way" overlays now, since the legend groups by purpose rather than
-    // listing Superchargers first.
-    expect(checkboxLabels().filter((label) => label.includes('('))).toEqual([
-      'BC Parks (2)',
-      `${UNCATEGORIZED_AGENCY} (1)`,
-      'US Forest Service (1)',
-      'Superchargers (0)',
-      'Planet Fitness (0)',
-    ]);
+    await waitFor(() => expect(screen.getByLabelText(/Campgrounds \(4\)/)).toBeInTheDocument());
+    expect(checkboxLabels()).toEqual(['Campgrounds (4)', 'Superchargers (0)', 'Planet Fitness (0)', expect.any(String)]);
+    expect(screen.queryByLabelText(/BC Parks/)).not.toBeInTheDocument();
   });
 
   test('unticking an overlay hides its pin and hit layers', async () => {
@@ -650,19 +640,21 @@ describe('the legend', () => {
     expect(instance.layer('pf-points')?.layout.visibility).toBe('visible');
   });
 
-  test('unticking an agency filters the campground layers without refetching', async () => {
-    poiResponses = [collection([pin(1, 'campground', 'BC Parks')])];
+  test('the filter\'s agency pick narrows the campground layers and count without refetching', async () => {
+    poiResponses = [collection([pin(1, 'campground', 'BC Parks'), pin(2, 'campground', 'US Forest Service')])];
     await renderMap({ zoom: 8 });
-    await waitFor(() => expect(screen.getByLabelText(/BC Parks/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(/Campgrounds \(2\)/)).toBeInTheDocument());
     const before = poiRequests().length;
 
     await act(async () => {
-      await userEvent.click(screen.getByLabelText(/BC Parks/));
+      useMapStore.getState().setCampgroundFilterAgencies(['BC Parks']);
     });
 
-    const expected = ['all', ['!', ['in', ['get', 'agency'], ['literal', ['BC Parks']]]]];
+    const expected = ['all', ['any', ['in', ['get', 'agency'], ['literal', ['BC Parks']]]]];
     expect(instance.layer('cg-points')?.filter).toEqual(expected);
     expect(instance.layer('cg-points-hit')?.filter).toEqual(expected);
+    expect(screen.getByLabelText(/Campgrounds \(1\)/)).toBeInTheDocument();
+    expect(useMapStore.getState().viewportCampgrounds).toHaveLength(2);
     expect(poiRequests()).toHaveLength(before);
   });
 
@@ -671,7 +663,7 @@ describe('the legend', () => {
       collection([pin(8101, 'campground', 'BC Parks'), pin(8102, 'campground', 'BC Parks')]),
     ];
     await renderMap({ zoom: 8 });
-    await waitFor(() => expect(screen.getByLabelText(/BC Parks \(2\)/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(/Campgrounds \(2\)/)).toBeInTheDocument());
 
     await act(async () => {
       useMapStore.getState().setCampgroundFilterIds([8101]);
@@ -680,10 +672,10 @@ describe('the legend', () => {
     const expected = ['all', ['in', ['id'], ['literal', [8101]]]];
     expect(instance.layer('cg-points')?.filter).toEqual(expected);
     expect(instance.layer('cg-points-hit')?.filter).toEqual(expected);
-    expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Campgrounds \(1\)/)).toBeInTheDocument();
     // The published pins are the viewport's, not the filter's: the topbar reads
-    // the agency off them to honour the legend's switches, and a set this filter
-    // had already narrowed could not answer for the campground it excluded.
+    // the agency off them for its agency dropdown, and a set this filter had
+    // already narrowed could not count the campground it excluded.
     expect(useMapStore.getState().viewportCampgrounds).toHaveLength(2);
 
     await act(async () => {
@@ -691,7 +683,7 @@ describe('the legend', () => {
     });
 
     expect(instance.layer('cg-points')?.filter).toBeNull();
-    expect(screen.getByLabelText(/BC Parks \(2\)/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Campgrounds \(2\)/)).toBeInTheDocument();
   });
 
   test('collapses to a pop-out button and comes back', async () => {
@@ -822,9 +814,9 @@ describe('route mode', () => {
       trip.setRoute({ type: 'FeatureCollection', features: [] });
     });
 
-    // The agency row waits on the corridor's own request: a 250ms debounce, a round
+    // The count waits on the corridor's own request: a 250ms debounce, a round
     // trip and a re-render, which is past the default 1s budget on a loaded machine.
-    await waitFor(() => expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument(), {
+    await waitFor(() => expect(screen.getByLabelText(/Campgrounds \(1\)/)).toBeInTheDocument(), {
       timeout: 3000,
     });
   });

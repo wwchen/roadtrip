@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Checkbox, Icon, Tag, Toggle } from '@ui';
-import { sortedAgencies } from '@/map/agencies';
+import { Icon, Tag, Toggle } from '@ui';
 import { overlaySpec, type PointOverlaySpec } from '@/map/overlays';
 import { useMapStore } from '@/stores/mapStore';
 import { BasemapPicker } from './BasemapPicker';
@@ -18,8 +17,8 @@ export interface LegendPanelProps {
 }
 
 /**
- * The layers panel: what is on the map, how much of it is in view, and what to
- * filter out.
+ * The layers panel: what is on the map and how much of it is in view. Narrowing
+ * campgrounds by agency is the topbar filter's job, not this panel's.
  *
  * Port of `#panel` from index.html plus the collapse/drawer behaviour from
  * web/app.js's two IIFEs. Everything it filters is applied by `useMapOverlays`;
@@ -57,8 +56,6 @@ export function LegendPanel({ pois }: LegendPanelProps) {
     }
     setCollapsed(true);
   };
-
-  const agencies = sortedAgencies(pois.agencies);
 
   return (
     <>
@@ -109,15 +106,7 @@ export function LegendPanel({ pois }: LegendPanelProps) {
 
         <div className="rt-legend__group">
           <div className="rt-legend__section">Places to sleep</div>
-          <OverlayRow spec={overlaySpec('cg')} />
-          {/* Viewport-scoped: rows come from the campgrounds currently in view, so
-              panning away from a region drops its agencies rather than accumulating
-              every agency ever seen. */}
-          <div className="rt-legend__agencies">
-            {agencies.map((agency) => (
-              <AgencyRow key={agency} agency={agency} count={pois.agencies.get(agency) ?? 0} />
-            ))}
-          </div>
+          <OverlayRow spec={overlaySpec('cg')} count={pois.campgroundsRequested ? pois.counts.cg : undefined} />
         </div>
 
         <div className="rt-legend__group">
@@ -164,32 +153,6 @@ function OverlayRow({ spec, count }: { spec: PointOverlaySpec; count?: number })
 }
 
 /**
- * One managing agency's row.
- *
- * Subscribes per row rather than taking `hidden` as a prop so that ticking one
- * agency re-renders one row, not the whole (potentially 50-row) list.
- */
-function AgencyRow({ agency, count }: { agency: string; count: number }) {
-  const visible = useMapStore((s) => !s.hiddenAgencies.includes(agency));
-  const setAgencyHidden = useMapStore((s) => s.setAgencyHidden);
-
-  return (
-    <Checkbox
-      // No `id`: LDS wraps the input in its own <label>, so the association is
-      // implicit — and an agency name is not a safe source for an element id.
-      checked={visible}
-      onChange={(e) => setAgencyHidden(agency, !e.target.checked)}
-      label={
-        <span className="rt-legend__row-label">
-          <LegendDot colorToken={overlaySpec('cg').legendColorToken} />
-          {agency} <Count value={count} />
-        </span>
-      }
-    />
-  );
-}
-
-/**
  * The colored swatch beside a row.
  *
  * An inline `var()` reference rather than a class per overlay: the color is
@@ -198,9 +161,4 @@ function AgencyRow({ agency, count }: { agency: string; count: number }) {
  */
 function LegendDot({ colorToken }: { colorToken: string }) {
   return <span className="rt-legend__dot" style={{ background: `var(${colorToken})` }} />;
-}
-
-/** A viewport count, in the panel's parenthesised style. */
-function Count({ value }: { value: number }) {
-  return <span className="rt-legend__count">({value.toLocaleString()})</span>;
 }

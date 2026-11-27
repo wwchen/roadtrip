@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { FilterPanel } from './FilterPanel';
 
@@ -22,16 +22,104 @@ const calendar = () => screen.queryByRole('group', { name: /\d{4}$/ });
 /** `useDismiss` attaches its outside-click listener a tick after the calendar opens. */
 const nextTick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
+const AGENCY_COUNTS = new Map([
+  ['National Park Service', 9],
+  ['USDA Forest Service', 21],
+  ['California State Parks', 14],
+]);
+
 const mount = (open = true) =>
-  render(<FilterPanel open={open} onToggle={() => {}} totalInBoundary={17} totalMatching={17} checkableIds={[]} />);
+  render(
+    <FilterPanel
+      open={open}
+      onToggle={() => {}}
+      totalInBoundary={17}
+      totalMatching={17}
+      agencyCounts={AGENCY_COUNTS}
+      checkableIds={[]}
+    />,
+  );
+
+const agencyField = () => screen.getByRole('button', { name: /^Agency/ });
+const agencyMenu = () => screen.getByRole('group', { name: 'Agency' });
 
 describe('FilterPanel', () => {
-  test('closed, it is the pill with its hint', () => {
+  test('closed, it is the Filter pill and the count in view', () => {
     mount(false);
 
-    expect(screen.getByRole('button', { name: /Filter campgrounds/ })).toBeInTheDocument();
-    expect(screen.getByText('Then check dates')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filter' })).toHaveTextContent('Filter');
+    expect(screen.getByText('17 in view')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
     expect(screen.queryByRole('radiogroup', { name: 'Site type' })).toBeNull();
+  });
+
+  test('an active filter shows on the pill, its name, and a Clear beside the count', () => {
+    filters().toggleAgency('National Park Service');
+    filters().setSiteType('tent');
+    mount(false);
+
+    expect(screen.getByRole('button', { name: 'Filter, 2 active' })).toHaveTextContent('Filter2');
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
+  });
+
+  test('Clear empties the catalog filters and the agency pick, and keeps the dates', () => {
+    filters().toggleAgency('National Park Service');
+    filters().toggleAmenity('water');
+    filters().setDateWindow({ start: '2026-10-16', end: '2026-10-19' });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(filters().agencies).toEqual([]);
+    expect(filters().amenities).toEqual([]);
+    expect(filters().dateWindow).toEqual({ start: '2026-10-16', end: '2026-10-19' });
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument();
+  });
+
+  test('the agency field reads All agencies, and lists agencies by count under the All row', () => {
+    mount();
+
+    expect(agencyField()).toHaveAccessibleName('Agency All agencies');
+    fireEvent.click(agencyField());
+
+    const rows = within(agencyMenu())
+      .getAllByRole('checkbox')
+      .map((box) => box.closest('label')?.textContent);
+    expect(rows).toEqual(['All agencies', 'USDA Forest Service', 'California State Parks', 'National Park Service']);
+    expect(within(agencyMenu()).getByText('21')).toBeInTheDocument();
+  });
+
+  test('picking agencies shows only those: the store, the field and the pill all follow', () => {
+    mount();
+    fireEvent.click(agencyField());
+
+    fireEvent.click(within(agencyMenu()).getByLabelText('National Park Service'));
+    fireEvent.click(within(agencyMenu()).getByLabelText('USDA Forest Service'));
+
+    expect(filters().agencies).toEqual(['National Park Service', 'USDA Forest Service']);
+    expect(agencyField()).toHaveAccessibleName('Agency USDA Forest Service +1');
+    expect(screen.getByRole('button', { name: 'Filter, 1 active' })).toBeInTheDocument();
+  });
+
+  test('a picked agency that has left the view stays listed at zero, so it can be unticked', () => {
+    filters().toggleAgency('BC Parks');
+    mount();
+    fireEvent.click(agencyField());
+
+    const gone = within(agencyMenu()).getByLabelText('BC Parks');
+    expect(gone).toBeChecked();
+    fireEvent.click(gone);
+
+    expect(filters().agencies).toEqual([]);
+  });
+
+  test('every control carries a visible label', () => {
+    mount();
+
+    for (const label of ['Agency', 'Site type', 'Group size', 'Amenities', 'Start date', 'End date']) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByRole('group', { name: 'Amenities' })).toBeInTheDocument();
   });
 
   test('open, the site type control writes the store', () => {
@@ -42,18 +130,16 @@ describe('FilterPanel', () => {
     expect(filters().siteType).toBe('tent');
   });
 
-  test('the stepper turns the group filter on at the minimum and off again below it', () => {
+  test('the stepper reads Any when off, turns on at the minimum, and goes back to Any below it', () => {
     mount();
 
+    expect(screen.getByRole('group', { name: 'Group size' })).toHaveTextContent('Any');
+
+    fireEvent.click(screen.getByRole('button', { name: 'More people' }));
+    expect(filters().groupSize).toBe(2);
     expect(screen.getByRole('group', { name: 'Group size' })).toHaveTextContent('2');
 
     fireEvent.click(screen.getByRole('button', { name: 'More people' }));
-    expect(filters().groupSize).toBe(3);
-
-    fireEvent.click(screen.getByRole('button', { name: 'More people' }));
-    expect(filters().groupSize).toBe(4);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Fewer people' }));
     expect(filters().groupSize).toBe(3);
 
     fireEvent.click(screen.getByRole('button', { name: 'Fewer people' }));
@@ -61,6 +147,7 @@ describe('FilterPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Fewer people' }));
     expect(filters().groupSize).toBeNull();
+    expect(screen.getByRole('group', { name: 'Group size' })).toHaveTextContent('Any');
   });
 
   test('amenity chips toggle', () => {
@@ -75,7 +162,16 @@ describe('FilterPanel', () => {
 
   test('the head reports matches against the view once a filter is active', () => {
     filters().setSiteType('tent');
-    render(<FilterPanel open onToggle={() => {}} totalInBoundary={17} totalMatching={9} checkableIds={[]} />);
+    render(
+      <FilterPanel
+        open
+        onToggle={() => {}}
+        totalInBoundary={17}
+        totalMatching={9}
+        agencyCounts={AGENCY_COUNTS}
+        checkableIds={[]}
+      />,
+    );
 
     expect(screen.getByText('9 of 17 in view')).toBeInTheDocument();
   });

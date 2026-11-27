@@ -15,6 +15,7 @@ import { usePoiDetail } from '@/queries/poi-detail';
 import { geomCenter, hasCoordinates } from '@/lib/geo';
 import { featureAgency } from '@/map/agencies';
 import { overlayForCategory } from '@/map/overlays';
+import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { useMapContext } from './MapProvider';
 
@@ -38,7 +39,7 @@ export function useDeepLinkedPoi(): void {
   const { map, styleEpoch } = useMapContext();
   const selectPoi = useMapStore((s) => s.selectPoi);
   const setOverlayHidden = useMapStore((s) => s.setOverlayHidden);
-  const setAgencyHidden = useMapStore((s) => s.setAgencyHidden);
+  const includeAgency = useCampgroundFilterStore((s) => s.includeAgency);
 
   // Captured on the first render, before anything can rewrite the URL: the drawer
   // itself calls `showPoiInUrl`, so reading `window.location` later would be reading
@@ -74,16 +75,16 @@ export function useDeepLinkedPoi(): void {
     if (!hasCoordinates(geometry) || !Number.isFinite(lng) || !Number.isFinite(lat)) return;
     restored.current = true;
 
-    // A shared campground filters by agency rather than by layer, so un-hiding the
-    // overlay alone would still leave it filtered out of the source.
+    // A shared campground can also be held back by the filter's agency pick, so
+    // un-hiding the overlay alone could still leave it filtered out of the source.
     const overlay = overlayForCategory(properties.category);
     if (overlay) setOverlayHidden(overlay.key, false);
-    if (properties.category === 'campground') setAgencyHidden(featureAgency(data), false);
+    if (properties.category === 'campground') includeAgency(featureAgency(data));
 
     map.flyTo({
       center: [lng, lat],
       zoom: SHARED_POINT_ZOOM,
       speed: SHARED_FLY_SPEED,
     });
-  }, [data, map, styleEpoch, setOverlayHidden, setAgencyHidden]);
+  }, [data, map, styleEpoch, setOverlayHidden, includeAgency]);
 }

@@ -64,15 +64,16 @@ beforeEach(() => {
   useStayCheckStore.setState({ retryAt: null });
   stayBodies = [];
   stayStream = () => json({}, 404);
-  // `hiddenAgencies`/`hiddenOverlays` too: the legend's state is app-wide, and the
-  // results-list tests below hide agencies that would otherwise leak into the next test.
+  // `hiddenOverlays` and the published filter too: map state is app-wide, and the
+  // results-list tests below change it in ways that would otherwise leak into the next test.
   useMapStore.setState({
     userLocation: null,
     viewport: null,
     selectedPoiId: null,
     selectedRegion: null,
-    hiddenAgencies: [],
     hiddenOverlays: [],
+    campgroundFilterIds: null,
+    campgroundFilterAgencies: [],
     viewportCampgrounds: [],
     campgroundsRequested: false,
   });
@@ -878,18 +879,19 @@ describe('the results list', () => {
     expect(screen.getAllByText(/km in$/).length).toBe(2);
   });
 
-  test('counts the list, and says how many are filtered out', async () => {
+  test('counts the list, and an agency pick does not narrow a route', async () => {
     withCorridor();
     mount();
     await waitFor(() => expect(screen.getByText('Denny Creek')).toBeInTheDocument());
     expect(screen.getByText('· 2')).toBeInTheDocument();
 
     await act(async () => {
-      useMapStore.getState().setAgencyHidden('USFS', true);
+      useCampgroundFilterStore.getState().toggleAgency('BC Parks');
     });
 
-    expect(screen.getByText('· 1 of 2')).toBeInTheDocument();
-    expect(screen.queryByText('Denny Creek')).toBeNull();
+    expect(screen.getByText('· 2')).toBeInTheDocument();
+    expect(screen.getByText('Denny Creek')).toBeInTheDocument();
+    expect(useMapStore.getState().campgroundFilterAgencies).toEqual([]);
   });
 
   test('says so when the legend has hidden everything', async () => {
@@ -995,7 +997,7 @@ describe('the in-view list', () => {
     mount();
     await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
 
     await waitFor(() => expect(screen.getByText('132 tent sites · 206 total')).toBeInTheDocument());
@@ -1010,7 +1012,7 @@ describe('the in-view list', () => {
     await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
     expect(useMapStore.getState().campgroundFilterIds).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
 
     await waitFor(() =>
@@ -1027,7 +1029,7 @@ describe('the in-view list', () => {
     mount();
     await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
     await waitFor(() => expect(useMapStore.getState().campgroundFilterIds).not.toBeNull());
 
@@ -1084,7 +1086,7 @@ describe('the in-view list', () => {
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
 
-      fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+      fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
       fireEvent.click(screen.getByRole('button', { name: 'Start date, not set' }));
       fireEvent.click(screen.getByRole('button', { name: 'Friday, September 11, 2026' }));
       fireEvent.click(screen.getByRole('button', { name: 'Sunday, September 13, 2026' }));
@@ -1106,7 +1108,7 @@ describe('the in-view list', () => {
     afterEach(() => vi.useRealTimers());
 
     const pickStay = () => {
-      fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+      fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
       fireEvent.click(screen.getByRole('button', { name: 'Start date, not set' }));
       fireEvent.click(screen.getByRole('button', { name: 'Friday, September 11, 2026' }));
       fireEvent.click(screen.getByRole('button', { name: 'Sunday, September 13, 2026' }));
@@ -1434,22 +1436,22 @@ describe('the in-view list', () => {
     expect(screen.queryByText('Campgrounds in view')).toBeNull();
   });
 
-  test('hiding an agency removes its cards and updates the checkable count', async () => {
+  test('picking an agency keeps only its cards and updates the checkable count', async () => {
     withViewport();
     mount();
     await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
     expect(screen.getByText('Zephyr Cove')).toBeInTheDocument();
 
     act(() => {
-      useMapStore.setState({ hiddenAgencies: ['Private'] });
+      useCampgroundFilterStore.getState().toggleAgency('USFS');
     });
 
     expect(screen.getByText('· 1 of 2 · 1 checkable online')).toBeInTheDocument();
     expect(screen.queryByText('Zephyr Cove')).toBeNull();
   });
 
-  test('a switched-off agency is dropped before the card cap, not after', async () => {
-    // The reported shape: a view a switched-off agency dominates. The search
+  test('an unpicked agency is dropped before the card cap, not after', async () => {
+    // The reported shape: a view an unpicked agency dominates. The search
     // answers for every agency, so narrowing only the hydrated 50 would leave a
     // list of two showing none.
     const campgroundPin = (id: number, agency: string): PinFeature => ({
@@ -1469,8 +1471,8 @@ describe('the in-view list', () => {
       truncated: false,
     };
     withViewport();
+    useCampgroundFilterStore.setState({ agencies: ['Private'] });
     useMapStore.setState({
-      hiddenAgencies: ['USFS'],
       viewportCampgrounds: [
         ...forestIds.map((id) => campgroundPin(id, 'USFS')),
         campgroundPin(21, 'USFS'),
@@ -1481,15 +1483,15 @@ describe('the in-view list', () => {
 
     await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
     expect(screen.queryByText('Forest 100')).toBeNull();
-    // One row, and the count is against what the legend leaves visible — not the
+    // One row, and the count is against what the agency pick keeps — not the
     // 52 the search matched.
     expect(screen.getByText('· 1 · 0 checkable online')).toBeInTheDocument();
   });
 
-  test('the filter block counts what the legend leaves visible', async () => {
+  test('the filter block counts the agency pick against everything in view, and publishes the pick', async () => {
     withViewport();
+    useCampgroundFilterStore.setState({ agencies: ['USFS'] });
     useMapStore.setState({
-      hiddenAgencies: ['Private'],
       viewportCampgrounds: [
         {
           type: 'Feature',
@@ -1508,18 +1510,19 @@ describe('the in-view list', () => {
     mount();
     await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
-
-    // One of the two is switched off, so the block says 1 rather than the
-    // search's agency-blind 2 — the same number the head shows.
-    expect(screen.getByText('1 in view')).toBeInTheDocument();
+    // One of the two is the picked agency's, so the block says 1 of the 2 in
+    // view — the same 1 the head shows.
+    expect(screen.getByRole('button', { name: 'Filter, 1 active' })).toBeInTheDocument();
+    expect(screen.getByText('1 of 2 in view')).toBeInTheDocument();
     expect(screen.getByText('· 1 · 1 checkable online')).toBeInTheDocument();
+    await waitFor(() => expect(useMapStore.getState().campgroundFilterAgencies).toEqual(['USFS']));
+    expect(useMapStore.getState().campgroundFilterIds).toBeNull();
   });
 
-  test('switching every agency off says so, rather than that the view is empty', async () => {
+  test('a pick with no campground in view says so, rather than that the view is empty', async () => {
     withViewport();
+    useCampgroundFilterStore.setState({ agencies: ['BC Parks'] });
     useMapStore.setState({
-      hiddenAgencies: ['USFS', 'Private'],
       viewportCampgrounds: [
         {
           type: 'Feature',
@@ -1539,13 +1542,13 @@ describe('the in-view list', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText('All campgrounds hidden — re-enable a category in the legend.'),
+        screen.getByText('None of the agencies you picked have campgrounds in view.'),
       ).toBeInTheDocument(),
     );
     expect(screen.queryByText('No campgrounds in view — pan or zoom out to find some.')).toBeNull();
 
     // With the whole layer off too, the card with the switch wins: it is more
-    // use than a sentence naming the legend.
+    // use than a sentence naming the pick.
     await act(async () => {
       useMapStore.getState().setOverlayHidden('cg', true);
     });
