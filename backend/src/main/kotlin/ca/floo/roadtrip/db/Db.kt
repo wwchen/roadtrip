@@ -10,6 +10,8 @@ import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import javax.sql.DataSource
 
+const val UTC_SESSION_INIT_SQL = "SET TIME ZONE 'UTC'"
+
 // One pool shape for the importer and the Ktor server. Pool size and
 // connection-acquisition timeout come from [DbConfig] rather than literals
 // here: they are the two knobs a deployment actually retunes, and
@@ -28,6 +30,7 @@ fun dataSourceFor(cfg: DbConfig): HikariDataSource {
             // simple INSERT/UPDATE flows — explicit transactions wrap the
             // mark-and-sweep critical path.
             isAutoCommit = true
+            connectionInitSql = UTC_SESSION_INIT_SQL
         }
     return HikariDataSource(hk)
 }
