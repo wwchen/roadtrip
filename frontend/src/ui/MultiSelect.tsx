@@ -1,5 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
 import { Checkbox, Icon, TextField } from '@lew-ds/lds-react';
 import { useDismiss } from '@/lib/use-dismiss';
 import './multi-select.css';
@@ -7,6 +6,7 @@ import './multi-select.css';
 export const MULTI_SELECT_SEARCH_THRESHOLD = 10;
 const MENU_GAP_PX = 4;
 const MENU_MIN_WIDTH_PX = 260;
+const VIEWPORT_MARGIN_PX = 8;
 
 export interface MultiSelectOption {
   value: string;
@@ -22,10 +22,10 @@ export interface MultiSelectProps {
   onToggle: (value: string) => void;
   onClear: () => void;
   allLabel: string;
-  allCount?: number;
   triggerText: string;
   searchLabel: string;
   noMatchText: string;
+  emptyText: string;
   defaultOpen?: boolean;
 }
 
@@ -33,6 +33,7 @@ interface MenuPosition {
   top: number;
   left: number;
   width: number;
+  maxHeight: number;
 }
 
 function useAnchoredPosition(anchor: HTMLElement | null, open: boolean): MenuPosition | null {
@@ -41,7 +42,13 @@ function useAnchoredPosition(anchor: HTMLElement | null, open: boolean): MenuPos
     if (!open || !anchor) return;
     const measure = () => {
       const rect = anchor.getBoundingClientRect();
-      setPosition({ top: rect.bottom + MENU_GAP_PX, left: rect.left, width: Math.max(rect.width, MENU_MIN_WIDTH_PX) });
+      const top = rect.bottom + MENU_GAP_PX;
+      setPosition({
+        top,
+        left: rect.left,
+        width: Math.max(rect.width, MENU_MIN_WIDTH_PX),
+        maxHeight: window.innerHeight - top - VIEWPORT_MARGIN_PX,
+      });
     };
     measure();
     window.addEventListener('resize', measure);
@@ -62,21 +69,22 @@ export function MultiSelect({
   onToggle,
   onClear,
   allLabel,
-  allCount,
   triggerText,
   searchLabel,
   noMatchText,
+  emptyText,
   defaultOpen = false,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState('');
   const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const fieldRef = useRef<HTMLDivElement | null>(null);
   const position = useAnchoredPosition(trigger, open);
   const close = useCallback(() => setOpen(false), []);
 
   const labelId = `${id}-label`;
   const valueId = `${id}-value`;
+  const menuId = `${id}-menu`;
   const picked = new Set(selected);
   const needle = query.trim().toLowerCase();
   const rows = needle ? options.filter((option) => option.label.toLowerCase().includes(needle)) : options;
@@ -89,8 +97,14 @@ export function MultiSelect({
     trigger?.focus();
   };
 
+  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget as Node | null;
+    if (next && fieldRef.current?.contains(next)) return;
+    if (next) setOpen(false);
+  };
+
   return (
-    <div className="rt-field" onKeyDown={onKeyDown}>
+    <div className="rt-field" ref={fieldRef} onKeyDown={onKeyDown} onBlur={onBlur}>
       <span className="rt-field__label" id={labelId}>
         {label}
       </span>
@@ -100,8 +114,8 @@ export function MultiSelect({
         type="button"
         className={open ? 'rt-field-box rt-field-box--open' : 'rt-field-box'}
         aria-labelledby={`${labelId} ${valueId}`}
-        aria-haspopup="true"
         aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((current) => !current)}
       >
         <span
@@ -112,35 +126,33 @@ export function MultiSelect({
         </span>
         <Icon name={open ? 'chevron-up' : 'chevron-down'} aria-hidden="true" />
       </button>
-      {open
-        ? createPortal(
-            <MultiSelectMenu
-              menuRef={menuRef}
-              label={label}
-              position={position}
-              onDismiss={close}
-              searchable={searchable}
-              searchLabel={searchLabel}
-              query={query}
-              onQuery={setQuery}
-              allLabel={allLabel}
-              allCount={allCount}
-              noneSelected={selected.length === 0}
-              onClear={onClear}
-              rows={rows}
-              picked={picked}
-              onToggle={onToggle}
-              noMatchText={noMatchText}
-            />,
-            document.body,
-          )
-        : null}
+      {open ? (
+        <MultiSelectMenu
+          id={menuId}
+          fieldRef={fieldRef}
+          label={label}
+          position={position}
+          onDismiss={close}
+          searchable={searchable}
+          searchLabel={searchLabel}
+          query={query}
+          onQuery={setQuery}
+          allLabel={allLabel}
+          noneSelected={selected.length === 0}
+          onClear={onClear}
+          rows={rows}
+          picked={picked}
+          onToggle={onToggle}
+          emptyText={needle ? noMatchText : emptyText}
+        />
+      ) : null}
     </div>
   );
 }
 
 interface MultiSelectMenuProps {
-  menuRef: RefObject<HTMLDivElement | null>;
+  id: string;
+  fieldRef: RefObject<HTMLDivElement | null>;
   label: string;
   position: MenuPosition | null;
   onDismiss: () => void;
@@ -149,17 +161,17 @@ interface MultiSelectMenuProps {
   query: string;
   onQuery: (query: string) => void;
   allLabel: string;
-  allCount?: number;
   noneSelected: boolean;
   onClear: () => void;
   rows: readonly MultiSelectOption[];
   picked: ReadonlySet<string>;
   onToggle: (value: string) => void;
-  noMatchText: string;
+  emptyText: string;
 }
 
 function MultiSelectMenu({
-  menuRef,
+  id,
+  fieldRef,
   label,
   position,
   onDismiss,
@@ -168,24 +180,17 @@ function MultiSelectMenu({
   query,
   onQuery,
   allLabel,
-  allCount,
   noneSelected,
   onClear,
   rows,
   picked,
   onToggle,
-  noMatchText,
+  emptyText,
 }: MultiSelectMenuProps) {
-  useDismiss(menuRef, onDismiss);
+  useDismiss(fieldRef, onDismiss);
 
   return (
-    <div
-      ref={menuRef}
-      className="lds-menu rt-multi-select__menu"
-      role="group"
-      aria-label={label}
-      style={position ?? undefined}
-    >
+    <div id={id} className="lds-menu rt-multi-select__menu" role="group" aria-label={label} style={position ?? undefined}>
       {searchable ? (
         <div className="rt-multi-select__search">
           <TextField
@@ -199,7 +204,6 @@ function MultiSelectMenu({
       ) : null}
       <div className="rt-multi-select__row rt-multi-select__row--all">
         <Checkbox checked={noneSelected} onChange={onClear} label={allLabel} />
-        {allCount != null ? <span className="rt-multi-select__count">{allCount.toLocaleString()}</span> : null}
       </div>
       <hr className="lds-menu__separator" />
       <div className="rt-multi-select__list">
@@ -211,7 +215,7 @@ function MultiSelectMenu({
             ) : null}
           </div>
         ))}
-        {rows.length === 0 ? <div className="rt-multi-select__empty">{noMatchText}</div> : null}
+        {rows.length === 0 ? <div className="rt-multi-select__empty">{emptyText}</div> : null}
       </div>
     </div>
   );

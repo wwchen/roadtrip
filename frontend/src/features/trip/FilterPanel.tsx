@@ -54,8 +54,6 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, ag
   const agencyRows = agenciesByCount(agencyCounts, agencies);
   const firstPicked = agencyRows.find((row) => agencies.includes(row.agency))?.agency;
   const agencyText = firstPicked ? filterCopy.agencyPick(firstPicked, agencies.length) : filterCopy.allAgencies;
-  let allCount = 0;
-  for (const value of agencyCounts.values()) allCount += value;
 
   return (
     <div className="tb-filters" id="tb-filters">
@@ -76,9 +74,7 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, ag
             </span>
           ) : null}
         </Button>
-        <span className="tb-filters-count" aria-live="polite">
-          {count}
-        </span>
+        <span className="tb-filters-count">{count}</span>
         {activeCount > 0 ? (
           <LinkButton className="tb-filters-clear" aria-label={filterCopy.clearFilters} onClick={clearFilters}>
             {filterCopy.clear}
@@ -96,10 +92,10 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, ag
             onToggle={toggleAgency}
             onClear={clearAgencies}
             allLabel={filterCopy.allAgencies}
-            allCount={allCount}
             triggerText={agencyText}
             searchLabel={filterCopy.findAgency}
             noMatchText={filterCopy.noAgencyMatch}
+            emptyText={filterCopy.noAgenciesInView}
           />
           <div className="tb-filters-grid">
             <div className="rt-field">

@@ -24,10 +24,10 @@ function renderSelect(props: Partial<MultiSelectProps> = {}) {
       options={OPTIONS}
       selected={[]}
       allLabel="All agencies"
-      allCount={44}
       triggerText="All agencies"
       searchLabel="Find an agency"
       noMatchText="No agency matches"
+      emptyText="Nothing in view yet"
       {...handlers}
       {...props}
     />,
@@ -55,7 +55,6 @@ describe('MultiSelect', () => {
     const rows = within(menu()).getAllByRole('checkbox').map((box) => box.closest('label')?.textContent);
     expect(rows).toEqual(['All agencies', 'Alpha', 'Bravo', 'Charlie']);
     expect(within(menu()).getByText('21')).toBeInTheDocument();
-    expect(within(menu()).getByText('44')).toBeInTheDocument();
   });
 
   test('ticking an option reports it', async () => {
@@ -103,6 +102,46 @@ describe('MultiSelect', () => {
     await userEvent.type(screen.getByRole('textbox', { name: 'Find an agency' }), 'zzz');
 
     expect(within(menu()).getByText('No agency matches')).toBeInTheDocument();
+  });
+
+  test('with no options and no search, it says nothing is in view rather than that a search missed', async () => {
+    renderSelect({ options: [] });
+    await userEvent.click(trigger());
+
+    expect(within(menu()).getByText('Nothing in view yet')).toBeInTheDocument();
+    expect(within(menu()).queryByText('No agency matches')).toBeNull();
+  });
+
+  test('the menu follows its trigger in tab order, and tabbing out of it closes it', async () => {
+    render(
+      <>
+        <MultiSelect
+          id="agency"
+          label="Agency"
+          options={OPTIONS}
+          selected={[]}
+          onToggle={vi.fn()}
+          onClear={vi.fn()}
+          allLabel="All agencies"
+          triggerText="All agencies"
+          searchLabel="Find an agency"
+          noMatchText="No agency matches"
+          emptyText="Nothing in view yet"
+        />
+        <button type="button">Next field</button>
+      </>,
+    );
+    trigger().focus();
+    await userEvent.keyboard('{Enter}');
+
+    await userEvent.tab();
+    expect(within(menu()).getByLabelText('All agencies')).toHaveFocus();
+
+    for (let i = 0; i < OPTIONS.length; i += 1) await userEvent.tab();
+    await userEvent.tab();
+
+    expect(screen.getByRole('button', { name: 'Next field' })).toHaveFocus();
+    expect(screen.queryByRole('group', { name: 'Agency' })).not.toBeInTheDocument();
   });
 
   test('Escape closes the menu and puts focus back on the trigger', async () => {

@@ -5,7 +5,7 @@
 // placeholder and gains its name, type and region when `GET /api/pois/{id}` lands.
 // Sorting, filtering and copy all have to work on both.
 import { distanceKm } from '@/lib/geo';
-import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
+import { agencyName } from '@/map/agencies';
 import type { TripStop } from '@/stores/tripStore';
 import { distanceAlongRouteKm, type RouteIndex } from './route-index';
 
@@ -150,5 +150,5 @@ export function visibleCards<T extends TripCard>(
   if (campgroundsHidden) return [];
   if (agencies.length === 0) return [...cards];
   const keep = new Set(agencies);
-  return cards.filter((card) => keep.has(card.agency || UNCATEGORIZED_AGENCY));
+  return cards.filter((card) => keep.has(agencyName(card.agency)));
 }

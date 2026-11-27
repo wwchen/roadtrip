@@ -89,15 +89,15 @@ interface MultiSelectProps {
   onToggle: (value: string) => void;
   onClear: () => void;
   allLabel: string;
-  allCount?: number;
   triggerText: string;
   searchLabel: string;
   noMatchText: string;
+  emptyText: string;
   defaultOpen?: boolean;
 }
 ```
 
-The trigger is an `.rt-field-box` button with `aria-expanded`, and the menu is portalled to `document.body`. Pointer-down outside the menu or Escape closes it, and Escape returns focus to the trigger.
+The trigger is an `.rt-field-box` button with `aria-expanded` and `aria-controls`. The menu renders right after it with fixed positioning. A click outside, Escape, or focus leaving the field closes it, and Escape returns focus to the trigger.
 
 - [ ] Tests:
   - Clicking the trigger opens the menu, and clicking an option calls `onToggle('B')`.

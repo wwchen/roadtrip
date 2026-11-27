@@ -76,7 +76,7 @@ describe('FilterPanel', () => {
     expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument();
   });
 
-  test('the agency field reads All agencies, and lists agencies by count with the total first', () => {
+  test('the agency field reads All agencies, and lists agencies by count under the All row', () => {
     mount();
 
     expect(agencyField()).toHaveAccessibleName('Agency All agencies');
@@ -86,7 +86,7 @@ describe('FilterPanel', () => {
       .getAllByRole('checkbox')
       .map((box) => box.closest('label')?.textContent);
     expect(rows).toEqual(['All agencies', 'USDA Forest Service', 'California State Parks', 'National Park Service']);
-    expect(within(agencyMenu()).getByText('44')).toBeInTheDocument();
+    expect(within(agencyMenu()).getByText('21')).toBeInTheDocument();
   });
 
   test('picking agencies shows only those: the store, the field and the pill all follow', () => {

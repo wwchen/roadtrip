@@ -212,4 +212,12 @@ describe('visibleCards', () => {
   test('shows nothing when campgrounds are off entirely', () => {
     expect(visibleCards(cards, { agencies: [], campgroundsHidden: true })).toEqual([]);
   });
+
+  test('reads a card agency the way a pin reads it, trimmed, so a picked pin agency keeps its card', () => {
+    const padded = [card({ id: 3, agency: '  BC Parks ' }), card({ id: 4, agency: '   ' })];
+    expect(visibleCards(padded, { agencies: ['BC Parks'], campgroundsHidden: false }).map((c) => c.id)).toEqual([3]);
+    expect(visibleCards(padded, { agencies: ['Uncategorized'], campgroundsHidden: false }).map((c) => c.id)).toEqual([
+      4,
+    ]);
+  });
 });

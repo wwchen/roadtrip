@@ -31,10 +31,10 @@ function Demo({ options, initial = [] }: { options: MultiSelectOption[]; initial
         onToggle={toggle}
         onClear={() => setSelected([])}
         allLabel="All"
-        allCount={options.reduce((total, option) => total + (option.count ?? 0), 0)}
         triggerText={triggerText}
         searchLabel="Find an option"
         noMatchText="Nothing matches"
+        emptyText="No options"
       />
     </div>
   );
@@ -48,8 +48,9 @@ const meta = {
         component:
           'A field-shaped button that opens a checkbox list. Nothing selected means all; the caller ' +
           'orders the options and writes the trigger summary. Over ten options, the menu gets a search ' +
-          'box. The menu renders in a portal so a scrolling parent cannot clip it, and closes on an ' +
-          'outside click or Escape.',
+          'box. The menu sits right after its trigger in tab order and is positioned fixed, so a ' +
+          'scrolling parent cannot clip it. It closes on an outside click, on Escape, or when focus ' +
+          'leaves it.',
       },
     },
   },

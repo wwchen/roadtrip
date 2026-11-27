@@ -263,6 +263,7 @@ export const filterCopy = {
   allAgencies: 'All agencies',
   findAgency: 'Find an agency',
   noAgencyMatch: 'No agency in view matches',
+  noAgenciesInView: 'No campgrounds in view yet',
   agencyPick: (first: string, picked: number) => (picked === 1 ? first : `${first} +${picked - 1}`),
   fewerPeople: 'Fewer people',
   morePeople: 'More people',

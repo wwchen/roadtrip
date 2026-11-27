@@ -50,8 +50,11 @@ Layers keeps only what is drawn (the campground switch, stops, basemap).
   - `MultiSelect` is a new `@ui` primitive. It is domain-free and takes ordered options with counts.
   - The field label and the "button drawn as a field" box become shared `@ui` styles (`field.css`). The date
     fields, the agency dropdown and the group-size stepper all use them.
-- The menu renders in a portal with fixed positioning, because the topbar panel scrolls (`overflow-y: auto`)
-  and would clip it.
+- The menu renders right after its trigger, so it follows it in tab order. It uses fixed positioning, because
+  the topbar panel scrolls (`overflow-y: auto`) and would clip an absolutely positioned menu. A portal was
+  tried first and dropped: it put the menu at the end of the page, out of keyboard reach.
+- The menu has no count on its "All agencies" row. Pins are capped per category in dense views, so a sum of
+  pin counts can disagree with the server's "N in view" beside it. Per-agency counts share that limit.
 
 ## Approaches considered
 

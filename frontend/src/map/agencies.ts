@@ -25,7 +25,10 @@ const NO_EXCLUDED_IDS: ReadonlySet<number> = new Set();
 export function featureAgency(
   feature: { properties?: { agency?: unknown } | null } | null | undefined,
 ): string {
-  const agency = feature?.properties?.agency;
+  return agencyName(feature?.properties?.agency);
+}
+
+export function agencyName(agency: unknown): string {
   return (typeof agency === 'string' ? agency.trim() : '') || UNCATEGORIZED_AGENCY;
 }
 
