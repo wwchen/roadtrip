@@ -5,7 +5,6 @@ import {
   localToday,
   localYmd,
   parseLocalYmd,
-  sameLocalDay,
   startOfLocalMonth,
 } from './local-date';
 
@@ -72,16 +71,6 @@ describe('month helpers', () => {
 
   test('addLocalMonths goes backwards', () => {
     expect(localYmd(addLocalMonths(parseLocalYmd('2026-01-15'), -2))).toBe('2025-11-01');
-  });
-});
-
-describe('sameLocalDay', () => {
-  test('ignores the time of day', () => {
-    expect(sameLocalDay(new Date(2026, 6, 8, 0, 0), new Date(2026, 6, 8, 23, 59))).toBe(true);
-  });
-
-  test('distinguishes adjacent days', () => {
-    expect(sameLocalDay(new Date(2026, 6, 8), new Date(2026, 6, 9))).toBe(false);
   });
 });
 

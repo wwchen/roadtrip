@@ -1,0 +1,130 @@
+:root {
+  --rt-sheet-max-width: 420px;
+  --rt-sheet-gutter: 16px;
+}
+
+.rt-sheet {
+  --rt-sheet-peek: 0.26;
+  --rt-sheet-half: 0.52;
+  --rt-sheet-full: 0.92;
+  --rt-sheet-height: var(--rt-sheet-peek);
+  --rt-sheet-handle-width: 36px;
+  --rt-sheet-handle-height: 4px;
+  --rt-sheet-handle-focus-offset: 4px;
+  /* 44px, not the 28px this started at: the grabber and the close button share one
+     row, and both are then the comfortable touch target (iOS HIG / Material). */
+  --rt-sheet-grabber-height: 44px;
+  --rt-sheet-close-size: 44px;
+  --rt-sheet-close-icon: 18px;
+  --rt-sheet-motion: 220ms cubic-bezier(0.2, 0, 0, 1);
+  --rt-sheet-top-clearance: 0px;
+  --rt-sheet-top-gap: 8px;
+
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  /* On the scale, not left to `auto`. Every other overlay in the map shell carries a
+     positive z-index, and a positioned sibling at `auto` paints under all of them —
+     the zoom cluster sat inside this sheet and took its taps. */
+  z-index: var(--rt-z-place-sheet);
+  width: 100%;
+  max-width: var(--rt-sheet-max-width);
+  height: calc(var(--rt-sheet-height) * 100%);
+  max-height: calc(100% - var(--rt-sheet-top-clearance) - var(--rt-sheet-top-gap));
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 1px solid var(--rt-border);
+  border-bottom: 0;
+  border-radius: var(--rt-r-lg) var(--rt-r-lg) 0 0;
+  box-shadow: 0 -4px 24px rgba(var(--rt-c-shadow-rgb), 0.18);
+  overflow: hidden;
+}
+.rt-sheet[data-detent='peek'] { --rt-sheet-height: var(--rt-sheet-peek); }
+.rt-sheet[data-detent='half'] { --rt-sheet-height: var(--rt-sheet-half); }
+.rt-sheet[data-detent='full'] {
+  --rt-sheet-height: var(--rt-sheet-full);
+  --rt-sheet-max-width: 100%;
+}
+
+.rt-sheet[data-dragging] {
+  height: var(--rt-sheet-drag-height);
+  transition: none;
+  user-select: none;
+}
+@media (min-width: 768px) {
+  .rt-sheet { --rt-sheet-top-clearance: var(--rt-topbar-bottom, 0px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rt-sheet { transition: height var(--rt-sheet-motion), max-width var(--rt-sheet-motion); }
+}
+
+.rt-sheet-grabber {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: var(--rt-sheet-grabber-height);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+}
+.rt-sheet[data-dragging] .rt-sheet-grabber { cursor: grabbing; }
+.rt-sheet-handle {
+  width: var(--rt-sheet-handle-width);
+  height: var(--rt-sheet-handle-height);
+  border-radius: var(--rt-sheet-handle-height);
+  background: var(--rt-faint);
+}
+.rt-sheet-grabber:hover .rt-sheet-handle,
+.rt-sheet-grabber:focus-visible .rt-sheet-handle { background: var(--rt-muted); }
+.rt-sheet-grabber:focus-visible { outline: none; }
+.rt-sheet-grabber:focus-visible .rt-sheet-handle {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: var(--rt-sheet-handle-focus-offset);
+}
+
+.rt-sheet-close {
+  --icon-size: var(--rt-sheet-close-icon);
+
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: var(--rt-sheet-close-size);
+  height: var(--rt-sheet-close-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--rt-r-sm);
+  background: none;
+  color: var(--rt-muted);
+  cursor: pointer;
+}
+.rt-sheet-close:hover { color: var(--rt-text); }
+.rt-sheet-close:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+  color: var(--rt-text);
+}
+
+/* Focusable, because it scrolls. At full height it holds provider prose and the
+   upstream table, neither of which contains anything focusable, so without a tab
+   stop here a keyboard user cannot reach the text to read it. */
+.rt-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--rt-sheet-gutter) var(--rt-sheet-gutter);
+}
+.rt-sheet-body:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+}
+.rt-sheet-section + .rt-sheet-section { margin-top: var(--rt-sheet-gutter); }

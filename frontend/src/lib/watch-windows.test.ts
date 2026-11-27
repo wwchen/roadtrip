@@ -3,6 +3,7 @@ import type { Watch } from '@/api/watches-api';
 import type { AddToCartState } from '@/api/availability-api';
 import {
   NO_WATCH_CAPABILITIES,
+  cartReach,
   indexWatchesByWindow,
   normalizeWatchCapabilities,
   stayEndDate,
@@ -180,5 +181,20 @@ describe('indexing the user"s watches', () => {
     );
 
     expect([...watchedDates(index)].sort()).toEqual(['2026-08-11', '2026-08-14']);
+  });
+});
+
+describe('cartReach', () => {
+  test('it reads each wire state as what the caller can do about it', () => {
+    const reach: Record<AddToCartState, string> = {
+      ready: 'ready',
+      signed_out: 'gated',
+      no_credentials: 'gated',
+      unsupported: 'unsupported',
+    };
+
+    for (const [state, expected] of Object.entries(reach)) {
+      expect(cartReach(state as AddToCartState)).toBe(expected);
+    }
   });
 });

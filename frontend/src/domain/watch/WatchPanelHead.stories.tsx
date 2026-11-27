@@ -8,9 +8,8 @@ const meta = {
     docs: {
       description: {
         component:
-          'The title block and close affordance both watch panels (the editor and the ' +
-          'sign-in gate) share: a campground name, the date window the watch covers, and ' +
-          'an optional close button.',
+          'The title block and close affordance the watch editor draws: a campground ' +
+          'name, the date window the watch covers, and an optional close button.',
       },
     },
   },
