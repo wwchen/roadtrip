@@ -92,7 +92,7 @@ describe('poi registry', () => {
     const registry = loadPoiRegistry(PRODUCTION_REGISTRY_PATH);
     expect(registry.poiDataByName('Washington State Parks')!.agency).toEqual({
       kind: 'constant',
-      value: 'WA State Parks',
+      value: 'Washington State Parks',
     });
     expect(registry.poiDataByName('Rec.gov Campgrounds')!.agency).toEqual({
       kind: 'derived',

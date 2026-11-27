@@ -329,7 +329,7 @@ poi_data:
   - name: Washington State Parks
     category: campground
     subcategory: state
-    agency: WA State Parks
+    agency: Washington State Parks
     etls:
       - slug: aspira-wa-campgrounds
         adapter: AspiraCampgroundsEtl
