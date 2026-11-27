@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.db.UTC_SESSION_INIT_SQL
 import ca.floo.roadtrip.db.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -110,6 +111,7 @@ object SharedTestDb {
                 username = container.username
                 password = container.password
                 maximumPoolSize = maxPoolSize
+                connectionInitSql = UTC_SESSION_INIT_SQL
             },
         )
 }
