@@ -41,7 +41,7 @@ const READY = {
   failed: false,
   loading: false,
   campgroundsHidden: false,
-  agenciesHidden: false,
+  agencyFiltered: false,
   inBoundary: 2,
   matching: 2,
   inView: 2,
@@ -96,17 +96,17 @@ describe('inViewList', () => {
     });
   });
 
-  test('an all-hidden view names the legend rather than telling the user to pan', () => {
-    expect(inViewList({ ...READY, agenciesHidden: true, cards: [], total: 0 })).toEqual({
+  test('a view the agency pick empties names the pick rather than telling the user to pan', () => {
+    expect(inViewList({ ...READY, agencyFiltered: true, cards: [], total: 0 })).toEqual({
       kind: 'empty',
-      message: listCopy.allAgenciesHidden,
+      message: listCopy.noPickedAgencyInView,
     });
   });
 
-  test('with every agency switched on, an empty list is not the legend to blame', () => {
-    // Matches the search found, no cards built from them, and nothing switched
-    // off: the catalog moved under the two requests. Pointing at the legend
-    // would send the user to a panel that cannot help.
+  test('with no agency pick, an empty list is not the pick to blame', () => {
+    // Matches the search found, no cards built from them, and no agency picked:
+    // the catalog moved under the two requests. Pointing at the agency filter
+    // would send the user to a control that cannot help.
     expect(inViewList({ ...READY, cards: [], total: 0 })).toEqual({
       kind: 'empty',
       message: inViewCopy.none,
@@ -120,17 +120,9 @@ describe('inViewList', () => {
 
 describe('routeList', () => {
   const CORRIDOR = [card(1, 'USFS'), card(2, 'BC Parks')];
-  const base = { loading: false, cards: CORRIDOR, hiddenAgencies: [], campgroundsHidden: false };
+  const base = { loading: false, cards: CORRIDOR, campgroundsHidden: false };
 
-  test('counts the shown cards against the whole corridor', () => {
-    expect(routeList({ ...base, hiddenAgencies: ['USFS'] })).toEqual({
-      kind: 'ready',
-      cards: [CORRIDOR[1]],
-      total: 2,
-    });
-  });
-
-  test('one number when nothing is held back', () => {
+  test('shows the whole corridor: the filter, agency pick included, does not narrow a route', () => {
     expect(routeList(base)).toEqual({ kind: 'ready', cards: CORRIDOR, total: 2 });
   });
 
@@ -149,11 +141,7 @@ describe('routeList', () => {
     });
   });
 
-  test('a switched-off layer, then switched-off agencies', () => {
+  test('a switched-off layer shows the layer-off card', () => {
     expect(routeList({ ...base, campgroundsHidden: true })).toEqual({ kind: 'layer-off', inView: 2 });
-    expect(routeList({ ...base, hiddenAgencies: ['USFS', 'BC Parks'] })).toEqual({
-      kind: 'empty',
-      message: listCopy.allAgenciesHidden,
-    });
   });
 });

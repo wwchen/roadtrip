@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, waitFor } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
+import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { FakeMap } from '@/test/fake-map';
 
@@ -61,6 +62,7 @@ beforeEach(() => {
   respond = () => json(feature());
   vi.stubGlobal('fetch', vi.fn(async () => respond()));
   useMapStore.getState().reset();
+  useCampgroundFilterStore.getState().reset();
 });
 
 afterEach(() => {
@@ -118,31 +120,36 @@ describe('a shared POI link', () => {
     await waitFor(() => expect(instance.flyToCalls).toHaveLength(1));
   });
 
-  test('reveals the overlay and the agency the shared pin needs', async () => {
+  test('reveals the overlay and adds the shared pin\'s agency to a non-empty pick', async () => {
     act(() => {
       useMapStore.getState().setOverlayHidden('cg', true);
-      useMapStore.getState().setAgencyHidden('WA Parks', true);
+      useCampgroundFilterStore.getState().toggleAgency('USFS');
     });
 
     await openOn(`/?poi=${CG_ID}`);
 
     await waitFor(() => expect(useMapStore.getState().hiddenOverlays).toEqual([]));
-    expect(useMapStore.getState().hiddenAgencies).toEqual([]);
+    expect(useCampgroundFilterStore.getState().agencies).toEqual(['USFS', 'WA Parks']);
   });
 
-  test('reveals the charger overlay for a shared charger, and leaves agencies alone', async () => {
+  test('leaves an empty agency pick empty, since every agency already shows', async () => {
+    await openOn(`/?poi=${CG_ID}`);
+
+    await waitFor(() => expect(instance.flyToCalls).toHaveLength(1));
+    expect(useCampgroundFilterStore.getState().agencies).toEqual([]);
+  });
+
+  test('reveals the charger overlay for a shared charger, and leaves the agency pick alone', async () => {
     respond = () => json(feature({ category: 'tesla_supercharger', agency: undefined }));
     act(() => {
       useMapStore.getState().setOverlayHidden('sc', true);
-      useMapStore.getState().setAgencyHidden('WA Parks', true);
+      useCampgroundFilterStore.getState().toggleAgency('USFS');
     });
 
     await openOn(`/?poi=${CG_ID}`);
 
     await waitFor(() => expect(useMapStore.getState().hiddenOverlays).toEqual([]));
-    // Agency filtering is campground-only; a charger must not clear someone's
-    // campground legend as a side effect.
-    expect(useMapStore.getState().hiddenAgencies).toEqual(['WA Parks']);
+    expect(useCampgroundFilterStore.getState().agencies).toEqual(['USFS']);
   });
 
   test('a POI that fails to hydrate moves nothing', async () => {

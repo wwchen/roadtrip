@@ -195,29 +195,21 @@ describe('hydrateCard: availability and rating', () => {
 describe('visibleCards', () => {
   const cards = [card({ id: 1, agency: 'WA Parks' }), card({ id: 2, agency: '' })];
 
-  test('shows everything with nothing hidden', () => {
-    expect(
-      visibleCards(cards, { hiddenAgencies: [], campgroundsHidden: false }).map((c) => c.id),
-    ).toEqual([1, 2]);
+  test('shows everything with an empty agency pick', () => {
+    expect(visibleCards(cards, { agencies: [], campgroundsHidden: false }).map((c) => c.id)).toEqual([1, 2]);
   });
 
-  test('drops the agencies the legend switched off', () => {
-    expect(
-      visibleCards(cards, { hiddenAgencies: ['WA Parks'], campgroundsHidden: false }).map(
-        (c) => c.id,
-      ),
-    ).toEqual([2]);
+  test('keeps only the picked agencies', () => {
+    expect(visibleCards(cards, { agencies: ['WA Parks'], campgroundsHidden: false }).map((c) => c.id)).toEqual([1]);
   });
 
-  test('an agency-less card is hidden as Uncategorized', () => {
-    expect(
-      visibleCards(cards, { hiddenAgencies: ['Uncategorized'], campgroundsHidden: false }).map(
-        (c) => c.id,
-      ),
-    ).toEqual([1]);
+  test('an agency-less card is kept when Uncategorized is picked', () => {
+    expect(visibleCards(cards, { agencies: ['Uncategorized'], campgroundsHidden: false }).map((c) => c.id)).toEqual([
+      2,
+    ]);
   });
 
   test('shows nothing when campgrounds are off entirely', () => {
-    expect(visibleCards(cards, { hiddenAgencies: [], campgroundsHidden: true })).toEqual([]);
+    expect(visibleCards(cards, { agencies: [], campgroundsHidden: true })).toEqual([]);
   });
 });

@@ -43,21 +43,11 @@ export interface MapState {
    */
   hiddenOverlays: OverlayKey[];
   /**
-   * Campground agencies the user switched off.
-   *
-   * Hidden-set semantics matter more here than for overlays: the legend is
-   * viewport-scoped, so its rows change as you pan. With a visible-set an agency
-   * appearing for the first time would default to hidden, and panning into a new
-   * region would show nothing until the user ticked each new row. Absent from
-   * this list means visible, so a never-seen agency shows.
-   */
-  hiddenAgencies: string[];
-  /**
    * The campground pins the viewport loop last returned, and whether campgrounds
    * were requested at all (false below the zoom gate). Published by
    * `features/map/useViewportPois` for the topbar's in-view list, which sits
    * across the feature boundary and reads the agency off each pin to honour the
-   * legend's switches. Clipped to the viewport but NOT narrowed by
+   * filter's agency pick. Clipped to the viewport but NOT narrowed by
    * `campgroundFilterIds` — the topbar applies its own filter and needs to see
    * the campgrounds it excluded. Empty while a route owns the map: the corridor's
    * pins are not in the viewport, and the route list shows them instead.
@@ -71,6 +61,7 @@ export interface MapState {
    * legend counts.
    */
   campgroundFilterIds: ReadonlySet<number> | null;
+  campgroundFilterAgencies: readonly string[];
   /** The POI whose drawer is open, or null when the drawer is closed. */
   selectedPoiId: string | number | null;
   /**
@@ -86,9 +77,9 @@ export interface MapState {
   setUserLocation: (userLocation: UserLocation | null) => void;
   setOverlayHidden: (overlay: OverlayKey, hidden: boolean) => void;
   toggleOverlay: (overlay: OverlayKey) => void;
-  setAgencyHidden: (agency: string, hidden: boolean) => void;
   setViewportCampgrounds: (features: PinFeature[], requested: boolean) => void;
   setCampgroundFilterIds: (ids: readonly number[] | null) => void;
+  setCampgroundFilterAgencies: (agencies: readonly string[]) => void;
   /** Open the drawer for a POI. */
   selectPoi: (id: string | number) => void;
   /** Close the drawer. */
@@ -103,10 +94,10 @@ const INITIAL_MAP = {
   viewport: null,
   userLocation: null,
   hiddenOverlays: [],
-  hiddenAgencies: [],
   viewportCampgrounds: [],
   campgroundsRequested: false,
   campgroundFilterIds: null,
+  campgroundFilterAgencies: [],
   selectedPoiId: null,
   selectedRegion: null,
 } satisfies Omit<
@@ -115,9 +106,9 @@ const INITIAL_MAP = {
   | 'setUserLocation'
   | 'setOverlayHidden'
   | 'toggleOverlay'
-  | 'setAgencyHidden'
   | 'setViewportCampgrounds'
   | 'setCampgroundFilterIds'
+  | 'setCampgroundFilterAgencies'
   | 'selectPoi'
   | 'clearSelectedPoi'
   | 'selectRegion'
@@ -130,6 +121,10 @@ function withMembership<T>(list: T[], value: T, present: boolean): T[] {
   const has = list.includes(value);
   if (has === present) return list;
   return present ? [...list, value] : list.filter((item) => item !== value);
+}
+
+function sameMembers(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i]);
 }
 
 export const useMapStore = create<MapState>()((set) => ({
@@ -149,13 +144,13 @@ export const useMapStore = create<MapState>()((set) => ({
       hiddenOverlays: withMembership(s.hiddenOverlays, overlay, !s.hiddenOverlays.includes(overlay)),
     })),
 
-  setAgencyHidden: (agency, hidden) =>
-    set((s) => ({ hiddenAgencies: withMembership(s.hiddenAgencies, agency, hidden) })),
-
   setViewportCampgrounds: (viewportCampgrounds, campgroundsRequested) =>
     set({ viewportCampgrounds, campgroundsRequested }),
 
   setCampgroundFilterIds: (ids) => set({ campgroundFilterIds: ids ? new Set(ids) : null }),
+
+  setCampgroundFilterAgencies: (agencies) =>
+    set((s) => (sameMembers(s.campgroundFilterAgencies, agencies) ? s : { campgroundFilterAgencies: [...agencies] })),
 
   selectPoi: (selectedPoiId) => set({ selectedPoiId }),
   clearSelectedPoi: () => set({ selectedPoiId: null }),
@@ -176,8 +171,3 @@ export const selectIsOverlayVisible =
   (s: MapState): boolean =>
     !s.hiddenOverlays.includes(overlay);
 
-/** Whether an agency is painted under the current legend state. */
-export const selectIsAgencyVisible =
-  (agency: string) =>
-  (s: MapState): boolean =>
-    !s.hiddenAgencies.includes(agency);

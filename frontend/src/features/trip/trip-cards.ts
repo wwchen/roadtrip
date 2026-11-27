@@ -131,8 +131,8 @@ export function hydrateCard(
 }
 
 export interface CardFilter {
-  /** Agencies the legend has switched off. */
-  hiddenAgencies: readonly string[];
+  /** The filter's agency pick; empty keeps every agency. */
+  agencies: readonly string[];
   /** True when the legend has switched campgrounds off entirely. */
   campgroundsHidden: boolean;
 }
@@ -141,16 +141,14 @@ export interface CardFilter {
  * The cards the map is currently showing pins for.
  *
  * The list has to agree with the map, because clicking a card flies to its pin — a
- * row for a hidden pin is a row that flies the camera to nothing. The vanilla filtered
- * by agency only; the overlay check is new because 4b's legend can switch campgrounds
- * off wholesale, which the vanilla legend could not.
+ * row for a hidden pin is a row that flies the camera to nothing.
  */
 export function visibleCards<T extends TripCard>(
   cards: readonly T[],
-  { hiddenAgencies, campgroundsHidden }: CardFilter,
+  { agencies, campgroundsHidden }: CardFilter,
 ): T[] {
   if (campgroundsHidden) return [];
-  if (hiddenAgencies.length === 0) return [...cards];
-  const hidden = new Set(hiddenAgencies);
-  return cards.filter((card) => !hidden.has(card.agency || UNCATEGORIZED_AGENCY));
+  if (agencies.length === 0) return [...cards];
+  const keep = new Set(agencies);
+  return cards.filter((card) => keep.has(card.agency || UNCATEGORIZED_AGENCY));
 }

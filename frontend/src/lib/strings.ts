@@ -178,9 +178,9 @@ export const routeListCopy = {
   none: 'Pan the map or widen the corridor to find campgrounds.',
 } as const;
 
-/** What both lists say when the legend, rather than the catalog, is what emptied them. */
+/** What both lists say when the legend or the agency pick, rather than the catalog, is what emptied them. */
 export const listCopy = {
-  allAgenciesHidden: 'All campgrounds hidden — re-enable a category in the legend.',
+  noPickedAgencyInView: 'None of the agencies you picked have campgrounds in view.',
   layerOffTitle: 'Campgrounds are switched off',
   layerOffBody: (inView: number) =>
     `There are ${inView} in view — the Campgrounds layer is turned off, so none are drawn.`,
@@ -247,15 +247,23 @@ export const stayCopy = {
 
 /** The campground filter block under the search row, and the cards' facet row. */
 export const filterCopy = {
-  pill: 'Filter campgrounds',
-  pillHint: 'Then check dates',
-  heading: 'Campgrounds',
+  pill: 'Filter',
+  pillActive: (active: number) => `Filter, ${active} active`,
+  clear: 'Clear',
+  clearFilters: 'Clear filters',
   /** The filter block's count: everything in view, or how many of it pass the filter. */
   inView: (total: number) => `${total} in view`,
   matching: (matching: number, total: number) => `${matching} of ${total} in view`,
   siteType: 'Site type',
   anySiteType: 'Any',
   groupSize: 'Group size',
+  anyGroupSize: 'Any',
+  amenities: 'Amenities',
+  agency: 'Agency',
+  allAgencies: 'All agencies',
+  findAgency: 'Find an agency',
+  noAgencyMatch: 'No agency in view matches',
+  agencyPick: (first: string, picked: number) => (picked === 1 ? first : `${first} +${picked - 1}`),
   fewerPeople: 'Fewer people',
   morePeople: 'More people',
   /** The card's count line with a type selected: the kind's count, then the total when they differ. */

@@ -1,0 +1,52 @@
+.rt-multi-select__menu {
+  position: fixed;
+  z-index: var(--rt-z-popover);
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  --control-xl: 30px;
+}
+
+.rt-multi-select__search {
+  padding: 2px 2px 6px;
+}
+
+.rt-multi-select__list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.rt-multi-select__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 6px;
+  border-radius: calc(var(--radius) - var(--menu-pad));
+}
+
+.rt-multi-select__row:hover {
+  background: var(--bg-hover);
+}
+
+.rt-multi-select__row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rt-multi-select__row--all {
+  font-weight: 600;
+}
+
+.rt-multi-select__count {
+  flex: 0 0 auto;
+  color: var(--text-subdued);
+  font-size: var(--text-control-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-multi-select__empty {
+  padding: 8px 6px;
+  color: var(--text-subdued);
+  font-size: var(--text-control-sm);
+}

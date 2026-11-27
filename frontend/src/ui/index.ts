@@ -28,6 +28,12 @@ export { ConfirmButton, type ConfirmButtonProps } from './ConfirmButton';
 export { SecretField, type SecretFieldProps } from './SecretField';
 export { LinkButton, type LinkButtonProps } from './LinkButton';
 export { MonthCalendar, type MonthCalendarProps } from './MonthCalendar';
+export {
+  MULTI_SELECT_SEARCH_THRESHOLD,
+  MultiSelect,
+  type MultiSelectOption,
+  type MultiSelectProps,
+} from './MultiSelect';
 
 // ---------------------------------------------------------------------------
 // Type corrections.

@@ -87,18 +87,11 @@ const ALONG_ROUTE: TripCard[] = [
   { id: 13, name: 'William Kent', sub: 'Standard campground', location: '', agency: '', lng: -120.05, lat: 38.93, routeKm: 26.5, distKm: 0, checkable: true, rating: null, hydrated: true },
 ];
 
-function Panel({
-  hiddenAgencies = [],
-  children,
-}: {
-  hiddenAgencies?: string[];
-  children: ReactNode;
-}) {
-  // The legend's filter is app-wide store state, so a story sets it the way the legend would.
+function Panel({ children }: { children: ReactNode }) {
   useEffect(() => {
-    useMapStore.setState({ hiddenAgencies, hiddenOverlays: [] });
-    return () => useMapStore.setState({ hiddenAgencies: [], hiddenOverlays: [] });
-  }, [hiddenAgencies]);
+    useMapStore.setState({ hiddenOverlays: [] });
+    return () => useMapStore.setState({ hiddenOverlays: [] });
+  }, []);
 
   return (
     <MapRuntimeContext.Provider value={NO_MAP}>
@@ -193,10 +186,10 @@ export const InViewLoading = inViewStory({ kind: 'empty', message: inViewCopy.lo
 /** The search itself failed: not the same answer as an empty view. */
 export const InViewFailed = inViewStory({ kind: 'empty', message: inViewCopy.failed });
 
-/** Every campground in view belongs to an agency the legend has switched off. */
-export const InViewAllAgenciesHidden = inViewStory({
+/** None of the agencies picked in the filter have campgrounds in view. */
+export const InViewNoPickedAgency = inViewStory({
   kind: 'empty',
-  message: listCopy.allAgenciesHidden,
+  message: listCopy.noPickedAgencyInView,
 });
 
 /** The Campgrounds layer itself is off: the one empty state that carries its own switch. */

@@ -165,7 +165,6 @@ function Seeded({ stops, mode, viewport, children }: Required<Omit<TripProps, 'o
     useMapStore.setState({
       viewport,
       campgroundsRequested: viewport !== null,
-      hiddenAgencies: [],
       hiddenOverlays: [],
       viewportCampgrounds: [],
     });
@@ -174,7 +173,12 @@ function Seeded({ stops, mode, viewport, children }: Required<Omit<TripProps, 'o
       useTripStore.getState().reset();
       useCampgroundFilterStore.getState().reset();
       useStayCheckStore.getState().reset();
-      useMapStore.setState({ viewport: null, campgroundsRequested: false, campgroundFilterIds: null });
+      useMapStore.setState({
+        viewport: null,
+        campgroundsRequested: false,
+        campgroundFilterIds: null,
+        campgroundFilterAgencies: [],
+      });
       setVisibleRouteParam(null);
     };
   }, [stops, mode, viewport]);

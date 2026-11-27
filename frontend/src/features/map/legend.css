@@ -1,10 +1,8 @@
 /* ---------------------------------------------------------------------------
-   The layers panel: legend, filters and basemap picker.
+   The layers panel: legend and basemap picker.
 
    Ported from index.html's inline <style> for `#panel` and its buttons. The
-   desktop geometry is carried over as-is; the rows are LDS `Checkbox`
-   components now, so the box, the focus ring and the touch target come from
-   the design system instead of from `accent-color` on a bare input. Mobile no
+   desktop geometry is carried over as-is. Mobile no
    longer is: it was a top sheet dropping under the account button, and a tall
    search/nav panel above the map could put its close button right on top of
    that panel. It is a bottom sheet now, shaped like `.rt-drawer` in
@@ -104,12 +102,6 @@
   color: var(--rt-muted);
 }
 
-.rt-legend__count {
-  color: var(--rt-faint);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
 .rt-legend__dot {
   display: inline-block;
   width: 10px;
@@ -125,16 +117,6 @@
   /* Long agency names wrap rather than widening the panel. */
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-/* One row per agency in the current viewport, so this list can be long. LDS's
-   checkbox pads itself to the 44px touch floor via --control-xl; turning that
-   knob down here keeps the control and its focus ring intact while making a
-   50-agency legend scannable. Mobile gets the full target back below. */
-.rt-legend__agencies {
-  --control-xl: 26px;
-  max-height: 220px;
-  overflow-y: auto;
 }
 
 .rt-legend__basemap-grid {
@@ -351,10 +333,6 @@
   }
 
   /* Back to the touch floor: a thumb needs the height a mouse does not. */
-  .rt-legend__agencies {
-    --control-xl: 40px;
-  }
-
   .rt-legend__dot {
     width: 12px;
     height: 12px;

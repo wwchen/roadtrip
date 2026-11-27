@@ -1,14 +1,14 @@
 // The viewport list, start to finish: search, narrow, cap, hydrate, count.
 //
-// One owner, because the steps are not independent. The legend's agency
-// switches have to narrow the id set BEFORE the card cap — the search answers
-// for every agency, so capping first and dropping the switched-off rows
-// afterwards leaves a handful of cards in any view a hidden agency dominates —
-// and the counts the topbar shows have to be taken from the same narrowing, or
-// the head and the filter block disagree with the legend beside them.
+// One owner, because the steps are not independent. The filter's agency pick
+// has to narrow the id set BEFORE the card cap — the search answers for every
+// agency, so capping first and dropping the unpicked rows afterwards leaves a
+// handful of cards in any view an unpicked agency dominates — and the counts
+// the topbar shows have to be taken from the same narrowing, or the head and
+// the filter block disagree.
 //
-// The switches are therefore applied twice, to two different sources, and both
-// are load-bearing:
+// The pick is therefore applied twice, to two different sources, and both are
+// load-bearing:
 //
 //   1. by PIN agency, to the id set, before the cap. The pins are the only
 //      thing that knows an id's agency before it is fetched, and the cap is
@@ -24,9 +24,10 @@
 // place and fills in, so nothing moves under the pointer.
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { hiddenAgencyPinIds, idsWithVisibleAgency } from '@/map/agencies';
+import { agencyCounts, excludedAgencyPinIds, idsWithVisibleAgency } from '@/map/agencies';
+import { pinFeatureId } from '@/map/pins';
 import { bboxCenter } from '@/map/viewport';
-import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
+import { selectCatalogFilterCount, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { cardsFromSummaries, rankCards, type InViewCard } from './campground-cards';
 import { inViewList, type ResultsList } from './results-list';
@@ -39,10 +40,11 @@ import { useCurrentStayCheck, type CurrentStayCheck } from './useStayCheck';
 export interface InViewCampgrounds {
   /** What the results section renders. */
   list: ResultsList<InViewCard>;
-  /** Campgrounds in view the legend leaves visible — the filter block's "in view". */
+  /** Campgrounds in view, before any filter — the filter block's "in view". */
   inView: number;
-  /** Those of them that pass the campground filter. */
+  /** Those of them that pass the campground filter, agency pick included. */
   matching: number;
+  agencyCounts: ReadonlyMap<string, number>;
   /** Every id the search matched, agency-blind: the map's pin filter and the legend count it. */
   matchingIds: readonly number[];
   /** False below the zoom gate or while a route owns the list. */
@@ -75,7 +77,8 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
   const campgroundsRequested = useMapStore((s) => s.campgroundsRequested);
   const viewportBbox = useMapStore((s) => s.viewport?.bbox ?? null);
   const campgroundsHidden = useMapStore((s) => s.hiddenOverlays.includes('cg'));
-  const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
+  const agencies = useCampgroundFilterStore((s) => s.agencies);
+  const catalogFiltered = useCampgroundFilterStore((s) => selectCatalogFilterCount(s) > 0);
   const viewportCampgrounds = useMapStore((s) => s.viewportCampgrounds);
   const stayCheck = useCurrentStayCheck();
   const stayResults = stayCheck && !stayCheck.running ? stayCheck.results : null;
@@ -83,25 +86,35 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
     useShallow((s) => ({ siteType: s.siteType, groupSize: s.groupSize, amenities: s.amenities })),
   );
 
-  const hiddenIds = useMemo(
-    () => hiddenAgencyPinIds(viewportCampgrounds, hiddenAgencies),
-    [viewportCampgrounds, hiddenAgencies],
+  const excludedIds = useMemo(
+    () => excludedAgencyPinIds(viewportCampgrounds, agencies),
+    [viewportCampgrounds, agencies],
   );
-  const shownIds = useMemo(() => idsWithVisibleAgency(search.ids, hiddenIds), [search.ids, hiddenIds]);
+  const shownIds = useMemo(() => idsWithVisibleAgency(search.ids, excludedIds), [search.ids, excludedIds]);
+  const counts = useMemo(() => {
+    if (!catalogFiltered) return agencyCounts(viewportCampgrounds);
+    const matched = new Set(search.ids);
+    return agencyCounts(
+      viewportCampgrounds.filter((pin) => {
+        const id = pinFeatureId(pin);
+        return typeof id === 'number' && matched.has(id);
+      }),
+    );
+  }, [viewportCampgrounds, catalogFiltered, search.ids]);
   const cappedIds = useMemo(() => shownIds.slice(0, MAX_IN_VIEW_CARDS), [shownIds]);
   const summaries = useCampgroundSummaries(cappedIds);
 
   const ranked = useMemo(() => {
     const built = cardsFromSummaries(cappedIds, summaries.byId, viewportBbox ? bboxCenter(viewportBbox) : null);
-    return rankCards(visibleCards(built, { hiddenAgencies, campgroundsHidden }), rankFilter);
-  }, [cappedIds, summaries.byId, viewportBbox, rankFilter, hiddenAgencies, campgroundsHidden]);
+    return rankCards(visibleCards(built, { agencies, campgroundsHidden }), rankFilter);
+  }, [cappedIds, summaries.byId, viewportBbox, rankFilter, agencies, campgroundsHidden]);
   const cards = useMemo(() => (stayResults ? rankByStay(ranked, stayResults) : ranked), [ranked, stayResults]);
 
-  // With nothing hidden the server's own counts are the honest ones — they
-  // survive a truncated search, which the id list does not. With something
-  // hidden, the switched-off pins come off them.
-  const matching = hiddenIds.size === 0 ? search.totalMatching : shownIds.length;
-  const inView = Math.max(search.totalInBoundary - hiddenIds.size, matching);
+  // With nothing excluded the server's own counts are the honest ones — they
+  // survive a truncated search, which the id list does not. With an agency
+  // pick, the unpicked pins come off them.
+  const matching = excludedIds.size === 0 ? search.totalMatching : shownIds.length;
+  const drawable = Math.max(search.totalInBoundary - excludedIds.size, matching);
   const failed = search.isError || summaries.isError;
   const loading = search.isFetching || summaries.isFetching;
 
@@ -112,10 +125,10 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
         failed,
         loading,
         campgroundsHidden,
-        agenciesHidden: hiddenAgencies.length > 0,
+        agencyFiltered: agencies.length > 0,
         inBoundary: search.totalInBoundary,
         matching: search.totalMatching,
-        inView,
+        inView: drawable,
         cards,
         total: matching,
       }),
@@ -127,8 +140,8 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
       failed,
       loading,
       campgroundsHidden,
-      hiddenAgencies,
-      inView,
+      agencies,
+      drawable,
       cards,
       matching,
     ],
@@ -140,5 +153,15 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
     [list.kind, ranked],
   );
 
-  return { list, inView, matching, matchingIds: search.ids, enabled: search.enabled, failed, stayCheck, checkableIds };
+  return {
+    list,
+    inView: search.totalInBoundary,
+    matching,
+    agencyCounts: counts,
+    matchingIds: search.ids,
+    enabled: search.enabled,
+    failed,
+    stayCheck,
+    checkableIds,
+  };
 }
