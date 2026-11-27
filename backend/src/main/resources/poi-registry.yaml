@@ -317,6 +317,7 @@ poi_data:
         inputs: [campflare-campgrounds-export]
 
   - name: Rec.gov Campgrounds
+    enabled: false
     category: campground
     subcategory: federal
     agency:
@@ -327,9 +328,10 @@ poi_data:
         inputs: [recgov-campgrounds-raw, recgov-campground-enrichment]
 
   - name: Washington State Parks
+    enabled: false
     category: campground
     subcategory: state
-    agency: WA State Parks
+    agency: Washington State Parks
     etls:
       - slug: aspira-wa-campgrounds
         adapter: AspiraCampgroundsEtl
@@ -401,6 +403,7 @@ poi_data:
           provider: reserveamerica
 
   - name: New York State Parks
+    enabled: false
     category: campground
     subcategory: state
     agency: New York State Parks
@@ -416,6 +419,7 @@ poi_data:
           provider: reserveamerica
 
   - name: California State Parks
+    enabled: false
     category: campground
     subcategory: state
     agency: California State Parks
@@ -457,6 +461,7 @@ campsite_data:
         inputs: [campflare-campsites-export, campflare-campgrounds-export]
 
   - name: Rec.gov Campsites
+    enabled: false
     etls:
       - slug: recgov-campsites
         adapter: RecGovCampsitesEtl
@@ -465,6 +470,7 @@ campsite_data:
   # Aspira per-tenant campsite catalogs. Each reads inventory, dictionaries,
   # and maps directly; AspiraLeavesWalk extracts leaf metadata for labeling.
   - name: Washington Aspira Resources
+    enabled: false
     etls:
       - slug: aspira-wa-campsites
         adapter: AspiraCampsitesEtl
@@ -499,6 +505,7 @@ campsite_data:
           dictionaries_input: aspira-dictionaries-pc
 
   - name: California State Park Sites
+    enabled: false
     etls:
       - slug: reservecalifornia-campsites
         adapter: ReserveCaliforniaSitesEtl
@@ -513,6 +520,7 @@ campsite_data:
           contract: ABPP
 
   - name: New York State Park Sites
+    enabled: false
     etls:
       - slug: reserveamerica-ny-campsites
         adapter: ReserveAmericaSitesEtl

@@ -58,23 +58,15 @@ class RegistryTargetsTest {
         assertEquals(
             listOf(
                 "Campflare Campgrounds",
-                "Rec.gov Campgrounds",
-                "Washington State Parks",
                 "BC Provincial Parks",
                 "Parks Canada",
                 "Alberta Provincial Parks",
-                "New York State Parks",
-                "California State Parks",
                 "Planet Fitness",
                 "Tesla Superchargers",
                 "Campflare Campsites",
-                "Rec.gov Campsites",
-                "Washington Aspira Resources",
                 "BC Aspira Resources",
                 "Parks Canada Aspira Resources",
-                "California State Park Sites",
                 "Alberta Provincial Park Sites",
-                "New York State Park Sites",
             ),
             importTargetsFromRegistry(registry).keys.toList(),
         )

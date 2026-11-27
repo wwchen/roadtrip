@@ -253,7 +253,7 @@ describe('the Aspira campgrounds adapter, transform on the Washington row', () =
       location: { latitude: 46.039, longitude: -120.667 },
       reservationUrl: 'https://washington.goingtocamp.com/',
       links: [{ url: 'https://washington.goingtocamp.com/' }],
-      management: { agency: 'WA State Parks' },
+      management: { agency: 'Washington State Parks' },
       sourceUrl: 'https://washington.goingtocamp.com/',
       geometryProvenance: { match_kind: 'exact', source: WA_CSV, matched_name: 'brooks memorial' },
     });

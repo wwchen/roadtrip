@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.productionTerminalEtlDefinitions
+import ca.floo.roadtrip.service.etl.framework.poiAdapters
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
@@ -104,17 +104,13 @@ class UsCampgroundsCsvSourceTest {
      */
     @Test
     fun `the WA terminal reads the geometry source state from the registry`() {
-        val definition =
-            productionTerminalEtlDefinitions["aspira-wa-campgrounds"]
-                ?: error("aspira-wa-campgrounds is not a registered terminal")
-        val etl = definition.etl as AspiraCampgroundsEtl
-
         val entry =
             PoiRegistry
                 .loadResource("poi-registry.yaml")
                 .poiData
                 .flatMap { it.etls }
                 .single { it.slug == "aspira-wa-campgrounds" }
+        val etl = poiAdapters.getValue(entry.adapter).create(entry).etl as AspiraCampgroundsEtl
         assertEquals("WA", checkNotNull(entry.geometry).sources.single().state)
         assertEquals(listOf("SP", "CP", "SF"), checkNotNull(entry.geometry).sources.single().types)
 
