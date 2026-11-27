@@ -236,19 +236,21 @@ function DateField({ which, label, value, picking, calendarId, buttonRef, onTogg
   const open = picking === which;
   const shown = value === null ? null : formatDateShort(value);
   return (
-    <div className="tb-dates-field">
-      <label htmlFor={id}>{label}</label>
+    <div className="rt-field tb-dates-field">
+      <label className="rt-field__label" htmlFor={id}>
+        {label}
+      </label>
       <button
         type="button"
         id={id}
         ref={buttonRef}
-        className={open ? 'tb-dates-field-box tb-dates-field-open' : 'tb-dates-field-box'}
+        className={open ? 'rt-field-box rt-field-box--open' : 'rt-field-box'}
         aria-label={filterCopy.dateField(label, shown)}
         aria-expanded={open}
         aria-controls={open ? calendarId : undefined}
         onClick={() => onToggle(which)}
       >
-        <span className={shown === null ? 'tb-dates-unset' : undefined}>{shown ?? filterCopy.noDate}</span>
+        <span className={shown === null ? 'rt-field-box__placeholder' : undefined}>{shown ?? filterCopy.noDate}</span>
         <Icon name="calendar" aria-hidden="true" />
       </button>
     </div>

@@ -1,14 +1,8 @@
-// The campground legend's agency logic.
+// The campground filter's agency logic.
 //
-// Campgrounds are the one overlay with no on/off switch: there are 50+ managing
-// agencies and the legend filters by them instead.
-//
-// The legend is VIEWPORT-SCOPED: rows come from the campgrounds currently in
-// view, with no accumulated "agencies I have ever seen" set, so panning away
-// from a region drops its agencies. The user's choices are stored the other way
-// round — as the set of agencies explicitly switched OFF (see
-// `stores/mapStore`), so an agency nobody has seen before defaults to visible
-// and panning into a new region shows everything there.
+// Agency is the one classification every campground source populates, so the
+// filter narrows by it. The pick is SHOW-ONLY: empty means every agency, and a
+// non-empty pick keeps only the agencies in it, wherever the user pans.
 import type { ExpressionSpecification, FilterSpecification } from 'maplibre-gl';
 import { pinFeatureId, type PinFeature } from './pins';
 
@@ -17,13 +11,13 @@ export const UNCATEGORIZED_AGENCY = 'Uncategorized';
 
 const CAMPGROUND_CATEGORY = 'campground';
 
-/** Shared empty set, so "nothing hidden" is one stable identity for memo consumers. */
-const NO_HIDDEN_IDS: ReadonlySet<number> = new Set();
+/** Shared empty set, so "nothing excluded" is one stable identity for memo consumers. */
+const NO_EXCLUDED_IDS: ReadonlySet<number> = new Set();
 
 /**
  * An agency name, or the sentinel when the pin carries none.
  *
- * Typed on `properties` rather than on `PinFeature`: the legend passes viewport
+ * Typed on `properties` rather than on `PinFeature`: the filter passes viewport
  * pins, but the shared-link restore passes a hydrated `/api/pois/{id}` feature,
  * and this reads no geometry — requiring the full pin shape would make callers
  * cast to satisfy a field the function never touches.
@@ -31,7 +25,10 @@ const NO_HIDDEN_IDS: ReadonlySet<number> = new Set();
 export function featureAgency(
   feature: { properties?: { agency?: unknown } | null } | null | undefined,
 ): string {
-  const agency = feature?.properties?.agency;
+  return agencyName(feature?.properties?.agency);
+}
+
+export function agencyName(agency: unknown): string {
   return (typeof agency === 'string' ? agency.trim() : '') || UNCATEGORIZED_AGENCY;
 }
 
@@ -40,7 +37,7 @@ export function featureAgency(
  *
  * Non-campground features are skipped rather than trusted to be absent: the
  * caller passes the campground bucket today, but the on-route payload mixes
- * categories and this is the count the legend shows.
+ * categories and this is the count the agency filter shows.
  */
 export function agencyCounts(features: readonly PinFeature[]): Map<string, number> {
   const counts = new Map<string, number>();
@@ -52,108 +49,81 @@ export function agencyCounts(features: readonly PinFeature[]): Map<string, numbe
   return counts;
 }
 
-/**
- * The POI ids of the campground pins whose agency the legend has switched off.
- *
- * The switches are a view filter, not a search parameter: the boundary search
- * answers for every agency, and the pins already carry the agency, so the
- * narrowing happens on this side — see [idsWithVisibleAgency].
- */
-export function hiddenAgencyPinIds(
+export function excludedAgencyPinIds(
   features: readonly PinFeature[],
-  hidden: readonly string[],
+  picked: readonly string[],
 ): ReadonlySet<number> {
-  if (hidden.length === 0) return NO_HIDDEN_IDS;
-  const hiddenAgencies = new Set(hidden);
+  if (picked.length === 0) return NO_EXCLUDED_IDS;
+  const keep = new Set(picked);
   const ids = new Set<number>();
   for (const feature of features) {
     if (feature?.properties?.category !== CAMPGROUND_CATEGORY) continue;
-    if (!hiddenAgencies.has(featureAgency(feature))) continue;
+    if (keep.has(featureAgency(feature))) continue;
     const id = pinFeatureId(feature);
-    // Numbers only, the same narrowing the map's own pin filter does: a POI id
-    // that came back as a string could never match a search id, and counting it
-    // would overstate how much the legend is holding back.
     if (typeof id === 'number') ids.add(id);
   }
   return ids;
 }
 
 /**
- * The ids left once the switched-off agencies are dropped.
+ * The ids left once the excluded agencies are dropped.
  *
- * This has to run BEFORE a caller caps the list, or a view a switched-off agency
+ * This has to run BEFORE a caller caps the list, or a view an unpicked agency
  * dominates fills the cap with rows the caller then drops and shows a handful of
  * results. An id with no pin in the set stays: the pin loop samples above its
  * budget and lags a pan by one fetch, and "no agency known" is not the same
- * answer as "an agency you switched off". The same array comes back when nothing
- * is hidden, so a memo downstream does not churn.
+ * answer as "an agency you did not pick". The same array comes back when nothing
+ * is excluded, so a memo downstream does not churn.
  */
 export function idsWithVisibleAgency(
   ids: readonly number[],
-  hiddenIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<number>,
 ): readonly number[] {
-  if (hiddenIds.size === 0) return ids;
-  return ids.filter((id) => !hiddenIds.has(id));
+  if (excludedIds.size === 0) return ids;
+  return ids.filter((id) => !excludedIds.has(id));
 }
 
-/** Legend row order: the agency names, alphabetically. */
-export function sortedAgencies(counts: ReadonlyMap<string, number>): string[] {
-  return [...counts.keys()].sort((a, b) => a.localeCompare(b));
+export interface AgencyCount {
+  agency: string;
+  count: number;
 }
 
-/**
- * Filter clauses to exclude the given agencies and, if requested, uncategorized
- * campgrounds.
- *
- * The `Uncategorized` row needs its own clause because it is a sentinel, not a
- * value: MapLibre can only test properties that are present, so hiding it means
- * excluding the features with no `agency` at all. One known seam, carried over
- * from the original rather than silently changed: a pin whose agency is
- * whitespace counts as `Uncategorized` in the legend (`featureAgency` trims) but
- * still satisfies `['has', 'agency']`, so hiding that row leaves it painted.
- */
-function hiddenAgencyClauses(hidden: readonly string[]): ExpressionSpecification[] {
-  const hideUncategorized = hidden.includes(UNCATEGORIZED_AGENCY);
-  const namedHidden = hidden.filter((agency) => agency !== UNCATEGORIZED_AGENCY);
+export function agenciesByCount(
+  counts: ReadonlyMap<string, number>,
+  picked: readonly string[],
+): AgencyCount[] {
+  const inView = [...counts.entries()]
+    .map(([agency, count]) => ({ agency, count }))
+    .sort((a, b) => b.count - a.count || a.agency.localeCompare(b.agency));
+  const gone = picked.filter((agency) => !counts.has(agency)).map((agency) => ({ agency, count: 0 }));
+  return [...inView, ...gone];
+}
 
-  const clauses: ExpressionSpecification[] = [];
-  if (namedHidden.length > 0) {
-    clauses.push(['!', ['in', ['get', 'agency'], ['literal', namedHidden]]]);
-  }
-  if (hideUncategorized) {
-    clauses.push(['has', 'agency']);
-  }
-  return clauses;
+function pickedAgencyClause(picked: readonly string[]): ExpressionSpecification | null {
+  if (picked.length === 0) return null;
+  const named = picked.filter((agency) => agency !== UNCATEGORIZED_AGENCY);
+  const alternatives: ExpressionSpecification[] = [];
+  if (named.length > 0) alternatives.push(['in', ['get', 'agency'], ['literal', named]]);
+  if (picked.includes(UNCATEGORIZED_AGENCY)) alternatives.push(['!', ['has', 'agency']]);
+  return ['any', ...alternatives];
 }
 
 /**
- * The campground layer filter for a set of switched-off agencies.
- *
- * Null means "no filter" — MapLibre wants the filter removed rather than set to a
- * tautology.
- */
-export function hiddenAgencyFilter(hidden: readonly string[]): FilterSpecification | null {
-  const clauses = hiddenAgencyClauses(hidden);
-  return clauses.length === 0 ? null : ['all', ...clauses];
-}
-
-/**
- * The campground layer filter: hidden agencies combined with the active pin
+ * The campground layer filter: the agency pick combined with the active pin
  * filter, if any.
  *
- * `matchingIds` null means no filter is active, so every pin the agency clause
- * allows stays. Non-null, it also requires the feature's top-level `id` — the
- * one MapLibre reads through `['id']` — to be in the set.
+ * Null means "no filter" — MapLibre wants the filter removed rather than set to a
+ * tautology. `matchingIds` null means no catalog filter is active; non-null, it
+ * also requires the feature's top-level `id` — the one MapLibre reads through
+ * `['id']` — to be in the set.
  */
 export function campgroundLayerFilter(
-  hidden: readonly string[],
+  picked: readonly string[],
   matchingIds: ReadonlySet<number> | null,
 ): FilterSpecification | null {
-  const clauses = [...hiddenAgencyClauses(hidden)];
-
-  if (matchingIds !== null) {
-    clauses.push(['in', ['id'], ['literal', [...matchingIds]]]);
-  }
-
+  const clauses: ExpressionSpecification[] = [];
+  const agencyClause = pickedAgencyClause(picked);
+  if (agencyClause) clauses.push(agencyClause);
+  if (matchingIds !== null) clauses.push(['in', ['id'], ['literal', [...matchingIds]]]);
   return clauses.length === 0 ? null : ['all', ...clauses];
 }

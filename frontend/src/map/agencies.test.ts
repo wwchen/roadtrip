@@ -3,12 +3,11 @@ import type { PinFeature } from './pins';
 import {
   UNCATEGORIZED_AGENCY,
   agencyCounts,
+  agenciesByCount,
   campgroundLayerFilter,
+  excludedAgencyPinIds,
   featureAgency,
-  hiddenAgencyFilter,
-  hiddenAgencyPinIds,
   idsWithVisibleAgency,
-  sortedAgencies,
 } from './agencies';
 
 const campground = (agency?: string | null, id = 1): PinFeature => ({
@@ -67,51 +66,47 @@ describe('agencyCounts', () => {
   });
 });
 
-describe('hiddenAgencyPinIds and idsWithVisibleAgency', () => {
+describe('excludedAgencyPinIds and idsWithVisibleAgency', () => {
   const pins = [
     campground('US Forest Service', 1),
     campground('US Forest Service', 2),
     campground('BC Parks', 3),
     campground(undefined, 4),
   ];
-  const narrow = (ids: number[], hidden: string[]) =>
-    idsWithVisibleAgency(ids, hiddenAgencyPinIds(pins, hidden));
+  const narrow = (ids: number[], picked: string[]) => idsWithVisibleAgency(ids, excludedAgencyPinIds(pins, picked));
 
-  test('drops the ids whose agency is switched off', () => {
-    expect(narrow([1, 2, 3, 4], ['US Forest Service'])).toEqual([3, 4]);
+  test('keeps only the ids whose agency is picked', () => {
+    expect(narrow([1, 2, 3, 4], ['US Forest Service'])).toEqual([1, 2]);
   });
 
-  test('the sentinel row switches off the campgrounds with no agency', () => {
-    expect(narrow([1, 2, 3, 4], [UNCATEGORIZED_AGENCY])).toEqual([1, 2, 3]);
+  test('picking the sentinel keeps the campgrounds with no agency', () => {
+    expect(narrow([1, 2, 3, 4], [UNCATEGORIZED_AGENCY])).toEqual([4]);
   });
 
-  test('an id with no pin stays — unknown is not hidden', () => {
-    expect(narrow([1, 99], ['US Forest Service'])).toEqual([99]);
+  test('an id with no pin stays — unknown is not excluded', () => {
+    expect(narrow([3, 99], ['US Forest Service'])).toEqual([99]);
   });
 
-  test('narrows before any cap, so a dominant hidden agency cannot crowd the head', () => {
+  test('narrows before any cap, so a dominant unpicked agency cannot crowd the head', () => {
     const forest = Array.from({ length: 50 }, (_, i) => campground('US Forest Service', i + 1));
     const parks = [campground('BC Parks', 51), campground('BC Parks', 52)];
     const inView = [...forest, ...parks];
     const ids = inView.map((pin) => pin.id as number);
 
-    expect(idsWithVisibleAgency(ids, hiddenAgencyPinIds(inView, ['US Forest Service']))).toEqual([
-      51, 52,
-    ]);
+    expect(idsWithVisibleAgency(ids, excludedAgencyPinIds(inView, ['BC Parks']))).toEqual([51, 52]);
   });
 
-  test('nothing hidden is one empty set and the same array back', () => {
+  test('an empty pick excludes nothing: one shared empty set and the same array back', () => {
     const ids = [1, 2, 3];
-    const hidden = hiddenAgencyPinIds(pins, []);
+    const excluded = excludedAgencyPinIds(pins, []);
 
-    expect(hidden.size).toBe(0);
-    expect(hidden).toBe(hiddenAgencyPinIds([], []));
-    expect(idsWithVisibleAgency(ids, hidden)).toBe(ids);
+    expect(excluded.size).toBe(0);
+    expect(excluded).toBe(excludedAgencyPinIds([], []));
+    expect(idsWithVisibleAgency(ids, excluded)).toBe(ids);
   });
 
-  test('a hidden agency that is not in view leaves the ids alone', () => {
-    const ids = [1, 2, 3];
-    expect(idsWithVisibleAgency(ids, hiddenAgencyPinIds(pins, ['Parks Canada']))).toBe(ids);
+  test('a pick that is not in view excludes every campground in view', () => {
+    expect(narrow([1, 2, 3, 4], ['Parks Canada'])).toEqual([]);
   });
 
   test('ignores anything that is not a campground', () => {
@@ -122,67 +117,59 @@ describe('hiddenAgencyPinIds and idsWithVisibleAgency', () => {
       properties: { category: 'tesla_supercharger', agency: 'US Forest Service' },
     } as PinFeature;
 
-    expect(hiddenAgencyPinIds([supercharger], ['US Forest Service']).size).toBe(0);
+    expect(excludedAgencyPinIds([supercharger], ['BC Parks']).size).toBe(0);
   });
 });
 
-describe('sortedAgencies', () => {
-  test('orders rows alphabetically', () => {
-    const counts = agencyCounts([
-      campground('US Forest Service', 1),
-      campground('BC Parks', 2),
-      campground('National Park Service', 3),
-    ]);
+describe('agenciesByCount', () => {
+  const counts = new Map([
+    ['National Park Service', 9],
+    ['USDA Forest Service', 21],
+    ['California State Parks', 14],
+    ['BC Parks', 9],
+  ]);
 
-    expect(sortedAgencies(counts)).toEqual([
-      'BC Parks',
-      'National Park Service',
-      'US Forest Service',
-    ]);
-  });
-});
-
-describe('hiddenAgencyFilter', () => {
-  test('nothing hidden means no filter', () => {
-    expect(hiddenAgencyFilter([])).toBeNull();
-  });
-
-  test('excludes the named agencies', () => {
-    expect(hiddenAgencyFilter(['BC Parks', 'US Forest Service'])).toEqual([
-      'all',
-      ['!', ['in', ['get', 'agency'], ['literal', ['BC Parks', 'US Forest Service']]]],
+  test('orders by count, most first, then by name', () => {
+    expect(agenciesByCount(counts, [])).toEqual([
+      { agency: 'USDA Forest Service', count: 21 },
+      { agency: 'California State Parks', count: 14 },
+      { agency: 'BC Parks', count: 9 },
+      { agency: 'National Park Service', count: 9 },
     ]);
   });
 
-  test('hiding the sentinel requires the property to be present', () => {
-    expect(hiddenAgencyFilter([UNCATEGORIZED_AGENCY])).toEqual(['all', ['has', 'agency']]);
-  });
-
-  test('combines both clauses', () => {
-    expect(hiddenAgencyFilter(['BC Parks', UNCATEGORIZED_AGENCY])).toEqual([
-      'all',
-      ['!', ['in', ['get', 'agency'], ['literal', ['BC Parks']]]],
-      ['has', 'agency'],
+  test('a picked agency no longer in view stays listed with zero, last', () => {
+    expect(agenciesByCount(counts, ['Gone', 'BC Parks']).slice(-2)).toEqual([
+      { agency: 'National Park Service', count: 9 },
+      { agency: 'Gone', count: 0 },
     ]);
   });
 });
 
 describe('campgroundLayerFilter', () => {
-  test('no hidden agencies and no id filter means no filter', () => {
+  test('an empty pick and no id filter means no filter', () => {
     expect(campgroundLayerFilter([], null)).toBeNull();
   });
 
-  test('an id filter with nothing hidden is just the in clause', () => {
-    expect(campgroundLayerFilter([], new Set([1, 2]))).toEqual([
+  test('an id filter with an empty pick is just the in clause', () => {
+    expect(campgroundLayerFilter([], new Set([1, 2]))).toEqual(['all', ['in', ['id'], ['literal', [1, 2]]]]);
+  });
+
+  test('a pick keeps only the named agencies', () => {
+    expect(campgroundLayerFilter(['BC Parks', 'US Forest Service'], null)).toEqual([
       'all',
-      ['in', ['id'], ['literal', [1, 2]]],
+      ['any', ['in', ['get', 'agency'], ['literal', ['BC Parks', 'US Forest Service']]]],
     ]);
   });
 
-  test('combines the hidden-agency clause and the id clause', () => {
-    expect(campgroundLayerFilter(['BC Parks'], new Set([1, 2]))).toEqual([
+  test('picking the sentinel keeps the features with no agency property', () => {
+    expect(campgroundLayerFilter([UNCATEGORIZED_AGENCY], null)).toEqual(['all', ['any', ['!', ['has', 'agency']]]]);
+  });
+
+  test('combines the pick and the id clause', () => {
+    expect(campgroundLayerFilter(['BC Parks', UNCATEGORIZED_AGENCY], new Set([1, 2]))).toEqual([
       'all',
-      ['!', ['in', ['get', 'agency'], ['literal', ['BC Parks']]]],
+      ['any', ['in', ['get', 'agency'], ['literal', ['BC Parks']]], ['!', ['has', 'agency']]],
       ['in', ['id'], ['literal', [1, 2]]],
     ]);
   });

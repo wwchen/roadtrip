@@ -293,11 +293,11 @@ describe('import cli', () => {
 });
 
 describe('the production adapter registry against the production poi registry', () => {
-  const MISSPELLED_ADAPTER = 'ReserveCaliforniaSiteEtl';
-  const CORRECT_ADAPTER = 'ReserveCaliforniaSitesEtl';
-  const MISSPELLED_ROW = 'California State Park Sites';
-  const MISSPELLED_SLUG = 'reservecalifornia-campsites';
-  const TARGET_COUNT = 18;
+  const MISSPELLED_ADAPTER = 'CampflareCampsiteEtl';
+  const CORRECT_ADAPTER = 'CampflareCampsitesEtl';
+  const MISSPELLED_ROW = 'Campflare Campsites';
+  const MISSPELLED_SLUG = 'campflare-campsites';
+  const TARGET_COUNT = 10;
 
   function strictCli(registryPath: string, argv: string[]): Promise<{ code: number } & Captured> {
     const captured: Captured = { out: [], err: [] };

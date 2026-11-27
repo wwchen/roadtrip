@@ -369,6 +369,7 @@
                                   the drawer and answers the same question. */
   --rt-z-modal:        1000;
   --rt-z-topbar:       1000;   /* desktop only: the search panel */
+  --rt-z-popover:      1200;   /* the multi-select menu, above the topbar that anchors it */
   --rt-z-chrome:       9999;   /* the deployment banner, above everything the app draws */
 
   /* Breakpoints.

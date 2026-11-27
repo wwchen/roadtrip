@@ -37,8 +37,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchViewportPois, type ViewportPoiCollection } from '@/api/poi-api';
 import { queryKeys } from '@/queries/keys';
-import { agencyCounts } from '@/map/agencies';
 import { POINT_OVERLAYS, bucketPins, type OverlayKey } from '@/map/overlays';
+import { featureAgency } from '@/map/agencies';
 import { pinFeatureId, type PinCollection, type PinFeature } from '@/map/pins';
 import { createViewportCache, type ViewportCache } from '@/map/viewport-cache';
 import {
@@ -57,8 +57,6 @@ export interface ViewportPois {
   buckets: Record<OverlayKey, PinCollection>;
   /** Pins per overlay in the current view — the legend's counts. */
   counts: Record<OverlayKey, number>;
-  /** Campgrounds per managing agency in the current view — the legend's rows. */
-  agencies: Map<string, number>;
   /**
    * Whether campgrounds are being requested at all.
    *
@@ -89,15 +87,20 @@ const CAMPGROUND_CATEGORY = 'campground';
 
 /**
  * Drops campgrounds the active filter does not match; every other category
- * rides along untouched. Null `filterIds` means no filter is active.
+ * rides along untouched. Null `filterIds` and an empty `agencies` pick each mean
+ * that half of the filter is off.
  */
 function filterCampgrounds(
   features: readonly PinFeature[],
   filterIds: ReadonlySet<number> | null,
+  agencies: readonly string[],
 ): PinFeature[] {
-  if (filterIds === null) return [...features];
+  if (filterIds === null && agencies.length === 0) return [...features];
+  const picked = new Set(agencies);
   return features.filter((feature) => {
     if (feature?.properties?.category !== CAMPGROUND_CATEGORY) return true;
+    if (picked.size > 0 && !picked.has(featureAgency(feature))) return false;
+    if (filterIds === null) return true;
     const id = pinFeatureId(feature);
     return typeof id === 'number' && filterIds.has(id);
   });
@@ -233,20 +236,20 @@ export function useViewportPois(): ViewportPois {
   // bbox to clip to — its pins are the corridor's, not the viewport's.
   const clippedFeatures = !routeActive && request ? clipToBbox(features, request.bbox) : features;
   const campgroundFilterIds = useMapStore((s) => s.campgroundFilterIds);
+  const campgroundFilterAgencies = useMapStore((s) => s.campgroundFilterAgencies);
   // While a filter is active, campgrounds it does not match are dropped from the
   // counts too — the legend counts only what the filter matches. Painting stays
   // unfiltered above; `useMapOverlays`'s layer filter is what hides them on the map.
   const countedFeatures = useMemo(
-    () => filterCampgrounds(clippedFeatures, campgroundFilterIds),
-    [clippedFeatures, campgroundFilterIds],
+    () => filterCampgrounds(clippedFeatures, campgroundFilterIds, campgroundFilterAgencies),
+    [clippedFeatures, campgroundFilterIds, campgroundFilterAgencies],
   );
   const countedBuckets = useMemo(() => bucketPins(countedFeatures), [countedFeatures]);
   const counts = useMemo(() => countPins(countedBuckets), [countedBuckets]);
-  const agencies = useMemo(() => agencyCounts(countedBuckets.cg.features), [countedBuckets]);
   // The topbar gets the campgrounds in view BEFORE its own filter narrows them:
   // what it wants from this loop is the agency each pin carries, and a set the
-  // filter has already been applied to could not answer for a campground the
-  // filter excluded.
+  // filter has already been applied to could not count an agency the user has
+  // not picked yet.
   const clippedBuckets = useMemo(() => bucketPins(clippedFeatures), [clippedFeatures]);
 
   // A route supplies campgrounds whatever the zoom, so the topbar's in-view hint
@@ -261,5 +264,5 @@ export function useViewportPois(): ViewportPois {
     setViewportCampgrounds(routeActive ? [] : clippedBuckets.cg.features, campgroundsRequested);
   }, [routeActive, clippedBuckets, campgroundsRequested, setViewportCampgrounds]);
 
-  return { buckets, counts, agencies, campgroundsRequested };
+  return { buckets, counts, campgroundsRequested };
 }

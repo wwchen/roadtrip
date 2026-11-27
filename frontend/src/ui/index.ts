@@ -20,14 +20,20 @@ export { IconSprite } from '@lew-ds/lds-react/icon-sprite';
 // Local additions.
 //
 // Shapes LDS has no primitive for — a two-step confirm, a write-only secret, an
-// action word inside a sentence, a calendar, a detented sheet — drawn here once
-// instead of per feature.
+// action word inside a sentence, a calendar, a multi-select, a detented sheet —
+// drawn here once instead of per feature.
 // ---------------------------------------------------------------------------
 
 export { ConfirmButton, type ConfirmButtonProps } from './ConfirmButton';
 export { SecretField, type SecretFieldProps } from './SecretField';
 export { LinkButton, type LinkButtonProps } from './LinkButton';
 export { MonthCalendar, type MonthCalendarProps } from './MonthCalendar';
+export {
+  MULTI_SELECT_SEARCH_THRESHOLD,
+  MultiSelect,
+  type MultiSelectOption,
+  type MultiSelectProps,
+} from './MultiSelect';
 export {
   Sheet,
   SheetHeader,

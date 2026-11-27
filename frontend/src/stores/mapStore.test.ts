@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import type { PinFeature } from '@/map/pins';
 import {
-  selectIsAgencyVisible,
   selectIsDrawerOpen,
   selectIsOverlayVisible,
   useMapStore,
@@ -20,7 +19,7 @@ describe('initial state', () => {
       viewport: null,
       userLocation: null,
       hiddenOverlays: [],
-      hiddenAgencies: [],
+      campgroundFilterAgencies: [],
       selectedPoiId: null,
     });
   });
@@ -70,23 +69,20 @@ describe('overlay filter', () => {
   });
 });
 
-describe('agency filter', () => {
-  test('every agency is visible until it is hidden', () => {
-    expect(selectIsAgencyVisible('US Forest Service')(map())).toBe(true);
+describe('published agency filter', () => {
+  test('records the agencies the topbar publishes', () => {
+    map().setCampgroundFilterAgencies(['BC Parks', 'Parks Canada']);
+
+    expect(map().campgroundFilterAgencies).toEqual(['BC Parks', 'Parks Canada']);
   });
 
-  test('an agency nobody has switched off is visible', () => {
-    map().setAgencyHidden('US Forest Service', true);
+  test('publishing the same agencies keeps the same array, so the layer filter does not rerun', () => {
+    map().setCampgroundFilterAgencies(['BC Parks']);
+    const before = map().campgroundFilterAgencies;
 
-    expect(selectIsAgencyVisible('US Forest Service')(map())).toBe(false);
-    expect(selectIsAgencyVisible('BC Parks')(map())).toBe(true);
-  });
+    map().setCampgroundFilterAgencies(['BC Parks']);
 
-  test('un-hiding removes it from the set', () => {
-    map().setAgencyHidden('BC Parks', true);
-    map().setAgencyHidden('BC Parks', false);
-
-    expect(map().hiddenAgencies).toEqual([]);
+    expect(map().campgroundFilterAgencies).toBe(before);
   });
 });
 
@@ -124,7 +120,7 @@ describe('reset', () => {
     map().setViewport(VIEWPORT);
     map().setUserLocation({ lng: 0, lat: 0 });
     map().setOverlayHidden('pf', true);
-    map().setAgencyHidden('BC Parks', true);
+    map().setCampgroundFilterAgencies(['BC Parks']);
     map().selectPoi(42);
 
     map().reset();
@@ -133,7 +129,7 @@ describe('reset', () => {
       viewport: null,
       userLocation: null,
       hiddenOverlays: [],
-      hiddenAgencies: [],
+      campgroundFilterAgencies: [],
       selectedPoiId: null,
     });
   });

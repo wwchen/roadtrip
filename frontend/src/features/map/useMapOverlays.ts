@@ -11,8 +11,8 @@
 //   2. install     [map, styleEpoch]              — and reinstall after a basemap change
 //   3. paint       [map, styleEpoch, buckets]     — setData only, layers untouched
 //   4. visibility  [map, styleEpoch, hidden…]     — the legend's on/off toggles
-//   5. filter      [map, styleEpoch, hiddenAgencies, campgroundFilterIds] — the
-//                   campground legend and the topbar's active search filter
+//   5. filter      [map, styleEpoch, campgroundFilterAgencies, campgroundFilterIds] —
+//                   the topbar filter's agency pick and its active search filter
 //   6. handlers    [map, styleEpoch, …actions]    — clicks and the cursor
 //
 // `styleEpoch` is in every one of them because `setStyle({ diff: false })`
@@ -44,7 +44,7 @@ import type { ViewportPois } from './useViewportPois';
 export function useMapOverlays(pois: ViewportPois): void {
   const { map, styleEpoch } = useMapContext();
   const hiddenOverlays = useMapStore((s) => s.hiddenOverlays);
-  const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
+  const campgroundFilterAgencies = useMapStore((s) => s.campgroundFilterAgencies);
   const campgroundFilterIds = useMapStore((s) => s.campgroundFilterIds);
   const selectPoi = useMapStore((s) => s.selectPoi);
   const clearSelectedPoi = useMapStore((s) => s.clearSelectedPoi);
@@ -80,12 +80,10 @@ export function useMapOverlays(pois: ViewportPois): void {
     }
   }, [map, styleEpoch, hiddenOverlays]);
 
-  // Campgrounds have no on/off toggle — 50+ managing agencies cannot be a
-  // checkbox — so their legend is a filter instead of a visibility switch.
   useEffect(() => {
     if (!map || !styleEpoch) return;
-    setOverlayFilter(map, overlaySpec('cg'), campgroundLayerFilter(hiddenAgencies, campgroundFilterIds));
-  }, [map, styleEpoch, hiddenAgencies, campgroundFilterIds]);
+    setOverlayFilter(map, overlaySpec('cg'), campgroundLayerFilter(campgroundFilterAgencies, campgroundFilterIds));
+  }, [map, styleEpoch, campgroundFilterAgencies, campgroundFilterIds]);
 
   useEffect(() => {
     if (!map || !styleEpoch) return;

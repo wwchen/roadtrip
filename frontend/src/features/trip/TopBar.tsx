@@ -21,7 +21,7 @@ import { useSearchResults } from './useSearchResults';
 import { useSharedTrip } from './useSharedTrip';
 import { useTopbarClearance } from './useTopbarClearance';
 import { useTripPlanner } from './useTripPlanner';
-import { selectActiveFilterCount, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
+import { selectCatalogFilterCount, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { MAX_STOPS } from '@/stores/tripStore';
 import { routeShareUrl } from '@/lib/share-links';
 import { useCopyLink } from '@/lib/use-copy-link';
@@ -29,6 +29,7 @@ import './topbar.css';
 
 /** What the keyboard has selected before any arrow key is pressed. */
 const NO_ACTIVE_RESULT = -1;
+const NO_AGENCIES: readonly string[] = [];
 
 const COPY_LABEL = 'Copy trip link';
 const COPIED_LABEL = 'Trip link copied';
@@ -94,12 +95,29 @@ export function TopBar({ alerts }: TopBarProps) {
   // features agree on what "matches the filter" means. Cleared on unmount so a
   // closed topbar does not leave a stale filter painted.
   const setCampgroundFilterIds = useMapStore((s) => s.setCampgroundFilterIds);
-  const activeFilterCount = useCampgroundFilterStore(selectActiveFilterCount);
+  const setCampgroundFilterAgencies = useMapStore((s) => s.setCampgroundFilterAgencies);
+  const catalogFilterCount = useCampgroundFilterStore(selectCatalogFilterCount);
+  const agencies = useCampgroundFilterStore((s) => s.agencies);
   useEffect(() => {
-    const filtered = activeFilterCount > 0 && inView.enabled && !inView.failed;
-    setCampgroundFilterIds(filtered ? inView.matchingIds : null);
-  }, [activeFilterCount, inView.enabled, inView.failed, inView.matchingIds, setCampgroundFilterIds]);
-  useEffect(() => () => setCampgroundFilterIds(null), [setCampgroundFilterIds]);
+    const live = inView.enabled && !inView.failed;
+    setCampgroundFilterIds(live && catalogFilterCount > 0 ? inView.matchingIds : null);
+    setCampgroundFilterAgencies(live ? agencies : NO_AGENCIES);
+  }, [
+    catalogFilterCount,
+    agencies,
+    inView.enabled,
+    inView.failed,
+    inView.matchingIds,
+    setCampgroundFilterIds,
+    setCampgroundFilterAgencies,
+  ]);
+  useEffect(
+    () => () => {
+      setCampgroundFilterIds(null);
+      setCampgroundFilterAgencies(NO_AGENCIES);
+    },
+    [setCampgroundFilterIds, setCampgroundFilterAgencies],
+  );
 
   const pick = (result: SearchResult) => {
     planner.pickResult(draft?.row ?? 0, result);
@@ -261,6 +279,7 @@ export function TopBar({ alerts }: TopBarProps) {
           onToggle={() => setFiltersOpen((open) => !open)}
           totalInBoundary={inView.inView}
           totalMatching={inView.matching}
+          agencyCounts={inView.agencyCounts}
           checkableIds={checkableIds}
         />
       ) : null}

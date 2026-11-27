@@ -17,12 +17,16 @@ export interface CampgroundFilterState {
   siteType: CampsiteKind | null;
   groupSize: number | null;
   amenities: AmenityKey[];
+  agencies: string[];
   dateWindow: DateWindow | null;
   setSiteType: (kind: CampsiteKind | null) => void;
   setGroupSize: (size: number | null) => void;
   toggleAmenity: (key: AmenityKey) => void;
+  toggleAgency: (agency: string) => void;
+  includeAgency: (agency: string) => void;
+  clearAgencies: () => void;
   setDateWindow: (window: DateWindow | null) => void;
-  /** The three catalog filters; the date window is a separate decision and stays. */
+  /** The catalog filters and the agency pick; the date window is a separate decision and stays. */
   clearFilters: () => void;
   reset: () => void;
 }
@@ -31,10 +35,19 @@ const INITIAL_FILTERS = {
   siteType: null,
   groupSize: null,
   amenities: [],
+  agencies: [],
   dateWindow: null,
 } satisfies Omit<
   CampgroundFilterState,
-  'setSiteType' | 'setGroupSize' | 'toggleAmenity' | 'setDateWindow' | 'clearFilters' | 'reset'
+  | 'setSiteType'
+  | 'setGroupSize'
+  | 'toggleAmenity'
+  | 'toggleAgency'
+  | 'includeAgency'
+  | 'clearAgencies'
+  | 'setDateWindow'
+  | 'clearFilters'
+  | 'reset'
 >;
 
 function clampGroupSize(size: number | null): number | null {
@@ -50,17 +63,27 @@ export const useCampgroundFilterStore = create<CampgroundFilterState>()((set) =>
     set((s) => ({
       amenities: s.amenities.includes(key) ? s.amenities.filter((k) => k !== key) : [...s.amenities, key],
     })),
+  toggleAgency: (agency) =>
+    set((s) => ({
+      agencies: s.agencies.includes(agency) ? s.agencies.filter((a) => a !== agency) : [...s.agencies, agency],
+    })),
+  includeAgency: (agency) =>
+    set((s) => (s.agencies.length === 0 || s.agencies.includes(agency) ? s : { agencies: [...s.agencies, agency] })),
+  clearAgencies: () => set({ agencies: [] }),
   setDateWindow: (dateWindow) => set({ dateWindow }),
-  clearFilters: () => set({ siteType: null, groupSize: null, amenities: [] }),
+  clearFilters: () => set({ siteType: null, groupSize: null, amenities: [], agencies: [] }),
   reset: () => set({ ...INITIAL_FILTERS }),
 }));
 
-export const selectActiveFilterCount = (s: CampgroundFilterState): number =>
+export const selectCatalogFilterCount = (s: CampgroundFilterState): number =>
   (s.siteType ? 1 : 0) + (s.groupSize ? 1 : 0) + (s.amenities.length > 0 ? 1 : 0);
+
+export const selectActiveFilterCount = (s: CampgroundFilterState): number =>
+  selectCatalogFilterCount(s) + (s.agencies.length > 0 ? 1 : 0);
 
 /** The wire filter, or undefined when nothing is active so the request omits it. */
 export const selectFilterDto = (s: CampgroundFilterState): CampgroundFilterDto | undefined => {
-  if (selectActiveFilterCount(s) === 0) return undefined;
+  if (selectCatalogFilterCount(s) === 0) return undefined;
   return {
     ...(s.siteType ? { site_type: s.siteType } : {}),
     ...(s.groupSize ? { group_size: s.groupSize } : {}),

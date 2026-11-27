@@ -67,29 +67,35 @@ class SmokeTest {
     ): Locator = page.getByRole(AriaRole.REGION, Page.GetByRoleOptions().setName(name))
 
     /**
-     * A legend agency row's clickable control.
+     * An agency row's clickable control in the filter's Agency dropdown.
      *
      * The label, not the checkbox: LDS renders the real input at `opacity: 0` with no
      * size and `pointer-events: none` and draws `.lds-check__box` in its place, so the
      * input can be READ but never clicked. Verified in Chromium — clicking it times out
-     * with "element is not visible".
-     *
-     * Matched on the label's text, which also carries the count ("US Forest Service
-     * (1)"), hence a substring match.
+     * with "element is not visible". The count sits beside the label, not in it.
      */
-    private fun agencyRow(
+    private fun agencyOption(
         page: Page,
         agency: String,
-    ): Locator =
-        page
-            .locator(".rt-legend__agencies label")
-            .filter(Locator.FilterOptions().setHasText(Pattern.compile(agency)))
+    ): Locator = agencyBox(page, agency).locator("xpath=ancestor::label[1]")
 
-    /** The same row's checkbox, which is what reports the filter's state. */
+    /** An agency row's checkbox, which is what reports the filter's state. */
     private fun agencyBox(
         page: Page,
         agency: String,
-    ): Locator = agencyRow(page, agency).locator("input[type='checkbox']")
+    ): Locator = page.locator(".rt-multi-select__menu").getByLabel(agency, Locator.GetByLabelOptions().setExact(true))
+
+    private fun openAgencyDropdown(
+        page: Page,
+        timeoutMs: Double,
+    ) {
+        page.locator("#tb-agency").click()
+        page.waitForFunction(
+            "() => document.querySelectorAll('.rt-multi-select__menu input[type=\"checkbox\"]').length >= 4",
+            null,
+            Page.WaitForFunctionOptions().setTimeout(timeoutMs),
+        )
+    }
 
     @Test
     fun `cold load - api pois - Banff campground place sheet`() {
@@ -253,7 +259,7 @@ class SmokeTest {
     }
 
     @Test
-    fun `campground agency controls MapLibre layer filter`() {
+    fun `filter agency dropdown narrows campgrounds by agency`() {
         val context =
             browser.newContext(
                 Browser
@@ -316,46 +322,43 @@ class SmokeTest {
 
         try {
             page.navigate("/")
-            // Flat legend: one checkbox per agency present in the viewport.
-            page.waitForFunction(
-                "() => document.querySelectorAll('.rt-legend__agencies input[type=\"checkbox\"]').length >= 3",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
-            )
+            page.getByRole(AriaRole.BUTTON, Page.GetByRoleOptions().setName("Filter").setExact(true)).click()
+            // The rows fill in as the viewport's pins land: one per agency, after "All agencies".
+            openAgencyDropdown(page, MAP_READY_TIMEOUT_MS)
+            // The agency pick lives in the filter now; the layers panel lists none.
+            assertThat(page.locator(".rt-legend").getByText("US Forest Service")).hasCount(0)
 
-            // By label text, not by a `data-cg-agency` attribute: the React rows are
-            // real labelled checkboxes, and an agency name is not a safe source for an
-            // element id (see `LegendPanel.AgencyRow`).
+            val all = agencyBox(page, "All agencies")
             val nps = agencyBox(page, "National Park Service")
             val forestService = agencyBox(page, "US Forest Service")
             val stateParks = agencyBox(page, "WA State Parks")
-            // Every agency present defaults to shown (checked).
-            assertTrue(nps.isChecked())
-            assertTrue(forestService.isChecked())
-            assertTrue(stateParks.isChecked())
-
-            // Un-checking one agency updates the user-visible filter state. The
-            // imperative MapLibre filter expression is covered by the map unit suite;
-            // this browser test stays on the public UI contract.
-            agencyRow(page, "US Forest Service").click()
+            // Show-only: nothing picked means every agency shows.
+            assertTrue(all.isChecked())
+            assertFalse(nps.isChecked())
             assertFalse(forestService.isChecked())
-            assertTrue(nps.isChecked())
-            assertTrue(stateParks.isChecked())
+            assertFalse(stateParks.isChecked())
 
-            // A real map interaction causes a viewport refresh; the agency choice
-            // must survive the response and legend rebuild.
+            // Picking one agency shows only it, and the pill counts it.
+            agencyOption(page, "US Forest Service").click()
+            assertTrue(forestService.isChecked())
+            assertFalse(all.isChecked())
+            assertFalse(nps.isChecked())
+            assertThat(
+                page.getByRole(AriaRole.BUTTON, Page.GetByRoleOptions().setName("Filter, 1 active")),
+            ).isVisible()
+
+            // A real map interaction causes a viewport refresh; the pick must survive
+            // the response and the dropdown rebuild.
+            page.keyboard().press("Escape")
             page.getByLabel("Zoom in").click()
-            page.waitForFunction(
-                "() => document.querySelectorAll('.rt-legend__agencies input[type=\"checkbox\"]').length >= 3",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(PANEL_TIMEOUT_MS),
-            )
-            assertTrue(nps.isChecked())
-            assertFalse(forestService.isChecked())
-
-            // Re-checking the agency removes both layer filters again.
-            agencyRow(page, "US Forest Service").click()
+            openAgencyDropdown(page, PANEL_TIMEOUT_MS)
             assertTrue(forestService.isChecked())
+            assertFalse(nps.isChecked())
+
+            // Unticking it returns to every agency.
+            agencyOption(page, "US Forest Service").click()
+            assertFalse(forestService.isChecked())
+            assertTrue(all.isChecked())
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during agency filter smoke: ${pageErrors.joinToString(" | ")}",
