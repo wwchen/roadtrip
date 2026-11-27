@@ -20,30 +20,22 @@ const ALL_PRODUCTION_SLUGS: ReadonlySet<string> = new Set(
 );
 
 describe('poi registry', () => {
-  test('the production registry yields the eighteen import targets in Kotlin order', () => {
+  test('the production registry yields the ten enabled import targets in Kotlin order', () => {
     const registry = loadPoiRegistry(PRODUCTION_REGISTRY_PATH);
     const names = importTargets(registry, ALL_PRODUCTION_SLUGS).map(
       (t) => `${t.section}:${t.name}`,
     );
     expect(names).toEqual([
       'poi_data:Campflare Campgrounds',
-      'poi_data:Rec.gov Campgrounds',
-      'poi_data:Washington State Parks',
       'poi_data:BC Provincial Parks',
       'poi_data:Parks Canada',
       'poi_data:Alberta Provincial Parks',
-      'poi_data:New York State Parks',
-      'poi_data:California State Parks',
       'poi_data:Planet Fitness',
       'poi_data:Tesla Superchargers',
       'campsite_data:Campflare Campsites',
-      'campsite_data:Rec.gov Campsites',
-      'campsite_data:Washington Aspira Resources',
       'campsite_data:BC Aspira Resources',
       'campsite_data:Parks Canada Aspira Resources',
-      'campsite_data:California State Park Sites',
       'campsite_data:Alberta Provincial Park Sites',
-      'campsite_data:New York State Park Sites',
     ]);
   });
 
